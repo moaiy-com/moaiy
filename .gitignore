@@ -79,14 +79,39 @@ Temporary Items
 *~.nib
 *.perspective
 
-# Factory AI
+# Factory AI (development tool)
 .factory/
+
+# Project preparation and internal documents
+doc/preparation-*.md
+doc/market-*.md
+doc/competitor-*.md
+doc/brand-*.md
+doc/product-*.md
+doc/figma-*.md
+doc/open-source-*.md
+doc/poc-*.md
+doc/privacy-*.md
+doc/project-info.md
+
+# Internal verification and testing documents
+VERIFICATION_STEPS.md
+RELEASE_SANDBOX_TEST.md
+GIT_SETUP_*.md
+FILE_CLEANUP_*.md
+OPEN_SOURCE_*.md
 
 # Temporary files
 *.tmp
 *.temp
 *.log
 *.bak
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # GPG binaries (too large for Git, will be downloaded by script)
 MoaiySandboxTest/Resources/bin/gpg
