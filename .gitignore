@@ -108,6 +108,9 @@ OPEN_SOURCE_*.md
 *.log
 *.bak
 
+# Scripts (development/debugging scripts)
+*.sh
+
 # IDE and editor
 .vscode/
 .idea/
