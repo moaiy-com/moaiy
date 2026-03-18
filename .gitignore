@@ -93,6 +93,7 @@ doc/open-source-*.md
 doc/poc-*.md
 doc/privacy-*.md
 doc/project-info.md
+doc/development-plan.md
 
 # Internal verification and testing documents
 VERIFICATION_STEPS.md
