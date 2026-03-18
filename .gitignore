@@ -108,9 +108,6 @@ OPEN_SOURCE_*.md
 *.log
 *.bak
 
-# Scripts (development/debugging scripts)
-*.sh
-
 # IDE and editor
 .vscode/
 .idea/
@@ -121,6 +118,24 @@ OPEN_SOURCE_*.md
 MoaiySandboxTest/Resources/bin/gpg
 MoaiySandboxTest/Resources/lib/*.dylib
 Moaiy/Resources/gpg.bundle/
+
+# Internal documentation (keep locally, don't track in Git)
+doc/preparation-*.md
+doc/market-*.md
+doc/competitor-*.md
+doc/brand-*.md
+doc/product-*.md
+doc/figma-*.md
+doc/open-source-*.md
+doc/poc-*.md
+doc/privacy-*.md
+doc/project-info.md
+doc/development-plan.md
+VERIFICATION_STEPS.md
+RELEASE_SANDBOX_TEST.md
+GIT_SETUP_*.md
+FILE_CLEANUP_*.md
+OPEN_SOURCE_*.md
 
 # Test outputs
 test-results/
