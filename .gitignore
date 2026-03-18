@@ -1,0 +1,111 @@
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+*.xcworkspace/*
+!*.xcworkspace/contents.xcworkspacedata
+!*.xcworkspace/xcshareddata/
+DerivedData/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+
+# Build
+build/
+Build/
+*.build/
+Products/
+*.app
+*.dSYM.zip
+*.dSYM
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# Carthage
+Carthage/Build/
+Carthage/Checkouts/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Code Injection
+iOSInjectionProject/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Thumbnails
+*.Trashes
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.VolumeIcon.icns
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# IDEs
+*.swp
+*.swo
+*~.nib
+*.perspective
+
+# Factory AI
+.factory/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.bak
+
+# GPG binaries (too large for Git, will be downloaded by script)
+MoaiySandboxTest/Resources/bin/gpg
+MoaiySandboxTest/Resources/lib/*.dylib
+Moaiy/Resources/gpg.bundle/
+
+# Test outputs
+test-results/
+coverage/
+
+# Secrets and credentials
+*.pem
+*.key
+secrets/
+.env
+.env.*
+
+# Package files
+*.zip
+*.tar.gz
+*.dmg
+*.pkg
