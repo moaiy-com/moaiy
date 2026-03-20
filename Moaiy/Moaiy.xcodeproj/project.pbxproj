@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		0BEF4DE52F6D80E00053CE56 /* GPGError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DE32F6D80E00053CE56 /* GPGError.swift */; };
 		0BEF4DE62F6D80E00053CE56 /* GPGService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DE42F6D80E00053CE56 /* GPGService.swift */; };
+		0BEF4DF42F6D8D630053CE56 /* EncryptionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DF12F6D8D630053CE56 /* EncryptionViewModel.swift */; };
+		0BEF4DF52F6D8D630053CE56 /* KeyManagementViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DF22F6D8D630053CE56 /* KeyManagementViewModel.swift */; };
 		B00000000001 /* MoaiyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000001 /* MoaiyApp.swift */; };
 		B00000000002 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000002 /* MainView.swift */; };
 		B00000000003 /* KeyManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000003 /* KeyManagementView.swift */; };
@@ -24,6 +26,8 @@
 /* Begin PBXFileReference section */
 		0BEF4DE32F6D80E00053CE56 /* GPGError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPGError.swift; sourceTree = "<group>"; };
 		0BEF4DE42F6D80E00053CE56 /* GPGService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPGService.swift; sourceTree = "<group>"; };
+		0BEF4DF12F6D8D630053CE56 /* EncryptionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncryptionViewModel.swift; sourceTree = "<group>"; };
+		0BEF4DF22F6D8D630053CE56 /* KeyManagementViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyManagementViewModel.swift; sourceTree = "<group>"; };
 		A00000000001 /* MoaiyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoaiyApp.swift; sourceTree = "<group>"; };
 		A00000000002 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		A00000000003 /* KeyManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyManagementView.swift; sourceTree = "<group>"; };
@@ -40,9 +44,19 @@
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		0BEF4DF32F6D8D630053CE56 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				0BEF4DF12F6D8D630053CE56 /* EncryptionViewModel.swift */,
+				0BEF4DF22F6D8D630053CE56 /* KeyManagementViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
 		D00000000001 = {
 			isa = PBXGroup;
 			children = (
+				0BEF4DF32F6D8D630053CE56 /* ViewModels */,
 				D00000000002 /* . */,
 				D00000000003 /* Products */,
 			);
@@ -278,6 +292,8 @@
 				B00000000001 /* MoaiyApp.swift in Sources */,
 				B00000000002 /* MainView.swift in Sources */,
 				B00000000003 /* KeyManagementView.swift in Sources */,
+				0BEF4DF42F6D8D630053CE56 /* EncryptionViewModel.swift in Sources */,
+				0BEF4DF52F6D8D630053CE56 /* KeyManagementViewModel.swift in Sources */,
 				B00000000004 /* CreateKeyView.swift in Sources */,
 				B00000000005 /* EncryptionView.swift in Sources */,
 				B00000000006 /* SettingsView.swift in Sources */,

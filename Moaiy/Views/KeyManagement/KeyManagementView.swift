@@ -8,16 +8,18 @@
 import SwiftUI
 
 struct KeyManagementView: View {
-    @State private var keys: [Key] = []
-    @State private var searchText = ""
+    @State private var viewModel = KeyManagementViewModel()
     @State private var showingCreateKey = false
     
     var body: some View {
         Group {
-            if keys.isEmpty {
+            if viewModel.isLoading && viewModel.keys.isEmpty {
+                ProgressView("Loading keys...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if viewModel.keys.isEmpty {
                 EmptyKeysView(onCreateKey: { showingCreateKey = true })
             } else {
-                KeyListView(keys: $keys, searchText: $searchText)
+                KeyListView(viewModel: viewModel)
             }
         }
         .navigationTitle("Key Management")
@@ -29,12 +31,17 @@ struct KeyManagementView: View {
                 .buttonStyle(.borderedProminent)
             }
             ToolbarItem(placement: .automatic) {
+                Button(action: { Task { await viewModel.refresh() } }) {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+            }
+            ToolbarItem(placement: .automatic) {
                 Button(action: { }) {
                     Label("Import Key", systemImage: "square.and.arrow.down")
                 }
             }
         }
-        .searchable(text: $searchText, prompt: "Search keys...")
+        .searchable(text: $viewModel.searchText, prompt: "Search keys...")
         .sheet(isPresented: $showingCreateKey) {
             CreateKeyView()
         }
@@ -75,21 +82,10 @@ struct EmptyKeysView: View {
 // MARK: - Key List View
 
 struct KeyListView: View {
-    @Binding var keys: [Key]
-    @Binding var searchText: String
-    
-    var filteredKeys: [Key] {
-        if searchText.isEmpty {
-            return keys
-        }
-        return keys.filter { 
-            $0.name.localizedCaseInsensitiveContains(searchText) ||
-            $0.email.localizedCaseInsensitiveContains(searchText)
-        }
-    }
+    var viewModel: KeyManagementViewModel
     
     var body: some View {
-        List(filteredKeys) { key in
+        List(viewModel.filteredKeys) { key in
             KeyCardView(key: key)
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
         }
@@ -98,30 +94,45 @@ struct KeyListView: View {
 }
 
 // MARK: - Key Card View
+
 struct KeyCardView: View {
-    let key: Key
+    let key: GPGKey
     
     var body: some View {
         HStack(spacing: 16) {
-            Image(systemName: "key.fill")
+            Image(systemName: key.isSecret ? "key.fill" : "key")
                 .font(.title2)
-                .foregroundStyle(Color.moiayAccent)
+                .foregroundStyle(key.isSecret ? Color.moiayAccent : .secondary)
                 .frame(width: 40, height: 40)
-                .background(Color.moiayAccent.opacity(0.1))
+                .background(key.isSecret ? Color.moiayAccent.opacity(0.1) : Color.secondary.opacity(0.1))
                 .clipShape(Circle())
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(key.name)
-                    .font(.headline)
+                HStack {
+                    Text(key.name)
+                        .font(.headline)
+                    
+                    if key.isSecret {
+                        Text("Secret")
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.moiayAccent.opacity(0.2))
+                            .foregroundStyle(Color.moiayAccent)
+                            .clipShape(Capsule())
+                    }
+                }
                 
                 Text(key.email)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 
                 HStack(spacing: 8) {
-                    Label(key.type, systemImage: "number")
-                    Text("•")
-                    Text(key.createdAt.formatted(date: .abbreviated, time: .omitted))
+                    Label(key.displayKeyType, systemImage: "number")
+                    if let createdAt = key.createdAt {
+                        Text("•")
+                        Text(createdAt.formatted(date: .abbreviated, time: .omitted))
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.tertiary)
@@ -129,13 +140,17 @@ struct KeyCardView: View {
             
             Spacer()
             
-            // Actions
             HStack(spacing: 8) {
                 Button("Encrypt") { }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                 
-                Button { } label: {
+                Menu {
+                    Button("Export Public Key") { }
+                    Button("Copy Fingerprint") { }
+                    Divider()
+                    Button("Delete Key", role: .destructive) { }
+                } label: {
                     Image(systemName: "ellipsis.circle")
                 }
                 .buttonStyle(.borderless)
@@ -151,12 +166,4 @@ struct KeyCardView: View {
 #Preview("Empty State") {
     EmptyKeysView(onCreateKey: {})
         .frame(width: 800, height: 600)
-}
-
-#Preview("Key List") {
-    KeyListView(keys: .constant([
-        Key(name: "Work Key", email: "work@example.com", type: "RSA-4096"),
-        Key(name: "Personal Key", email: "personal@example.com", type: "RSA-4096")
-    ]), searchText: .constant(""))
-    .frame(width: 800, height: 600)
 }
