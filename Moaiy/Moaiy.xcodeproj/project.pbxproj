@@ -7,19 +7,23 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		B00000000001 /* MoaiyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000001; };
-		B00000000002 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000002; };
-		B00000000003 /* KeyManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000003; };
-		B00000000004 /* CreateKeyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000004; };
-		B00000000005 /* EncryptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000005; };
-		B00000000006 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000006; };
-		B00000000007 /* Key.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000007; };
-		B00000000008 /* Color+Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000008; };
-		B00000000009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000009; };
-		B0000000000A /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A0000000000A; };
+		0BEF4DE52F6D80E00053CE56 /* GPGError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DE32F6D80E00053CE56 /* GPGError.swift */; };
+		0BEF4DE62F6D80E00053CE56 /* GPGService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DE42F6D80E00053CE56 /* GPGService.swift */; };
+		B00000000001 /* MoaiyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000001 /* MoaiyApp.swift */; };
+		B00000000002 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000002 /* MainView.swift */; };
+		B00000000003 /* KeyManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000003 /* KeyManagementView.swift */; };
+		B00000000004 /* CreateKeyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000004 /* CreateKeyView.swift */; };
+		B00000000005 /* EncryptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000005 /* EncryptionView.swift */; };
+		B00000000006 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000006 /* SettingsView.swift */; };
+		B00000000007 /* Key.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000007 /* Key.swift */; };
+		B00000000008 /* Color+Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000008 /* Color+Theme.swift */; };
+		B00000000009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000009 /* Assets.xcassets */; };
+		B0000000000A /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A0000000000A /* Localizable.xcstrings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0BEF4DE32F6D80E00053CE56 /* GPGError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPGError.swift; sourceTree = "<group>"; };
+		0BEF4DE42F6D80E00053CE56 /* GPGService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPGService.swift; sourceTree = "<group>"; };
 		A00000000001 /* MoaiyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoaiyApp.swift; sourceTree = "<group>"; };
 		A00000000002 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		A00000000003 /* KeyManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyManagementView.swift; sourceTree = "<group>"; };
@@ -35,26 +39,16 @@
 		A0000000000D /* Moaiy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moaiy.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFrameworksBuildPhase section */
-		C00000000001 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXFrameworksBuildPhase section */
-
 /* Begin PBXGroup section */
 		D00000000001 = {
 			isa = PBXGroup;
 			children = (
-				D00000000002 /* Moaiy */,
+				D00000000002 /* . */,
 				D00000000003 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		D00000000002 /* Moaiy */ = {
+		D00000000002 /* . */ = {
 			isa = PBXGroup;
 			children = (
 				A0000000000C /* Info.plist */,
@@ -109,6 +103,8 @@
 		D00000000007 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				0BEF4DE32F6D80E00053CE56 /* GPGError.swift */,
+				0BEF4DE42F6D80E00053CE56 /* GPGService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -217,7 +213,6 @@
 			buildConfigurationList = E00000000002 /* Build configuration list for PBXNativeTarget "Moaiy" */;
 			buildPhases = (
 				E00000000003 /* Sources */,
-				E00000000004 /* Frameworks */,
 				E00000000005 /* Resources */,
 			);
 			buildRules = (
@@ -286,6 +281,8 @@
 				B00000000004 /* CreateKeyView.swift in Sources */,
 				B00000000005 /* EncryptionView.swift in Sources */,
 				B00000000006 /* SettingsView.swift in Sources */,
+				0BEF4DE52F6D80E00053CE56 /* GPGError.swift in Sources */,
+				0BEF4DE62F6D80E00053CE56 /* GPGService.swift in Sources */,
 				B00000000007 /* Key.swift in Sources */,
 				B00000000008 /* Color+Theme.swift in Sources */,
 			);
@@ -354,7 +351,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_MODE = wholemodule;
-				SWIFT_OPTIMIZATION_LEVEL = -Onone;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
 		};
@@ -410,7 +407,7 @@
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_OPTIMIZATION_LEVEL = -O;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
 			};
 			name = Release;
 		};

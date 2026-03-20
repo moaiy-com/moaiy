@@ -1,0 +1,753 @@
+//
+//  GPGService.swift
+//  Moaiy
+//
+//  Core GPG service for encryption, decryption, and key management
+//
+
+import Foundation
+
+/// Service class for GPG operations
+@MainActor
+final class GPGService: ObservableObject {
+    
+    // MARK: - Singleton
+    
+    static let shared = GPGService()
+    
+    // MARK: - Published Properties
+    
+    @Published private(set) var isReady = false
+    @Published private(set) var gpgVersion: String?
+    
+    // MARK: - Private Properties
+    
+    private var gpgURL: URL?
+    private var gpgHome: URL?
+    
+    private var gpgPath: String {
+        gpgURL?.path ?? ""
+    }
+    
+    // MARK: - Constants
+    
+    private let gpgBundleName = "gpg.bundle"
+    private let gpgExecutableName = "gpg"
+    
+    // MARK: - Initialization
+    
+    private init() {
+        setupGPG()
+    }
+    
+    // MARK: - Setup
+    
+    /// Setup GPG executable and environment
+    private func setupGPG() {
+        Task {
+            do {
+                try await findGPGExecutable()
+                try await setupGPGHome()
+                try await verifyGPG()
+                await MainActor.run {
+                    self.isReady = true
+                }
+            } catch {
+                print("GPG setup failed: \(error)")
+                await MainActor.run {
+                    self.isReady = false
+                }
+            }
+        }
+    }
+    
+    /// Find GPG executable in app bundle
+    private func findGPGExecutable() throws {
+        // Look for bundled GPG first
+        if let bundleURL = Bundle.main.url(forResource: gpgBundleName, withExtension: nil) {
+            let executableURL = bundleURL.appendingPathComponent("bin/\(gpgExecutableName)")
+            if FileManager.default.fileExists(atPath: executableURL.path) {
+                gpgURL = executableURL
+                return
+            }
+        }
+        
+        // Fallback to system GPG (for development)
+        let systemPath = "/usr/local/bin/gpg"
+        if FileManager.default.fileExists(atPath: systemPath) {
+            gpgURL = URL(fileURLWithPath: systemPath)
+            return
+        }
+        
+        // Try Homebrew path
+        let homebrewPath = "/opt/homebrew/bin/gpg"
+        if FileManager.default.fileExists(atPath: homebrewPath) {
+            gpgURL = URL(fileURLWithPath: homebrewPath)
+            return
+        }
+        
+        throw GPGError.gpgNotFound
+    }
+    
+    /// Setup GPG home directory in app container
+    private func setupGPGHome() throws {
+        guard let containerURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            throw GPGError.fileAccessDenied("Application Support directory")
+        }
+        
+        let gnupgHome = containerURL.appendingPathComponent("gnupg")
+        
+        if !FileManager.default.fileExists(atPath: gnupgHome.path) {
+            try FileManager.default.createDirectory(at: gnupgHome, withIntermediateDirectories: true)
+            
+            // Set appropriate permissions for GPG home
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o700],
+                ofItemAtPath: gnupgHome.path
+            )
+        }
+        
+        gpgHome = gnupgHome
+    }
+    
+    /// Verify GPG is working
+    private func verifyGPG() async throws {
+        let result = try await executeGPG(arguments: ["--version"])
+        
+        if let output = result.stdout {
+            let version = output.components(separatedBy: "\n").first ?? "Unknown"
+            await MainActor.run {
+                self.gpgVersion = version
+            }
+        }
+    }
+    
+    // MARK: - Key Management
+    
+    /// List all keys (public and secret)
+    /// - Parameter secretOnly: If true, only list secret keys
+    /// - Returns: Array of GPGKey objects
+    func listKeys(secretOnly: Bool = false) async throws -> [GPGKey] {
+        var arguments = ["--list-keys", "--with-colons", "--fixed-list-mode"]
+        if secretOnly {
+            arguments = ["--list-secret-keys", "--with-colons", "--fixed-list-mode"]
+        }
+        
+        let result = try await executeGPG(arguments: arguments)
+        
+        guard let output = result.stdout else {
+            throw GPGError.invalidOutput("No output from key list")
+        }
+        
+        return parseKeyList(output, secretOnly: secretOnly)
+    }
+    
+    /// Generate a new key pair
+    /// - Parameters:
+    ///   - name: User's name
+    ///   - email: User's email
+    ///   - keyType: Key type (RSA-4096, RSA-2048, ECC)
+    ///   - passphrase: Optional passphrase for the key
+    /// - Returns: Fingerprint of the generated key
+    func generateKey(name: String, email: String, keyType: KeyType, passphrase: String? = nil) async throws -> String {
+        // Build key generation parameters
+        let keyParams = buildKeyGenerationParams(
+            name: name,
+            email: email,
+            keyType: keyType,
+            passphrase: passphrase
+        )
+        
+        let result = try await executeGPG(
+            arguments: ["--batch", "--gen-key", "--status-fd", "1"],
+            input: keyParams
+        )
+        
+        // Extract fingerprint from output
+        guard let output = result.stdout,
+              let fingerprintRange = output.range(of: "KEY_CREATED ([A-Z]+) ", options: .regularExpression) else {
+            throw GPGError.keyGenerationFailed("Failed to get key fingerprint")
+        }
+        
+        let fingerprintStart = fingerprintRange.upperBound
+        let fingerprintEnd = output.index(fingerprintStart, offsetBy: 40)
+        let fingerprint = String(output[fingerprintStart..<fingerprintEnd])
+        
+        return fingerprint
+    }
+    
+    /// Import a key from file
+    /// - Parameter fileURL: URL of the key file
+    /// - Returns: Import results
+    func importKey(from fileURL: URL) async throws -> KeyImportResult {
+        let result = try await executeGPG(
+            arguments: ["--import", "--status-fd", "1", fileURL.path]
+        )
+        
+        guard let output = result.stdout else {
+            throw GPGError.importFailed("No output from import")
+        }
+        
+        return parseImportResult(output)
+    }
+    
+    /// Export a public key
+    /// - Parameters:
+    ///   - keyID: Key ID or fingerprint
+    ///   - armor: If true, export in ASCII armor format
+    /// - Returns: Exported key data
+    func exportPublicKey(keyID: String, armor: Bool = true) async throws -> Data {
+        var arguments = ["--export", keyID]
+        if armor {
+            arguments.insert("--armor", at: 0)
+        }
+        
+        let result = try await executeGPG(arguments: arguments)
+        
+        guard let data = result.data else {
+            throw GPGError.exportFailed("No key data exported")
+        }
+        
+        return data
+    }
+    
+    /// Export a secret key
+    /// - Parameters:
+    ///   - keyID: Key ID or fingerprint
+    ///   - passphrase: Key passphrase
+    ///   - armor: If true, export in ASCII armor format
+    /// - Returns: Exported key data
+    func exportSecretKey(keyID: String, passphrase: String, armor: Bool = true) async throws -> Data {
+        var arguments = ["--export-secret-key", "--batch", "--yes", keyID]
+        if armor {
+            arguments.insert("--armor", at: 0)
+        }
+        
+        // Set passphrase via environment
+        let result = try await executeGPG(
+            arguments: arguments,
+            environment: ["GPG_PASSPHRASE": passphrase]
+        )
+        
+        guard let data = result.data else {
+            throw GPGError.exportFailed("No key data exported")
+        }
+        
+        return data
+    }
+    
+    /// Delete a key
+    /// - Parameters:
+    ///   - keyID: Key ID or fingerprint
+    ///   - secret: If true, delete secret key
+    func deleteKey(keyID: String, secret: Bool = false) async throws {
+        var arguments = ["--batch", "--yes", "--delete-keys", keyID]
+        if secret {
+            arguments = ["--batch", "--yes", "--delete-secret-keys", keyID]
+        }
+        
+        _ = try await executeGPG(arguments: arguments)
+    }
+    
+    // MARK: - Encryption & Decryption
+    
+    /// Encrypt text
+    /// - Parameters:
+    ///   - text: Text to encrypt
+    ///   - recipients: Array of key IDs to encrypt for
+    ///   - sign: If true, also sign the message
+    ///   - signingKey: Key ID to sign with (required if sign is true)
+    /// - Returns: Encrypted text
+    func encrypt(text: String, recipients: [String], sign: Bool = false, signingKey: String? = nil) async throws -> String {
+        var arguments = ["--encrypt", "--armor", "--batch"]
+        
+        // Add recipients
+        for recipient in recipients {
+            arguments.append(contentsOf: ["--recipient", recipient])
+        }
+        
+        // Add signing if requested
+        if sign, let signingKey = signingKey {
+            arguments.append(contentsOf: ["--sign", "--local-user", signingKey])
+        }
+        
+        let result = try await executeGPG(arguments: arguments, input: text)
+        
+        guard let output = result.stdout else {
+            throw GPGError.encryptionFailed("No output from encryption")
+        }
+        
+        return output
+    }
+    
+    /// Decrypt text
+    /// - Parameters:
+    ///   - text: Text to decrypt
+    ///   - passphrase: Passphrase for the private key
+    /// - Returns: Decrypted text
+    func decrypt(text: String, passphrase: String) async throws -> String {
+        let result = try await executeGPG(
+            arguments: ["--decrypt", "--batch", "--passphrase-fd", "0"],
+            input: passphrase + "\n" + text
+        )
+        
+        guard let output = result.stdout else {
+            throw GPGError.decryptionFailed("No output from decryption")
+        }
+        
+        return output
+    }
+    
+    /// Encrypt a file
+    /// - Parameters:
+    ///   - sourceURL: Source file URL
+    ///   - destinationURL: Destination file URL
+    ///   - recipients: Array of key IDs to encrypt for
+    ///   - armor: If true, output ASCII armor format
+    func encryptFile(sourceURL: URL, destinationURL: URL, recipients: [String], armor: Bool = false) async throws {
+        var arguments = ["--encrypt", "--batch", "--yes"]
+        
+        // Add recipients
+        for recipient in recipients {
+            arguments.append(contentsOf: ["--recipient", recipient])
+        }
+        
+        // Add armor flag
+        if armor {
+            arguments.append("--armor")
+        }
+        
+        // Add input/output
+        arguments.append(contentsOf: ["--output", destinationURL.path, sourceURL.path])
+        
+        _ = try await executeGPG(arguments: arguments)
+    }
+    
+    /// Decrypt a file
+    /// - Parameters:
+    ///   - sourceURL: Source file URL
+    ///   - destinationURL: Destination file URL
+    ///   - passphrase: Passphrase for the private key
+    func decryptFile(sourceURL: URL, destinationURL: URL, passphrase: String) async throws {
+        let result = try await executeGPG(
+            arguments: [
+                "--decrypt",
+                "--batch",
+                "--yes",
+                "--passphrase-fd", "0",
+                "--output", destinationURL.path,
+                sourceURL.path
+            ],
+            input: passphrase
+        )
+        
+        if result.exitCode != 0 {
+            throw GPGError.decryptionFailed(result.stderr ?? "Unknown error")
+        }
+    }
+    
+    // MARK: - Signing & Verification
+    
+    /// Sign text
+    /// - Parameters:
+    ///   - text: Text to sign
+    ///   - keyID: Key ID to sign with
+    ///   - passphrase: Passphrase for the private key
+    ///   - clearSign: If true, use clear-sign format
+    /// - Returns: Signed text
+    func sign(text: String, keyID: String, passphrase: String, clearSign: Bool = true) async throws -> String {
+        var arguments = ["--batch", "--passphrase-fd", "0", "--local-user", keyID]
+        
+        if clearSign {
+            arguments.append("--clearsign")
+        } else {
+            arguments.append("--sign")
+        }
+        
+        arguments.append("--armor")
+        
+        let result = try await executeGPG(arguments: arguments, input: passphrase + "\n" + text)
+        
+        guard let output = result.stdout else {
+            throw GPGError.encryptionFailed("No output from signing")
+        }
+        
+        return output
+    }
+    
+    /// Verify a signature
+    /// - Parameter text: Signed text to verify
+    /// - Returns: Verification result
+    func verify(text: String) async throws -> VerificationResult {
+        let result = try await executeGPG(
+            arguments: ["--verify", "--status-fd", "1"],
+            input: text
+        )
+        
+        guard let output = result.stdout else {
+            throw GPGError.invalidOutput("No output from verification")
+        }
+        
+        return parseVerificationResult(output)
+    }
+    
+    // MARK: - Private Helpers
+    
+    /// Execute GPG command
+    private func executeGPG(
+        arguments: [String],
+        input: String? = nil,
+        environment: [String: String] = [:]
+    ) async throws -> GPGExecutionResult {
+        guard let gpgURL = gpgURL else {
+            throw GPGError.gpgNotFound
+        }
+        
+        let process = Process()
+        process.executableURL = gpgURL
+        process.arguments = arguments
+        
+        // Set environment
+        var env = ProcessInfo.processInfo.environment
+        
+        // Set GPG home directory
+        if let gpgHome = gpgHome {
+            env["GNUPGHOME"] = gpgHome.path
+        }
+        
+        // Add custom environment variables
+        for (key, value) in environment {
+            env[key] = value
+        }
+        
+        process.environment = env
+        
+        // Setup pipes
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        var stdinPipe: Pipe?
+        
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+        
+        if let input = input {
+            stdinPipe = Pipe()
+            process.standardInput = stdinPipe
+        }
+        
+        // Execute
+        do {
+            try process.run()
+            
+            // Write input if provided
+            if let input = input, let stdinPipe = stdinPipe {
+                let inputData = input.data(using: .utf8)
+                stdinPipe.fileHandleForWriting.write(inputData ?? Data())
+                try? stdinPipe.fileHandleForWriting.close()
+            }
+            
+            process.waitUntilExit()
+        } catch {
+            throw GPGError.executionFailed(error.localizedDescription)
+        }
+        
+        // Read output
+        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        
+        let stdout = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stderr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        let result = GPGExecutionResult(
+            exitCode: Int(process.terminationStatus),
+            stdout: stdout?.isEmpty == false ? stdout : nil,
+            stderr: stderr?.isEmpty == false ? stderr : nil,
+            data: stdoutData.isEmpty ? nil : stdoutData
+        )
+        
+        return result
+    }
+    
+    /// Parse key list output
+    private func parseKeyList(_ output: String, secretOnly: Bool) -> [GPGKey] {
+        var keys: [GPGKey] = []
+        var currentKey: GPGKeyBuilder?
+        
+        for line in output.components(separatedBy: "\n") {
+            let fields = line.components(separatedBy: ":")
+            
+            guard fields.count >= 1 else { continue }
+            
+            let recordType = fields[0]
+            
+            switch recordType {
+            case "pub", "sec":
+                // Start of a new key
+                if let key = currentKey?.build() {
+                    keys.append(key)
+                }
+                currentKey = GPGKeyBuilder()
+                currentKey?.isSecret = secretOnly
+                if fields.count >= 10 {
+                    currentKey?.keyID = fields[4]
+                    currentKey?.createdAt = parseTimestamp(fields[5])
+                    currentKey?.expiresAt = parseTimestamp(fields[6])
+                    currentKey?.algorithm = fields[3]
+                    currentKey?.keyLength = Int(fields[2]) ?? 0
+                    currentKey?.fingerprint = fields[4] // Will be overwritten by fpr record
+                }
+                
+            case "fpr":
+                if fields.count >= 10 {
+                    currentKey?.fingerprint = fields[9]
+                }
+                
+            case "uid":
+                if fields.count >= 10 {
+                    let userID = fields[9]
+                    // Parse name and email from "Name <email>"
+                    if let emailRange = userID.range(of: "<(.+)>", options: .regularExpression) {
+                        let emailStart = userID.index(emailRange.lowerBound, offsetBy: 1)
+                        let emailEnd = userID.index(emailRange.upperBound, offsetBy: -1)
+                        currentKey?.email = String(userID[emailStart..<emailEnd])
+                        currentKey?.name = String(userID[userID.startIndex..<emailRange.lowerBound])
+                            .trimmingCharacters(in: .whitespaces)
+                    } else {
+                        currentKey?.name = userID
+                    }
+                }
+            default:
+                break
+            }
+        }
+        
+        // Add last key
+        if let key = currentKey?.build() {
+            keys.append(key)
+        }
+        
+        return keys
+    }
+    
+    /// Parse timestamp
+    private func parseTimestamp(_ string: String) -> Date? {
+        guard let timestamp = Double(string), timestamp > 0 else { return nil }
+        return Date(timeIntervalSince1970: timestamp)
+    }
+    
+    /// Build key generation parameters
+    private func buildKeyGenerationParams(
+        name: String,
+        email: String,
+        keyType: KeyType,
+        passphrase: String?
+    ) -> String {
+        var params = """
+        %echo Generating key
+        Key-Type: \(keyType.gpgKeyType)
+        Key-Length: \(keyType.keyLength)
+        Key-Usage: sign,encrypt
+        Subkey-Type: \(keyType.gpgSubkeyType)
+        Subkey-Length: \(keyType.subkeyLength)
+        Subkey-Usage: encrypt
+        Name-Real: \(name)
+        Name-Email: \(email)
+        Expire-Date: 0
+        
+        """
+        
+        if let passphrase = passphrase, !passphrase.isEmpty {
+            params += "Passphrase: \(passphrase)\n"
+        } else {
+            params += "%no-protection\n"
+        }
+        
+        params += "%commit\n%echo Key generation complete\n"
+        
+        return params
+    }
+    
+    /// Parse import result
+    private func parseImportResult(_ output: String) -> KeyImportResult {
+        var imported = 0
+        var unchanged = 0
+        var newKeys: [String] = []
+        
+        for line in output.components(separatedBy: "\n") {
+            if line.contains("IMPORT_OK") {
+                let parts = line.components(separatedBy: " ")
+                if parts.count >= 4 {
+                    newKeys.append(parts[3])
+                }
+            }
+            if line.contains("IMPORT_RES") {
+                let parts = line.components(separatedBy: " ")
+                if parts.count >= 3 {
+                    imported = Int(parts[1]) ?? 0
+                    unchanged = Int(parts[2]) ?? 0
+                }
+            }
+        }
+        
+        return KeyImportResult(
+            imported: imported,
+            unchanged: unchanged,
+            newKeyIDs: newKeys
+        )
+    }
+    
+    /// Parse verification result
+    private func parseVerificationResult(_ output: String) -> VerificationResult {
+        var isValid = false
+        var signerKeyID: String?
+        var timestamp: Date?
+        
+        for line in output.components(separatedBy: "\n") {
+            if line.contains("GOODSIG") {
+                isValid = true
+                let parts = line.components(separatedBy: " ")
+                if parts.count >= 3 {
+                    signerKeyID = parts[2]
+                }
+            }
+            if line.contains("VALIDSIG") {
+                let parts = line.components(separatedBy: " ")
+                if parts.count >= 4 {
+                    if let ts = Double(parts[3]) {
+                        timestamp = Date(timeIntervalSince1970: ts)
+                    }
+                }
+            }
+        }
+        
+        return VerificationResult(
+            isValid: isValid,
+            signerKeyID: signerKeyID,
+            timestamp: timestamp
+        )
+    }
+}
+
+// MARK: - Supporting Types
+
+/// GPG execution result
+struct GPGExecutionResult {
+    let exitCode: Int
+    let stdout: String?
+    let stderr: String?
+    let data: Data?
+}
+
+/// GPG Key model
+struct GPGKey: Identifiable, Hashable {
+    let id: String
+    let keyID: String
+    let fingerprint: String
+    let name: String
+    let email: String
+    let algorithm: String
+    let keyLength: Int
+    let isSecret: Bool
+    let createdAt: Date?
+    let expiresAt: Date?
+    
+    /// Display-friendly key type
+    var displayKeyType: String {
+        "\(algorithm)-\(keyLength)"
+    }
+    
+    /// Check if key is expired
+    var isExpired: Bool {
+        guard let expiresAt = expiresAt else { return false }
+        return expiresAt < Date()
+    }
+}
+
+/// Key import result
+struct KeyImportResult {
+    let imported: Int
+    let unchanged: Int
+    let newKeyIDs: [String]
+}
+
+/// Verification result
+struct VerificationResult {
+    let isValid: Bool
+    let signerKeyID: String?
+    let timestamp: Date?
+}
+
+/// Key type enum
+enum KeyType: String, CaseIterable, Identifiable {
+    case rsa4096 = "RSA-4096"
+    case rsa2048 = "RSA-2048"
+    case ecc = "ECC"
+    
+    var id: String { rawValue }
+    
+    var gpgKeyType: String {
+        switch self {
+        case .rsa4096, .rsa2048: return "RSA"
+        case .ecc: return "EDDSA"
+        }
+    }
+    
+    var gpgSubkeyType: String {
+        switch self {
+        case .rsa4096, .rsa2048: return "RSA"
+        case .ecc: return "ECDH"
+        }
+    }
+    
+    var keyLength: Int {
+        switch self {
+        case .rsa4096: return 4096
+        case .rsa2048: return 2048
+        case .ecc: return 0 // Curve25519 doesn't use length
+        }
+    }
+    
+    var subkeyLength: Int {
+        switch self {
+        case .rsa4096: return 4096
+        case .rsa2048: return 2048
+        case .ecc: return 0 // Curve25519 doesn't use length
+        }
+    }
+    
+    var curve: String? {
+        switch self {
+        case .ecc: return "cv25519"
+        default: return nil
+        }
+    }
+}
+
+/// Helper class for building GPGKey
+private class GPGKeyBuilder {
+    var keyID: String = ""
+    var fingerprint: String = ""
+    var name: String = ""
+    var email: String = ""
+    var algorithm: String = ""
+    var keyLength: Int = 0
+    var isSecret: Bool = false
+    var createdAt: Date?
+    var expiresAt: Date?
+    
+    func build() -> GPGKey? {
+        guard !fingerprint.isEmpty else { return nil }
+        return GPGKey(
+            id: fingerprint,
+            keyID: keyID,
+            fingerprint: fingerprint,
+            name: name,
+            email: email,
+            algorithm: algorithm,
+            keyLength: keyLength,
+            isSecret: isSecret,
+            createdAt: createdAt,
+            expiresAt: expiresAt
+        )
+    }
+}
