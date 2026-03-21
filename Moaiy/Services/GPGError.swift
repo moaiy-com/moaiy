@@ -22,6 +22,8 @@ enum GPGError: Error, LocalizedError {
     case operationCancelled
     case fileAccessDenied(String)
     case unsupportedKeyType(String)
+    case trustUpdateFailed(String)
+    case keySigningFailed(String)
     
     var errorDescription: String? {
         switch self {
@@ -51,6 +53,10 @@ enum GPGError: Error, LocalizedError {
             return "File access denied: \(path)"
         case .unsupportedKeyType(let type):
             return "Unsupported key type: \(type)"
+        case .trustUpdateFailed(let message):
+            return "Trust update failed: \(message)"
+        case .keySigningFailed(let message):
+            return "Key signing failed: \(message)"
         }
     }
     
@@ -82,6 +88,10 @@ enum GPGError: Error, LocalizedError {
             return "Grant file access permission in Settings"
         case .unsupportedKeyType:
             return "Use RSA-4096 or ECC (Curve25519)"
+        case .trustUpdateFailed:
+            return "Check key ID and try again"
+        case .keySigningFailed:
+            return "Ensure you have the correct signing key and passphrase"
         }
     }
 }

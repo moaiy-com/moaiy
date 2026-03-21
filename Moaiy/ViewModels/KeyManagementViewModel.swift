@@ -82,7 +82,8 @@ final class KeyManagementViewModel {
                         keyLength: secretKey.keyLength,
                         isSecret: true,
                         createdAt: secretKey.createdAt,
-                        expiresAt: secretKey.expiresAt
+                        expiresAt: secretKey.expiresAt,
+                        trustLevel: secretKey.trustLevel
                     )
                 } else {
                     allKeys.append(secretKey)
@@ -196,6 +197,78 @@ final class KeyManagementViewModel {
         
         do {
             try await gpgService.deleteKey(keyID: key.fingerprint, secret: key.isSecret)
+            await loadKeys()
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+            throw error
+        }
+    }
+    
+    // MARK: - Trust Management
+    
+    /// Check trust level for a key
+    func checkTrust(for key: GPGKey) async -> TrustLevel {
+        do {
+            return try await gpgService.checkTrust(keyID: key.fingerprint)
+        } catch {
+            print("Failed to check trust: \(error)")
+            return .unknown
+        }
+    }
+    
+    /// Set trust level for a key
+    func setTrust(for key: GPGKey, trustLevel: TrustLevel) async throws {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            try await gpgService.setTrust(keyID: key.fingerprint, trustLevel: trustLevel)
+            await loadKeys()
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+            throw error
+        }
+    }
+    
+    /// Get detailed trust information for a key
+    func getTrustDetails(for key: GPGKey) async throws -> KeyTrustDetails {
+        try await gpgService.getTrustDetails(keyID: key.fingerprint)
+    }
+    
+    /// Sign a key to indicate trust
+    /// - Parameters:
+    ///   - keyToSign: The key to sign
+    ///   - signerKey: Your key to sign with (nil for default)
+    ///   - passphrase: Passphrase for signing key
+    ///   - trustLevel: Optional trust level to set after signing
+    func signKey(keyToSign: GPGKey, signerKey: GPGKey?, passphrase: String, trustLevel: TrustLevel? = nil) async throws {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            try await gpgService.signKey(
+                keyID: keyToSign.fingerprint,
+                signerKeyID: signerKey?.fingerprint,
+                passphrase: passphrase,
+                trustLevel: trustLevel
+            )
+            await loadKeys()
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+            throw error
+        }
+    }
+    
+    /// Update the trust database
+    func updateTrustDB() async throws {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            try await gpgService.updateTrustDB()
             await loadKeys()
         } catch {
             errorMessage = error.localizedDescription

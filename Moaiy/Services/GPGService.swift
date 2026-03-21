@@ -391,6 +391,128 @@ final class GPGService: ObservableObject {
         return parseVerificationResult(output)
     }
     
+    // MARK: - Trust Management
+    
+    /// Check the trust level of a key
+    /// - Parameter keyID: Key ID or fingerprint
+    /// - Returns: Current trust level
+    func checkTrust(keyID: String) async throws -> TrustLevel {
+        let result = try await executeGPG(
+            arguments: ["--list-keys", "--with-colons", "--fixed-list-mode", keyID]
+        )
+        
+        guard let output = result.stdout else {
+            throw GPGError.invalidOutput("No output from key list")
+        }
+        
+        // Parse trust from output
+        for line in output.components(separatedBy: "\n") {
+            let fields = line.components(separatedBy: ":")
+            if (fields[0] == "pub" || fields[0] == "sec") && fields.count >= 9 {
+                return TrustLevel(gpgCode: fields[8]) ?? .unknown
+            }
+        }
+        
+        return .unknown
+    }
+    
+    /// Set the owner trust level for a key
+    /// - Parameters:
+    ///   - keyID: Key ID or fingerprint
+    ///   - trustLevel: Trust level to set
+    func setTrust(keyID: String, trustLevel: TrustLevel) async throws {
+        // Use --edit-key with trust command
+        let trustCommand = "trust\n\(trustLevel.gpgCode)\ny\n"
+        
+        let result = try await executeGPG(
+            arguments: ["--command-fd", "0", "--edit-key", keyID],
+            input: trustCommand
+        )
+        
+        if result.exitCode != 0 {
+            throw GPGError.trustUpdateFailed(result.stderr ?? "Unknown error")
+        }
+    }
+    
+    /// Update the trust database
+    func updateTrustDB() async throws {
+        let result = try await executeGPG(arguments: ["--check-trustdb"])
+        
+        if result.exitCode != 0 {
+            throw GPGError.trustUpdateFailed(result.stderr ?? "Unknown error")
+        }
+    }
+    
+    /// Sign a key to indicate trust
+    /// - Parameters:
+    ///   - keyID: Key ID to sign
+    ///   - signerKeyID: Your key ID to sign with (optional, uses default)
+    ///   - passphrase: Passphrase for signing key
+    ///   - trustLevel: Local trust level to set after signing
+    func signKey(keyID: String, signerKeyID: String?, passphrase: String, trustLevel: TrustLevel? = nil) async throws {
+        var arguments = ["--command-fd", "0", "--batch", "--yes"]
+        
+        if let signerKeyID = signerKeyID {
+            arguments.append(contentsOf: ["--local-user", signerKeyID])
+        }
+        
+        arguments.append(contentsOf: ["--sign-key", keyID])
+        
+        var input = passphrase + "\n"
+        if let trustLevel = trustLevel {
+            input += "trust\n\(trustLevel.gpgCode)\ny\nsave\n"
+        }
+        
+        let result = try await executeGPG(arguments: arguments, input: input)
+        
+        if result.exitCode != 0 {
+            throw GPGError.keySigningFailed(result.stderr ?? "Unknown error")
+        }
+    }
+    
+    /// Check key validity and trust details
+    /// - Parameter keyID: Key ID or fingerprint
+    /// - Returns: Detailed trust information
+    func getTrustDetails(keyID: String) async throws -> KeyTrustDetails {
+        let result = try await executeGPG(
+            arguments: ["--list-keys", "--with-colons", "--fixed-list-mode", "--with-fingerprint", keyID]
+        )
+        
+        guard let output = result.stdout else {
+            throw GPGError.invalidOutput("No output from key list")
+        }
+        
+        var ownerTrust: TrustLevel = .unknown
+        var calculatedTrust: TrustLevel = .unknown
+        var signatureCount = 0
+        
+        for line in output.components(separatedBy: "\n") {
+            let fields = line.components(separatedBy: ":")
+            
+            switch fields[0] {
+            case "pub", "sec":
+                if fields.count >= 9 {
+                    ownerTrust = TrustLevel(gpgCode: fields[8]) ?? .unknown
+                }
+            case "uid":
+                if fields.count >= 9 {
+                    calculatedTrust = TrustLevel(gpgCode: fields[8]) ?? .unknown
+                }
+            case "sig":
+                signatureCount += 1
+            default:
+                break
+            }
+        }
+        
+        return KeyTrustDetails(
+            keyID: keyID,
+            ownerTrust: ownerTrust,
+            calculatedTrust: calculatedTrust,
+            signatureCount: signatureCount
+        )
+    }
+    
     // MARK: - Private Helpers
     
     /// Execute GPG command
@@ -495,6 +617,10 @@ final class GPGService: ObservableObject {
                     currentKey?.algorithm = fields[3]
                     currentKey?.keyLength = Int(fields[2]) ?? 0
                     currentKey?.fingerprint = fields[4] // Will be overwritten by fpr record
+                    // Field 8 is ownertrust for pub records
+                    if fields.count >= 9 {
+                        currentKey?.trustLevel = TrustLevel(gpgCode: fields[8]) ?? .unknown
+                    }
                 }
                 
             case "fpr":
@@ -514,6 +640,10 @@ final class GPGService: ObservableObject {
                             .trimmingCharacters(in: .whitespaces)
                     } else {
                         currentKey?.name = userID
+                    }
+                    // UID record field 8 contains the calculated trust
+                    if fields.count >= 9, currentKey?.trustLevel == .unknown {
+                        currentKey?.trustLevel = TrustLevel(gpgCode: fields[8]) ?? .unknown
                     }
                 }
             default:
@@ -638,6 +768,62 @@ struct GPGExecutionResult {
     let data: Data?
 }
 
+/// GPG Key trust level
+enum TrustLevel: String, CaseIterable, Identifiable {
+    case unknown = "unknown"
+    case none = "none"
+    case marginal = "marginal"
+    case full = "full"
+    case ultimate = "ultimate"
+    
+    var id: String { rawValue }
+    
+    /// GPG trust database character code
+    var gpgCode: String {
+        switch self {
+        case .unknown: return "-"
+        case .none: return "n"
+        case .marginal: return "m"
+        case .full: return "f"
+        case .ultimate: return "u"
+        }
+    }
+    
+    /// Initialize from GPG colon output code
+    init?(gpgCode: String) {
+        switch gpgCode {
+        case "-", "": self = .unknown
+        case "n": self = .none
+        case "m": self = .marginal
+        case "f": self = .full
+        case "u": self = .ultimate
+        default: return nil
+        }
+    }
+    
+    /// Display name for UI
+    var displayName: String {
+        switch self {
+        case .unknown: return "Unknown"
+        case .none: return "None"
+        case .marginal: return "Marginal"
+        case .full: return "Full"
+        case .ultimate: return "Ultimate"
+        }
+    }
+    
+    /// Description of trust level
+    var description: String {
+        switch self {
+        case .unknown: return "Trust level not yet calculated"
+        case .none: return "Not trusted"
+        case .marginal: return "Marginally trusted (needs more signatures)"
+        case .full: return "Fully trusted"
+        case .ultimate: return "Ultimate trust (your own key)"
+        }
+    }
+}
+
 /// GPG Key model
 struct GPGKey: Identifiable, Hashable {
     let id: String
@@ -650,6 +836,7 @@ struct GPGKey: Identifiable, Hashable {
     let isSecret: Bool
     let createdAt: Date?
     let expiresAt: Date?
+    let trustLevel: TrustLevel
     
     /// Display-friendly key type
     var displayKeyType: String {
@@ -660,6 +847,11 @@ struct GPGKey: Identifiable, Hashable {
     var isExpired: Bool {
         guard let expiresAt = expiresAt else { return false }
         return expiresAt < Date()
+    }
+    
+    /// Check if key is trusted enough for encryption
+    var isTrusted: Bool {
+        trustLevel == .full || trustLevel == .ultimate
     }
 }
 
@@ -675,6 +867,24 @@ struct VerificationResult {
     let isValid: Bool
     let signerKeyID: String?
     let timestamp: Date?
+}
+
+/// Key trust details
+struct KeyTrustDetails {
+    let keyID: String
+    let ownerTrust: TrustLevel
+    let calculatedTrust: TrustLevel
+    let signatureCount: Int
+    
+    /// Whether the key is considered trusted for encryption
+    var isTrusted: Bool {
+        calculatedTrust == .full || calculatedTrust == .ultimate
+    }
+    
+    /// Whether the key has been signed by others
+    var hasSignatures: Bool {
+        signatureCount > 0
+    }
 }
 
 /// Key type enum
@@ -734,6 +944,7 @@ private class GPGKeyBuilder {
     var isSecret: Bool = false
     var createdAt: Date?
     var expiresAt: Date?
+    var trustLevel: TrustLevel = .unknown
     
     func build() -> GPGKey? {
         guard !fingerprint.isEmpty else { return nil }
@@ -747,7 +958,8 @@ private class GPGKeyBuilder {
             keyLength: keyLength,
             isSecret: isSecret,
             createdAt: createdAt,
-            expiresAt: expiresAt
+            expiresAt: expiresAt,
+            trustLevel: trustLevel
         )
     }
 }
