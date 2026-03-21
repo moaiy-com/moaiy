@@ -25,11 +25,11 @@ struct MainView: View {
             }
         }
         
-        var title: String {
+        var title: LocalizedStringKey {
             switch self {
-            case .keyManagement: return String(localized: "section_key_management")
-            case .encryption: return String(localized: "section_encryption")
-            case .settings: return String(localized: "section_settings")
+            case .keyManagement: return "section_key_management"
+            case .encryption: return "section_encryption"
+            case .settings: return "section_settings"
             }
         }
     }
