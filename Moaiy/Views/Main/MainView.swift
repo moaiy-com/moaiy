@@ -36,9 +36,13 @@ struct MainView: View {
     
     var body: some View {
         NavigationSplitView {
-            List(Section.allCases, selection: $selectedSection) { section in
-                Label(section.title, systemImage: section.icon)
+            List(selection: $selectedSection) {
+                ForEach(Section.allCases) { section in
+                    Label(section.title, systemImage: section.icon)
+                        .tag(section)
+                }
             }
+            .listStyle(.sidebar)
             .navigationTitle("Moaiy")
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 250)
         } detail: {
