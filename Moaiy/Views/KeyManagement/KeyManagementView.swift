@@ -12,12 +12,18 @@ struct KeyManagementView: View {
     @State private var showingCreateKey = false
     @State private var showingImportKey = false
     @State private var selectedKey: GPGKey?
-    
+    @State private var showingFilters = false
+
     var body: some View {
         Group {
             if viewModel.isLoading && viewModel.keys.isEmpty {
-                ProgressView("status_loading_keys")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Skeleton loading
+                KeyListSkeleton(count: 5)
+            } else if let error = viewModel.errorMessage, viewModel.keys.isEmpty {
+                // Error state with retry
+                ErrorView(message: error) {
+                    Task { await viewModel.refresh() }
+                }
             } else if viewModel.keys.isEmpty {
                 EmptyKeysView(onCreateKey: { showingCreateKey = true })
             } else if let key = selectedKey {
@@ -43,25 +49,52 @@ struct KeyManagementView: View {
                     Label("action_create_key", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut("n", modifiers: .command)
             }
             ToolbarItem(placement: .automatic) {
                 Button(action: { Task { await viewModel.refresh() } }) {
                     Label("action_refresh", systemImage: "arrow.clockwise")
                 }
+                .keyboardShortcut("r", modifiers: .command)
             }
             ToolbarItem(placement: .automatic) {
                 Button(action: { showingImportKey = true }) {
                     Label("action_import_key", systemImage: "square.and.arrow.down")
                 }
+                .keyboardShortcut("i", modifiers: .command)
+            }
+            ToolbarItem(placement: .automatic) {
+                Button(action: { showingFilters = true }) {
+                    Label("action_filters", systemImage: "line.3.horizontal.decrease.circle")
+                }
+                .badge(viewModel.hasActiveFilters ? "!" : nil)
             }
         }
         .searchable(text: $viewModel.searchText, prompt: "prompt_search_keys")
+        .onSubmit(of: .search) {
+            viewModel.addToSearchHistory(viewModel.searchText)
+        }
         .sheet(isPresented: $showingCreateKey) {
             CreateKeyView()
         }
         .sheet(isPresented: $showingImportKey) {
             ImportKeySheet()
                 .environment(viewModel)
+        }
+        .sheet(isPresented: $showingFilters) {
+            FilterSheet(viewModel: viewModel)
+        }
+        .alert("error_occurred", isPresented: .constant(viewModel.errorMessage != nil)) {
+            Button("action_retry") {
+                Task { await viewModel.refresh() }
+            }
+            Button("action_cancel", role: .cancel) {
+                viewModel.clearError()
+            }
+        } message: {
+            if let error = viewModel.errorMessage {
+                Text(error)
+            }
         }
     }
 }
@@ -119,7 +152,8 @@ struct KeyListView: View {
 
 struct KeyCardView: View {
     let key: GPGKey
-    
+    @Environment(\.controlActiveState) private var controlActiveState
+
     var body: some View {
         HStack(spacing: 16) {
             // Key icon with color based on key type
@@ -129,12 +163,12 @@ struct KeyCardView: View {
                 .frame(width: 40, height: 40)
                 .background(keyIconColor.opacity(0.1))
                 .clipShape(Circle())
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(key.name)
                         .font(.headline)
-                    
+
                     // Key type badge: Private Key or Public Key
                     Text(key.isSecret ? "key_type_private" : "key_type_public")
                         .font(.caption)
@@ -143,7 +177,7 @@ struct KeyCardView: View {
                         .background(keyTypeBadgeColor.opacity(0.2))
                         .foregroundStyle(keyTypeBadgeColor)
                         .clipShape(Capsule())
-                    
+
                     // Trust level badge
                     Text(key.trustLevel.localizedName)
                         .font(.caption)
@@ -152,12 +186,23 @@ struct KeyCardView: View {
                         .background(trustLevelColor.opacity(0.2))
                         .foregroundStyle(trustLevelColor)
                         .clipShape(Capsule())
+
+                    // Expired badge
+                    if key.isExpired {
+                        Text("status_expired")
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.red.opacity(0.2))
+                            .foregroundStyle(.red)
+                            .clipShape(Capsule())
+                    }
                 }
-                
+
                 Text(key.email)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                
+
                 HStack(spacing: 8) {
                     Label(key.displayKeyType, systemImage: "number")
                     if let createdAt = key.createdAt {
@@ -168,17 +213,20 @@ struct KeyCardView: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
             }
-            
+
             Spacer()
-            
+
             HStack(spacing: 8) {
                 Button("action_encrypt") { }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                
+
                 Menu {
                     Button("action_export_public_key") { }
-                    Button("action_copy_fingerprint") { }
+                    Button("action_copy_fingerprint") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(key.fingerprint, forType: .string)
+                    }
                     Divider()
                     Button("action_delete_key", role: .destructive) { }
                 } label: {
@@ -191,6 +239,40 @@ struct KeyCardView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
+        .contextMenu {
+            Button(action: { }) {
+                Label("action_encrypt", systemImage: "lock.fill")
+            }
+
+            Button(action: { }) {
+                Label("action_decrypt", systemImage: "lock.open.fill")
+            }
+
+            Divider()
+
+            Button(action: {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(key.fingerprint, forType: .string)
+            }) {
+                Label("action_copy_fingerprint", systemImage: "doc.on.doc")
+            }
+
+            Button(action: { }) {
+                Label("action_export_public_key", systemImage: "square.and.arrow.up")
+            }
+
+            if key.isSecret {
+                Button(action: { }) {
+                    Label("action_export_private_key", systemImage: "key.fill")
+                }
+            }
+
+            Divider()
+
+            Button(role: .destructive, action: { }) {
+                Label("action_delete_key", systemImage: "trash.fill")
+            }
+        }
     }
     
     // MARK: - Color Computed Properties
@@ -216,6 +298,78 @@ struct KeyCardView: View {
         case .unknown:
             return .secondary
         }
+    }
+}
+
+// MARK: - Filter Sheet
+
+struct FilterSheet: View {
+    @Bindable var viewModel: KeyManagementViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 24) {
+            // Header
+            HStack {
+                Text("filter_title")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                Spacer()
+
+                if viewModel.hasActiveFilters {
+                    Button("action_reset") {
+                        viewModel.resetFilters()
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+
+            // Filter options
+            Form {
+                Section("filter_key_type") {
+                    Picker("", selection: $viewModel.filterKeyType) {
+                        ForEach(KeyTypeFilter.allCases) { filter in
+                            Text(filter.displayName).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.radioGroup)
+                }
+
+                Section("filter_trust_level") {
+                    Picker("", selection: $viewModel.filterTrustLevel) {
+                        Text("filter_all_trust_levels").tag(nil as TrustLevel?)
+                        ForEach(TrustLevel.allCases, id: \.self) { level in
+                            Text(level.localizedName).tag(level as TrustLevel?)
+                        }
+                    }
+                }
+
+                Section("filter_algorithm") {
+                    Picker("", selection: $viewModel.filterAlgorithm) {
+                        Text("filter_all_algorithms").tag(nil as String?)
+                        ForEach(viewModel.availableAlgorithms, id: \.self) { algorithm in
+                            Text(algorithm).tag(algorithm as String?)
+                        }
+                    }
+                }
+
+                Section("filter_other_options") {
+                    Toggle("filter_show_expired_keys", isOn: $viewModel.showExpiredKeys)
+                }
+            }
+            .formStyle(.grouped)
+
+            // Apply button
+            Button("action_apply") {
+                dismiss()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .frame(maxWidth: .infinity)
+        }
+        .padding(32)
+        .frame(width: 450)
     }
 }
 

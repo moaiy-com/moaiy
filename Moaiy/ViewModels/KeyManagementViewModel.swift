@@ -15,27 +15,71 @@ final class KeyManagementViewModel {
     private let logger = Logger(subsystem: "com.moaiy.app", category: "KeyManagement")
     
     // MARK: - Published State
-    
+
     var keys: [GPGKey] = []
     var isLoading = false
     var errorMessage: String?
     var searchText = ""
+
+    // Filter options
+    var filterKeyType: KeyTypeFilter = .all
+    var filterTrustLevel: TrustLevel? = nil
+    var filterAlgorithm: String? = nil
+    var showExpiredKeys: Bool = true
+
+    // Search history
+    var searchHistory: [String] = []
+    private let maxSearchHistory = 10
     
     // MARK: - Private Properties
     
     private let gpgService = GPGService.shared
     
     // MARK: - Computed Properties
-    
+
     var filteredKeys: [GPGKey] {
-        if searchText.isEmpty {
-            return keys
+        var result = keys
+
+        // Text search
+        if !searchText.isEmpty {
+            result = result.filter { key in
+                key.name.localizedCaseInsensitiveContains(searchText) ||
+                key.email.localizedCaseInsensitiveContains(searchText) ||
+                key.fingerprint.localizedCaseInsensitiveContains(searchText)
+            }
         }
-        return keys.filter { key in
-            key.name.localizedCaseInsensitiveContains(searchText) ||
-            key.email.localizedCaseInsensitiveContains(searchText) ||
-            key.fingerprint.localizedCaseInsensitiveContains(searchText)
+
+        // Key type filter
+        switch filterKeyType {
+        case .all:
+            break
+        case .publicOnly:
+            result = result.filter { !$0.isSecret }
+        case .secretOnly:
+            result = result.filter { $0.isSecret }
         }
+
+        // Trust level filter
+        if let trustLevel = filterTrustLevel {
+            result = result.filter { $0.trustLevel == trustLevel }
+        }
+
+        // Algorithm filter
+        if let algorithm = filterAlgorithm {
+            result = result.filter { $0.algorithm.localizedCaseInsensitiveContains(algorithm) }
+        }
+
+        // Expired keys filter
+        if !showExpiredKeys {
+            result = result.filter { !$0.isExpired }
+        }
+
+        return result
+    }
+
+    var availableAlgorithms: [String] {
+        let algorithms = Set(keys.map { $0.algorithm })
+        return Array(algorithms).sorted()
     }
     
     var publicKeys: [GPGKey] {
@@ -295,12 +339,74 @@ final class KeyManagementViewModel {
     }
     
     // MARK: - Helpers
-    
+
     func clearError() {
         errorMessage = nil
     }
-    
+
     func refresh() async {
         await loadKeys()
+    }
+
+    // MARK: - Search History
+
+    func addToSearchHistory(_ query: String) {
+        guard !query.isEmpty else { return }
+
+        // Remove if already exists
+        if let index = searchHistory.firstIndex(of: query) {
+            searchHistory.remove(at: index)
+        }
+
+        // Add to beginning
+        searchHistory.insert(query, at: 0)
+
+        // Limit history size
+        if searchHistory.count > maxSearchHistory {
+            searchHistory = Array(searchHistory.prefix(maxSearchHistory))
+        }
+    }
+
+    func clearSearchHistory() {
+        searchHistory = []
+    }
+
+    // MARK: - Filter Management
+
+    func resetFilters() {
+        filterKeyType = .all
+        filterTrustLevel = nil
+        filterAlgorithm = nil
+        showExpiredKeys = true
+        searchText = ""
+    }
+
+    var hasActiveFilters: Bool {
+        filterKeyType != .all ||
+        filterTrustLevel != nil ||
+        filterAlgorithm != nil ||
+        !showExpiredKeys ||
+        !searchText.isEmpty
+    }
+}
+
+// MARK: - Filter Types
+
+enum KeyTypeFilter: String, CaseIterable, Identifiable {
+    case all = "all"
+    case publicOnly = "public"
+    case secretOnly = "secret"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .all:
+            return String(localized: "filter_all_keys")
+        case .publicOnly:
+            return String(localized: "filter_public_keys")
+        case .secretOnly:
+            return String(localized: "filter_secret_keys")
+        }
     }
 }
