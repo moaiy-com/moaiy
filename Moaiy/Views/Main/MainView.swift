@@ -27,9 +27,9 @@ struct MainView: View {
         
         var title: String {
             switch self {
-            case .keyManagement: return "Key Management"
-            case .encryption: return "Encryption"
-            case .settings: return "Settings"
+            case .keyManagement: return String(localized: "section_key_management")
+            case .encryption: return String(localized: "section_encryption")
+            case .settings: return String(localized: "section_settings")
             }
         }
     }
@@ -56,7 +56,7 @@ struct MainView: View {
                     SettingsView()
                 }
             } else {
-                Text("Select a section")
+                Text("placeholder_select_section")
                     .foregroundStyle(.secondary)
             }
         }

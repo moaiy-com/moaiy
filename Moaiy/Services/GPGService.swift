@@ -10,7 +10,8 @@ import os.log
 
 /// Service class for GPG operations
 @MainActor
-final class GPGService: ObservableObject {
+@Observable
+final class GPGService {
     
     private let logger = Logger(subsystem: "com.moaiy.app", category: "GPGService")
     
@@ -18,10 +19,10 @@ final class GPGService: ObservableObject {
     
     static let shared = GPGService()
     
-    // MARK: - Published Properties
+    // MARK: - Properties
     
-    @Published private(set) var isReady = false
-    @Published private(set) var gpgVersion: String?
+    private(set) var isReady = false
+    private(set) var gpgVersion: String?
     
     // MARK: - Private Properties
     
@@ -49,21 +50,17 @@ final class GPGService: ObservableObject {
     private func setupGPG() {
         Task {
             do {
-                try await findGPGExecutable()
+                try findGPGExecutable()
                 logger.info("Found GPG at: \(self.gpgPath)")
-                try await setupGPGHome()
+                try setupGPGHome()
                 logger.info("GPG home directory: \(self.gpgHome?.path ?? "nil")")
                 try await verifyGPG()
                 logger.info("GPG version: \(self.gpgVersion ?? "unknown")")
-                await MainActor.run {
-                    self.isReady = true
-                }
+                self.isReady = true
                 logger.info("Setup complete, isReady = true")
             } catch {
                 logger.error("Setup failed: \(error.localizedDescription)")
-                await MainActor.run {
-                    self.isReady = false
-                }
+                self.isReady = false
             }
         }
     }
@@ -145,9 +142,7 @@ final class GPGService: ObservableObject {
         
         if let output = result.stdout {
             let version = output.components(separatedBy: "\n").first ?? "Unknown"
-            await MainActor.run {
-                self.gpgVersion = version
-            }
+            self.gpgVersion = version
         }
     }
     
@@ -157,10 +152,9 @@ final class GPGService: ObservableObject {
     /// - Parameter secretOnly: If true, only list secret keys
     /// - Returns: Array of GPGKey objects
     func listKeys(secretOnly: Bool = false) async throws -> [GPGKey] {
-        var arguments = ["--list-keys", "--with-colons", "--fixed-list-mode"]
-        if secretOnly {
-            arguments = ["--list-secret-keys", "--with-colons", "--fixed-list-mode"]
-        }
+        let arguments = secretOnly
+            ? ["--list-secret-keys", "--with-colons", "--fixed-list-mode"]
+            : ["--list-keys", "--with-colons", "--fixed-list-mode"]
         
         let result = try await executeGPG(arguments: arguments)
         
@@ -581,7 +575,7 @@ final class GPGService: ObservableObject {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
         
-        if let input = input {
+        if input != nil {
             stdinPipe = Pipe()
             process.standardInput = stdinPipe
         }
@@ -830,7 +824,7 @@ enum TrustLevel: String, CaseIterable, Identifiable {
         }
     }
     
-    /// Display name for UI
+    /// Display name for UI (non-localized, for debugging)
     var displayName: String {
         switch self {
         case .unknown: return "Unknown"
@@ -838,6 +832,17 @@ enum TrustLevel: String, CaseIterable, Identifiable {
         case .marginal: return "Marginal"
         case .full: return "Full"
         case .ultimate: return "Ultimate"
+        }
+    }
+    
+    /// Localized name for UI
+    var localizedName: String {
+        switch self {
+        case .unknown: return String(localized: "trust_level_unknown")
+        case .none: return String(localized: "trust_level_none")
+        case .marginal: return String(localized: "trust_level_marginal")
+        case .full: return String(localized: "trust_level_full")
+        case .ultimate: return String(localized: "trust_level_ultimate")
         }
     }
     

@@ -28,70 +28,70 @@ enum GPGError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .gpgNotFound:
-            return "GPG executable not found in application bundle"
+            return String(localized: "error_gpg_not_found")
         case .executionFailed(let message):
-            return "GPG execution failed: \(message)"
+            return "\(String(localized: "error_execution_failed")): \(message)"
         case .invalidOutput(let message):
-            return "Invalid GPG output: \(message)"
+            return "\(String(localized: "error_invalid_output")): \(message)"
         case .keyNotFound(let identifier):
-            return "Key not found: \(identifier)"
+            return "\(String(localized: "error_key_not_found")): \(identifier)"
         case .keyGenerationFailed(let message):
-            return "Key generation failed: \(message)"
+            return "\(String(localized: "error_key_generation_failed")): \(message)"
         case .encryptionFailed(let message):
-            return "Encryption failed: \(message)"
+            return "\(String(localized: "error_encryption_failed")): \(message)"
         case .decryptionFailed(let message):
-            return "Decryption failed: \(message)"
+            return "\(String(localized: "error_decryption_failed")): \(message)"
         case .importFailed(let message):
-            return "Key import failed: \(message)"
+            return "\(String(localized: "error_import_failed")): \(message)"
         case .exportFailed(let message):
-            return "Key export failed: \(message)"
+            return "\(String(localized: "error_export_failed")): \(message)"
         case .invalidPassphrase:
-            return "Invalid passphrase"
+            return String(localized: "error_invalid_passphrase")
         case .operationCancelled:
-            return "Operation was cancelled"
+            return String(localized: "error_operation_cancelled")
         case .fileAccessDenied(let path):
-            return "File access denied: \(path)"
+            return "\(String(localized: "error_file_access_denied")): \(path)"
         case .unsupportedKeyType(let type):
-            return "Unsupported key type: \(type)"
+            return "\(String(localized: "error_unsupported_key_type")): \(type)"
         case .trustUpdateFailed(let message):
-            return "Trust update failed: \(message)"
+            return "\(String(localized: "error_trust_update_failed")): \(message)"
         case .keySigningFailed(let message):
-            return "Key signing failed: \(message)"
+            return "\(String(localized: "error_key_signing_failed")): \(message)"
         }
     }
     
     var recoverySuggestion: String? {
         switch self {
         case .gpgNotFound:
-            return "Please reinstall the application"
+            return String(localized: "error_gpg_not_found_recovery")
         case .executionFailed:
-            return "Check GPG installation and try again"
+            return String(localized: "error_execution_failed_recovery")
         case .invalidOutput:
-            return "Try updating GPG version"
+            return String(localized: "error_invalid_output_recovery")
         case .keyNotFound:
-            return "Import the key first or check the key ID"
+            return String(localized: "error_key_not_found_recovery")
         case .keyGenerationFailed:
-            return "Check input parameters and try again"
+            return String(localized: "error_key_generation_failed_recovery")
         case .encryptionFailed:
-            return "Ensure you have valid recipient keys"
+            return String(localized: "error_encryption_failed_recovery")
         case .decryptionFailed:
-            return "Ensure you have the correct private key and passphrase"
+            return String(localized: "error_decryption_failed_recovery")
         case .importFailed:
-            return "Check if the key file is valid"
+            return String(localized: "error_import_failed_recovery")
         case .exportFailed:
-            return "Check file permissions and disk space"
+            return String(localized: "error_export_failed_recovery")
         case .invalidPassphrase:
-            return "Check your passphrase and try again"
+            return String(localized: "error_invalid_passphrase_recovery")
         case .operationCancelled:
-            return "Try the operation again"
+            return String(localized: "error_operation_cancelled_recovery")
         case .fileAccessDenied:
-            return "Grant file access permission in Settings"
+            return String(localized: "error_file_access_denied_recovery")
         case .unsupportedKeyType:
-            return "Use RSA-4096 or ECC (Curve25519)"
+            return String(localized: "error_unsupported_key_type_recovery")
         case .trustUpdateFailed:
-            return "Check key ID and try again"
+            return String(localized: "error_trust_update_failed_recovery")
         case .keySigningFailed:
-            return "Ensure you have the correct signing key and passphrase"
+            return String(localized: "error_key_signing_failed_recovery")
         }
     }
 }

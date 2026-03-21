@@ -14,7 +14,7 @@ struct KeyManagementView: View {
     var body: some View {
         Group {
             if viewModel.isLoading && viewModel.keys.isEmpty {
-                ProgressView("Loading keys...")
+                ProgressView("status_loading_keys")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if viewModel.keys.isEmpty {
                 EmptyKeysView(onCreateKey: { showingCreateKey = true })
@@ -22,26 +22,26 @@ struct KeyManagementView: View {
                 KeyListView(viewModel: viewModel)
             }
         }
-        .navigationTitle("Key Management")
+        .navigationTitle("section_key_management")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { showingCreateKey = true }) {
-                    Label("Create Key", systemImage: "plus")
+                    Label("action_create_key", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
             }
             ToolbarItem(placement: .automatic) {
                 Button(action: { Task { await viewModel.refresh() } }) {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+                    Label("action_refresh", systemImage: "arrow.clockwise")
                 }
             }
             ToolbarItem(placement: .automatic) {
                 Button(action: { }) {
-                    Label("Import Key", systemImage: "square.and.arrow.down")
+                    Label("action_import_key", systemImage: "square.and.arrow.down")
                 }
             }
         }
-        .searchable(text: $viewModel.searchText, prompt: "Search keys...")
+        .searchable(text: $viewModel.searchText, prompt: "prompt_search_keys")
         .sheet(isPresented: $showingCreateKey) {
             CreateKeyView()
         }
@@ -59,18 +59,18 @@ struct EmptyKeysView: View {
                 .font(.system(size: 64))
                 .foregroundStyle(.secondary)
             
-            Text("No Keys Yet")
+            Text("empty_keys_title")
                 .font(.title2)
                 .fontWeight(.semibold)
             
-            Text("Create your first GPG key to start encrypting and decrypting your secrets.")
+            Text("empty_keys_description")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 400)
             
             Button(action: onCreateKey) {
-                Label("Create Your First Key", systemImage: "plus.circle.fill")
+                Label("action_create_first_key", systemImage: "plus.circle.fill")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
@@ -114,7 +114,7 @@ struct KeyCardView: View {
                         .font(.headline)
                     
                     // Key type badge: Private Key or Public Key
-                    Text(key.isSecret ? "Private Key" : "Public Key")
+                    Text(key.isSecret ? "key_type_private" : "key_type_public")
                         .font(.caption)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -123,7 +123,7 @@ struct KeyCardView: View {
                         .clipShape(Capsule())
                     
                     // Trust level badge
-                    Text(key.trustLevel.displayName)
+                    Text(key.trustLevel.localizedName)
                         .font(.caption)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -150,15 +150,15 @@ struct KeyCardView: View {
             Spacer()
             
             HStack(spacing: 8) {
-                Button("Encrypt") { }
+                Button("action_encrypt") { }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                 
                 Menu {
-                    Button("Export Public Key") { }
-                    Button("Copy Fingerprint") { }
+                    Button("action_export_public_key") { }
+                    Button("action_copy_fingerprint") { }
                     Divider()
-                    Button("Delete Key", role: .destructive) { }
+                    Button("action_delete_key", role: .destructive) { }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
