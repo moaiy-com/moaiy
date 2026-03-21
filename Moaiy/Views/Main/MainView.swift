@@ -8,12 +8,12 @@
 import SwiftUI
 
 struct MainView: View {
-    @State private var selectedSection: Section = .keyManagement
+    @State private var selectedSection: Section? = .keyManagement
     
     enum Section: String, CaseIterable, Identifiable {
-        case keyManagement = "Key Management"
-        case encryption = "Encryption"
-        case settings = "Settings"
+        case keyManagement
+        case encryption
+        case settings
         
         var id: String { rawValue }
         
@@ -25,32 +25,35 @@ struct MainView: View {
             }
         }
         
-        var localizedName: String {
+        var title: String {
             switch self {
-            case .keyManagement: return String(localized: "section_key_management")
-            case .encryption: return String(localized: "section_encryption")
-            case .settings: return String(localized: "section_settings")
+            case .keyManagement: return "Key Management"
+            case .encryption: return "Encryption"
+            case .settings: return "Settings"
             }
         }
     }
     
     var body: some View {
         NavigationSplitView {
-            // Sidebar
             List(Section.allCases, selection: $selectedSection) { section in
-                Label(section.localizedName, systemImage: section.icon)
+                Label(section.title, systemImage: section.icon)
             }
             .navigationTitle("Moaiy")
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 250)
         } detail: {
-            // Detail view
-            switch selectedSection {
-            case .keyManagement:
-                KeyManagementView()
-            case .encryption:
-                EncryptionView()
-            case .settings:
-                SettingsView()
+            if let section = selectedSection {
+                switch section {
+                case .keyManagement:
+                    KeyManagementView()
+                case .encryption:
+                    EncryptionView()
+                case .settings:
+                    SettingsView()
+                }
+            } else {
+                Text("Select a section")
+                    .foregroundStyle(.secondary)
             }
         }
     }
