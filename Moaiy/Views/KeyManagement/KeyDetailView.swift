@@ -464,31 +464,27 @@ struct ExportKeySheet: View {
     private func exportAndSave(to url: URL) {
         isExporting = true
         exportError = nil
-        
-        Task {
+
+        Task { @MainActor in
             do {
                 let keyData = try await viewModel.exportPublicKey(key)
-                
+
                 // Write to file
                 guard url.startAccessingSecurityScopedResource() else {
                     throw GPGError.fileAccessDenied(url.path)
                 }
-                
+
                 defer {
                     url.stopAccessingSecurityScopedResource()
                 }
-                
+
                 try keyData.write(to: url)
-                
-                await MainActor.run {
-                    isExporting = false
-                    dismiss()
-                }
+
+                isExporting = false
+                dismiss()
             } catch {
-                await MainActor.run {
-                    exportError = error.localizedDescription
-                    isExporting = false
-                }
+                exportError = error.localizedDescription
+                isExporting = false
             }
         }
     }
@@ -496,27 +492,23 @@ struct ExportKeySheet: View {
     private func copyToClipboard() {
         isExporting = true
         exportError = nil
-        
-        Task {
+
+        Task { @MainActor in
             do {
                 let keyData = try await viewModel.exportPublicKey(key)
-                
+
                 guard let keyString = String(data: keyData, encoding: .utf8) else {
                     throw GPGError.exportFailed("Failed to convert key to text")
                 }
-                
+
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(keyString, forType: .string)
-                
-                await MainActor.run {
-                    isExporting = false
-                    dismiss()
-                }
+
+                isExporting = false
+                dismiss()
             } catch {
-                await MainActor.run {
-                    exportError = error.localizedDescription
-                    isExporting = false
-                }
+                exportError = error.localizedDescription
+                isExporting = false
             }
         }
     }

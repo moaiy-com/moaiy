@@ -224,13 +224,16 @@ final class GPGService {
         if armor {
             arguments.insert("--armor", at: 0)
         }
-        
-        let result = try await executeGPG(arguments: arguments)
-        
+
+        // Run on background thread to avoid blocking main thread
+        let result = try await Task.detached(priority: .userInitiated) {
+            try await self.executeGPG(arguments: arguments)
+        }.value
+
         guard let data = result.data else {
             throw GPGError.exportFailed("No key data exported")
         }
-        
+
         return data
     }
     
@@ -245,17 +248,19 @@ final class GPGService {
         if armor {
             arguments.insert("--armor", at: 0)
         }
-        
-        // Set passphrase via environment
-        let result = try await executeGPG(
-            arguments: arguments,
-            environment: ["GPG_PASSPHRASE": passphrase]
-        )
-        
+
+        // Run on background thread to avoid blocking main thread
+        let result = try await Task.detached(priority: .userInitiated) {
+            try await self.executeGPG(
+                arguments: arguments,
+                environment: ["GPG_PASSPHRASE": passphrase]
+            )
+        }.value
+
         guard let data = result.data else {
             throw GPGError.exportFailed("No key data exported")
         }
-        
+
         return data
     }
     

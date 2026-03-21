@@ -215,16 +215,14 @@ final class KeyManagementViewModel {
     
     /// Export a public key
     func exportPublicKey(_ key: GPGKey) async throws -> Data {
-        isLoading = true
-        errorMessage = nil
-        
+        logger.info("Exporting public key for: \(key.fingerprint)")
+
         do {
             let data = try await gpgService.exportPublicKey(keyID: key.fingerprint, armor: true)
-            isLoading = false
+            logger.info("Successfully exported public key, size: \(data.count) bytes")
             return data
         } catch {
-            errorMessage = error.localizedDescription
-            isLoading = false
+            logger.error("Failed to export public key: \(error.localizedDescription)")
             throw error
         }
     }
@@ -234,17 +232,15 @@ final class KeyManagementViewModel {
         guard key.isSecret else {
             throw GPGError.keyNotFound("Secret key for \(key.fingerprint)")
         }
-        
-        isLoading = true
-        errorMessage = nil
-        
+
+        logger.info("Exporting secret key for: \(key.fingerprint)")
+
         do {
             let data = try await gpgService.exportSecretKey(keyID: key.fingerprint, passphrase: passphrase, armor: true)
-            isLoading = false
+            logger.info("Successfully exported secret key, size: \(data.count) bytes")
             return data
         } catch {
-            errorMessage = error.localizedDescription
-            isLoading = false
+            logger.error("Failed to export secret key: \(error.localizedDescription)")
             throw error
         }
     }
