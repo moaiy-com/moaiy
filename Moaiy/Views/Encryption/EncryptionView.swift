@@ -17,8 +17,8 @@ struct EncryptionView: View {
         VStack(spacing: 0) {
             // Tab picker
             Picker("", selection: $selectedTab) {
-                Text("Text").tag(0)
-                Text("File").tag(1)
+                Text("tab_text").tag(0)
+                Text("tab_file").tag(1)
             }
             .pickerStyle(.segmented)
             .padding()
@@ -36,7 +36,7 @@ struct EncryptionView: View {
                 FileEncryptionView()
             }
         }
-        .navigationTitle("Encryption")
+        .navigationTitle("section_encryption")
     }
 }
 
@@ -50,7 +50,7 @@ struct TextEncryptionView: View {
         HStack(spacing: 16) {
             // Input
             VStack(alignment: .leading, spacing: 8) {
-                Text("Input")
+                Text("label_input")
                     .font(.headline)
                 
                 TextEditor(text: $inputText)
@@ -85,14 +85,14 @@ struct TextEncryptionView: View {
             // Output
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Output")
+                    Text("label_output")
                         .font(.headline)
                     
                     Spacer()
                     
                     if !outputText.isEmpty {
                         Button(action: copyOutput) {
-                            Label("Copy", systemImage: "doc.on.doc")
+                            Label("action_copy", systemImage: "doc.on.doc")
                         }
                         .buttonStyle(.borderless)
                         .controlSize(.small)
@@ -153,10 +153,10 @@ struct FileEncryptionView: View {
                         .font(.system(size: 48))
                         .foregroundStyle(isTargeted ? Color.moiayAccent : .secondary)
                     
-                    Text("Drop files here")
+                    Text("drop_zone_title")
                         .font(.headline)
                     
-                    Text("or click to browse")
+                    Text("drop_zone_subtitle")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -169,7 +169,7 @@ struct FileEncryptionView: View {
             }
             
             // Or select button
-            Button("Select Files") { }
+            Button("action_select_files") { }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
             

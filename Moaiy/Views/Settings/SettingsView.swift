@@ -18,51 +18,51 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
-                Picker("Theme", selection: $appearance) {
-                    Text("System").tag(0)
-                    Text("Light").tag(1)
-                    Text("Dark").tag(2)
+                Picker("setting_theme", selection: $appearance) {
+                    Text("theme_system").tag(0)
+                    Text("theme_light").tag(1)
+                    Text("theme_dark").tag(2)
                 }
                 
-                Picker("Default Key Type", selection: $defaultKeyType) {
-                    Text("RSA-4096").tag(0)
-                    Text("RSA-2048").tag(1)
-                    Text("ECC (Curve25519)").tag(2)
+                Picker("setting_default_key_type", selection: $defaultKeyType) {
+                    Text("key_type_rsa4096").tag(0)
+                    Text("key_type_rsa2048").tag(1)
+                    Text("key_type_ecc_curve25519").tag(2)
                 }
             } header: {
-                Text("General")
+                Text("section_general")
                     .font(.headline)
             }
             
             Section {
-                Toggle("Auto Backup", isOn: $autoBackup)
+                Toggle("setting_auto_backup", isOn: $autoBackup)
                 
                 if autoBackup {
-                    Picker("Backup Frequency", selection: $backupFrequency) {
-                        Text("Daily").tag(0)
-                        Text("Weekly").tag(1)
-                        Text("Monthly").tag(2)
+                    Picker("setting_backup_frequency", selection: $backupFrequency) {
+                        Text("frequency_daily").tag(0)
+                        Text("frequency_weekly").tag(1)
+                        Text("frequency_monthly").tag(2)
                     }
                 }
             } header: {
-                Text("Backup")
+                Text("section_backup")
                     .font(.headline)
             }
             
             Section {
-                Picker("Encryption Algorithm", selection: $encryptionAlgorithm) {
-                    Text("AES-256").tag(0)
-                    Text("AES-192").tag(1)
-                    Text("AES-128").tag(2)
+                Picker("setting_encryption_algorithm", selection: $encryptionAlgorithm) {
+                    Text("algorithm_aes256").tag(0)
+                    Text("algorithm_aes192").tag(1)
+                    Text("algorithm_aes128").tag(2)
                 }
                 
-                Picker("File Naming", selection: $fileNaming) {
-                    Text("filename.gpg").tag(0)
-                    Text("filename.asc").tag(1)
-                    Text("Custom").tag(2)
+                Picker("setting_file_naming", selection: $fileNaming) {
+                    Text("naming_filename_gpg").tag(0)
+                    Text("naming_filename_asc").tag(1)
+                    Text("naming_custom").tag(2)
                 }
             } header: {
-                Text("Encryption")
+                Text("section_encryption")
                     .font(.headline)
             }
         }

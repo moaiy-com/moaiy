@@ -843,17 +843,17 @@ enum TrustLevel: String, CaseIterable, Identifiable {
         case .marginal: return String(localized: "trust_level_marginal")
         case .full: return String(localized: "trust_level_full")
         case .ultimate: return String(localized: "trust_level_ultimate")
-        }
+    }
     }
     
-    /// Description of trust level
-    var description: String {
+    /// Localized description of trust level
+    var localizedDescription: String {
         switch self {
-        case .unknown: return "Trust level not yet calculated"
-        case .none: return "Not trusted"
-        case .marginal: return "Marginally trusted (needs more signatures)"
-        case .full: return "Fully trusted"
-        case .ultimate: return "Ultimate trust (your own key)"
+        case .unknown: return String(localized: "trust_desc_unknown")
+        case .none: return String(localized: "trust_desc_none")
+        case .marginal: return String(localized: "trust_desc_marginal")
+        case .full: return String(localized: "trust_desc_full")
+        case .ultimate: return String(localized: "trust_desc_ultimate")
         }
     }
 }
