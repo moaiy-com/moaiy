@@ -10,6 +10,8 @@ import SwiftUI
 struct KeyManagementView: View {
     @State private var viewModel = KeyManagementViewModel()
     @State private var showingCreateKey = false
+    @State private var showingImportKey = false
+    @State private var selectedKey: GPGKey?
     
     var body: some View {
         Group {
@@ -18,8 +20,20 @@ struct KeyManagementView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if viewModel.keys.isEmpty {
                 EmptyKeysView(onCreateKey: { showingCreateKey = true })
+            } else if let key = selectedKey {
+                // Show detail view
+                KeyDetailView(key: key)
+                    .environment(viewModel)
+                    .toolbar {
+                        ToolbarItem(placement: .navigation) {
+                            Button(action: { selectedKey = nil }) {
+                                Label("action_back", systemImage: "chevron.left")
+                            }
+                        }
+                    }
             } else {
-                KeyListView(viewModel: viewModel)
+                // Show list view
+                KeyListView(viewModel: viewModel, selectedKey: $selectedKey)
             }
         }
         .navigationTitle("section_key_management")
@@ -36,7 +50,7 @@ struct KeyManagementView: View {
                 }
             }
             ToolbarItem(placement: .automatic) {
-                Button(action: { }) {
+                Button(action: { showingImportKey = true }) {
                     Label("action_import_key", systemImage: "square.and.arrow.down")
                 }
             }
@@ -44,6 +58,10 @@ struct KeyManagementView: View {
         .searchable(text: $viewModel.searchText, prompt: "prompt_search_keys")
         .sheet(isPresented: $showingCreateKey) {
             CreateKeyView()
+        }
+        .sheet(isPresented: $showingImportKey) {
+            ImportKeySheet()
+                .environment(viewModel)
         }
     }
 }
@@ -82,12 +100,16 @@ struct EmptyKeysView: View {
 // MARK: - Key List View
 
 struct KeyListView: View {
-    var viewModel: KeyManagementViewModel
+    @Bindable var viewModel: KeyManagementViewModel
+    @Binding var selectedKey: GPGKey?
     
     var body: some View {
         List(viewModel.filteredKeys) { key in
-            KeyCardView(key: key)
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            Button(action: { selectedKey = key }) {
+                KeyCardView(key: key)
+            }
+            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
         }
         .listStyle(.inset)
     }

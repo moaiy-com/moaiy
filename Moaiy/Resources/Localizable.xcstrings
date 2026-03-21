@@ -27,6 +27,23 @@
         }
       }
     },
+    "action_cancel" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
     "action_copy" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -57,6 +74,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "复制指纹"
+          }
+        }
+      }
+    },
+    "action_copy_to_clipboard" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy to Clipboard"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制到剪贴板"
           }
         }
       }
@@ -95,6 +129,23 @@
         }
       }
     },
+    "action_delete" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除"
+          }
+        }
+      }
+    },
     "action_delete_key" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -112,6 +163,23 @@
         }
       }
     },
+    "action_edit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑"
+          }
+        }
+      }
+    },
     "action_encrypt" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -125,6 +193,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "加密"
+          }
+        }
+      }
+    },
+    "action_export_private_key" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Private Key"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出私钥"
           }
         }
       }
@@ -197,6 +282,23 @@
         }
       }
     },
+    "action_save_to_file" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save to File"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存到文件"
+          }
+        }
+      }
+    },
     "action_select_files" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -210,6 +312,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择文件"
+          }
+        }
+      }
+    },
+    "action_sign_key" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign Key"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "签名密钥"
           }
         }
       }
@@ -278,6 +397,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "推荐"
+          }
+        }
+      }
+    },
+    "confirm_delete_key_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Are you sure you want to delete this key? This action cannot be undone."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "确定要删除此密钥吗？此操作无法撤销。"
           }
         }
       }
@@ -380,6 +516,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "确保您有正确的私钥和密码"
+          }
+        }
+      }
+    },
+    "error_delete_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to delete key"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除密钥失败"
           }
         }
       }
@@ -877,6 +1030,40 @@
         }
       }
     },
+    "export_file_picker_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose where to save the exported key"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择保存导出密钥的位置"
+          }
+        }
+      }
+    },
+    "export_key_description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose how you want to export this key"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择如何导出此密钥"
+          }
+        }
+      }
+    },
     "field_confirm_password" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -992,6 +1179,84 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "每周"
+          }
+        }
+      }
+    },
+    "import_file_picker_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select a GPG key file to import"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择要导入的 GPG 密钥文件"
+          }
+        }
+      }
+    },
+    "import_key_description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select or drop a GPG key file to import"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择或拖放 GPG 密钥文件进行导入"
+          }
+        }
+      }
+    },
+    "import_success_details" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Imported: %lld, Unchanged: %lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已导入：%lld，未更改：%lld"
+          }
+        }
+      }
+    },
+    "import_success_details %lld %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "import_success_details %1$lld %2$lld"
+          }
+        }
+      }
+    },
+    "import_success_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key imported successfully"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥导入成功"
           }
         }
       }
@@ -1115,6 +1380,91 @@
         }
       }
     },
+    "label_algorithm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Algorithm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "算法"
+          }
+        }
+      }
+    },
+    "label_capabilities" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Capabilities"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "能力"
+          }
+        }
+      }
+    },
+    "label_created" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Created"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建时间"
+          }
+        }
+      }
+    },
+    "label_expires" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expires"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "过期时间"
+          }
+        }
+      }
+    },
+    "label_fingerprint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fingerprint"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "指纹"
+          }
+        }
+      }
+    },
     "label_input" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1132,6 +1482,57 @@
         }
       }
     },
+    "label_key_id" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key ID"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥 ID"
+          }
+        }
+      }
+    },
+    "label_key_length" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key Length"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥长度"
+          }
+        }
+      }
+    },
+    "label_key_type" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key Type"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥类型"
+          }
+        }
+      }
+    },
     "label_output" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1145,6 +1546,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "输出"
+          }
+        }
+      }
+    },
+    "label_trust_level" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trust Level"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "信任级别"
           }
         }
       }
@@ -1203,6 +1621,9 @@
         }
       }
     },
+    "OK" : {
+
+    },
     "placeholder_input_text" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1254,6 +1675,23 @@
         }
       }
     },
+    "section_actions" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "操作"
+          }
+        }
+      }
+    },
     "section_backup" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1267,6 +1705,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "备份"
+          }
+        }
+      }
+    },
+    "section_basic_info" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Basic Information"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基本信息"
           }
         }
       }
@@ -1335,6 +1790,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设置"
+          }
+        }
+      }
+    },
+    "section_technical_details" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Technical Details"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "技术细节"
+          }
+        }
+      }
+    },
+    "section_trust_level" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trust Level"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "信任级别"
           }
         }
       }
@@ -1441,6 +1930,23 @@
         }
       }
     },
+    "status_expired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expired"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已过期"
+          }
+        }
+      }
+    },
     "status_loading_keys" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1454,6 +1960,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "加载密钥中..."
+          }
+        }
+      }
+    },
+    "status_trusted" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trusted"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已信任"
           }
         }
       }
@@ -1713,6 +2236,23 @@
         }
       }
     },
+    "value_no_expiration" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Expiration"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "永不过期"
+          }
+        }
+      }
+    },
     "wizard_basic_info_description" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1845,6 +2385,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "密码"
+          }
+        }
+      }
+    },
+    "action_encrypt_file" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encrypt File"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加密文件"
+          }
+        }
+      }
+    },
+    "action_share" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享"
+          }
+        }
+      }
+    },
+    "action_decrypt_file" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Decrypt File"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解密文件"
+          }
+        }
+      }
+    },
+    "message_key_expired_description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This key has expired and can no longer be used for encryption"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此密钥已过期，无法继续用于加密"
           }
         }
       }

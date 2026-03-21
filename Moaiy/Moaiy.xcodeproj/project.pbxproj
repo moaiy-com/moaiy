@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0B018ACF2F6EE0AE00382075 /* ImportKeySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B018ACD2F6EE0AE00382075 /* ImportKeySheet.swift */; };
+		0B018AD02F6EE0AE00382075 /* KeyDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B018ACE2F6EE0AE00382075 /* KeyDetailView.swift */; };
 		0BEF4DE52F6D80E00053CE56 /* GPGError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DE32F6D80E00053CE56 /* GPGError.swift */; };
 		0BEF4DE62F6D80E00053CE56 /* GPGService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DE42F6D80E00053CE56 /* GPGService.swift */; };
 		0BEF4DF42F6D8D630053CE56 /* EncryptionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DF12F6D8D630053CE56 /* EncryptionViewModel.swift */; };
@@ -24,6 +26,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0B018ACD2F6EE0AE00382075 /* ImportKeySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportKeySheet.swift; sourceTree = "<group>"; };
+		0B018ACE2F6EE0AE00382075 /* KeyDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyDetailView.swift; sourceTree = "<group>"; };
 		0BEF4DE32F6D80E00053CE56 /* GPGError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPGError.swift; sourceTree = "<group>"; };
 		0BEF4DE42F6D80E00053CE56 /* GPGService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPGService.swift; sourceTree = "<group>"; };
 		0BEF4DF12F6D8D630053CE56 /* EncryptionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncryptionViewModel.swift; sourceTree = "<group>"; };
@@ -160,6 +164,8 @@
 			children = (
 				A00000000003 /* KeyManagementView.swift */,
 				A00000000004 /* CreateKeyView.swift */,
+				0B018ACD2F6EE0AE00382075 /* ImportKeySheet.swift */,
+				0B018ACE2F6EE0AE00382075 /* KeyDetailView.swift */,
 			);
 			path = KeyManagement;
 			sourceTree = "<group>";
@@ -296,6 +302,8 @@
 				0BEF4DF52F6D8D630053CE56 /* KeyManagementViewModel.swift in Sources */,
 				B00000000004 /* CreateKeyView.swift in Sources */,
 				B00000000005 /* EncryptionView.swift in Sources */,
+				0B018ACF2F6EE0AE00382075 /* ImportKeySheet.swift in Sources */,
+				0B018AD02F6EE0AE00382075 /* KeyDetailView.swift in Sources */,
 				B00000000006 /* SettingsView.swift in Sources */,
 				0BEF4DE52F6D80E00053CE56 /* GPGError.swift in Sources */,
 				0BEF4DE62F6D80E00053CE56 /* GPGService.swift in Sources */,
