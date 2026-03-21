@@ -6,10 +6,13 @@
 //
 
 import Foundation
+import os.log
 
 /// Service class for GPG operations
 @MainActor
 final class GPGService: ObservableObject {
+    
+    private let logger = Logger(subsystem: "com.moaiy.app", category: "GPGService")
     
     // MARK: - Singleton
     
@@ -47,13 +50,17 @@ final class GPGService: ObservableObject {
         Task {
             do {
                 try await findGPGExecutable()
+                logger.info("Found GPG at: \(self.gpgPath)")
                 try await setupGPGHome()
+                logger.info("GPG home directory: \(self.gpgHome?.path ?? "nil")")
                 try await verifyGPG()
+                logger.info("GPG version: \(self.gpgVersion ?? "unknown")")
                 await MainActor.run {
                     self.isReady = true
                 }
+                logger.info("Setup complete, isReady = true")
             } catch {
-                print("GPG setup failed: \(error)")
+                logger.error("Setup failed: \(error.localizedDescription)")
                 await MainActor.run {
                     self.isReady = false
                 }
@@ -63,26 +70,36 @@ final class GPGService: ObservableObject {
     
     /// Find GPG executable in app bundle
     private func findGPGExecutable() throws {
+        logger.debug("Looking for GPG executable...")
+        
         // Look for bundled GPG first
         if let bundleURL = Bundle.main.url(forResource: gpgBundleName, withExtension: nil) {
+            logger.debug("Found gpg.bundle at: \(bundleURL.path)")
             let executableURL = bundleURL.appendingPathComponent("bin/\(gpgExecutableName)")
             if FileManager.default.fileExists(atPath: executableURL.path) {
                 gpgURL = executableURL
+                logger.info("Using bundled GPG: \(executableURL.path)")
                 return
             }
+        } else {
+            logger.debug("No gpg.bundle found in app bundle")
         }
         
         // Fallback to system GPG (for development)
         let systemPath = "/usr/local/bin/gpg"
+        logger.debug("Checking system path: \(systemPath), exists: \(FileManager.default.fileExists(atPath: systemPath))")
         if FileManager.default.fileExists(atPath: systemPath) {
             gpgURL = URL(fileURLWithPath: systemPath)
+            logger.info("Using system GPG: \(systemPath)")
             return
         }
         
         // Try Homebrew path
         let homebrewPath = "/opt/homebrew/bin/gpg"
+        logger.debug("Checking homebrew path: \(homebrewPath), exists: \(FileManager.default.fileExists(atPath: homebrewPath))")
         if FileManager.default.fileExists(atPath: homebrewPath) {
             gpgURL = URL(fileURLWithPath: homebrewPath)
+            logger.info("Using Homebrew GPG: \(homebrewPath)")
             return
         }
         
@@ -91,6 +108,18 @@ final class GPGService: ObservableObject {
     
     /// Setup GPG home directory in app container
     private func setupGPGHome() throws {
+        // For development: use system's ~/.gnupg to access existing keys
+        // For production: use app's own gnupg directory with bundled GPG
+        
+        // Development mode: use system GPG home to access existing keys
+        let systemGPGHome = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gnupg")
+        if FileManager.default.fileExists(atPath: systemGPGHome.path) {
+            gpgHome = systemGPGHome
+            logger.info("Using system GPG home (development mode): \(systemGPGHome.path)")
+            return
+        }
+        
+        // Production: create app-specific GPG home
         guard let containerURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             throw GPGError.fileAccessDenied("Application Support directory")
         }

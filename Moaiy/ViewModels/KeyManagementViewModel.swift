@@ -7,10 +7,13 @@
 
 import Foundation
 import Combine
+import os.log
 
 @MainActor
 @Observable
 final class KeyManagementViewModel {
+    
+    private let logger = Logger(subsystem: "com.moaiy.app", category: "KeyManagement")
     
     // MARK: - Published State
     
@@ -52,6 +55,11 @@ final class KeyManagementViewModel {
     
     init() {
         Task {
+            // Wait for GPGService to be ready
+            while !gpgService.isReady {
+                logger.debug("Waiting for GPGService to be ready...")
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            }
             await loadKeys()
         }
     }
@@ -60,13 +68,19 @@ final class KeyManagementViewModel {
     
     /// Load all keys from GPG
     func loadKeys() async {
+        logger.info("Loading keys...")
+        logger.info("GPGService.isReady = \(self.gpgService.isReady)")
+        
         isLoading = true
         errorMessage = nil
         
         do {
             // Load both public and secret keys
             let publicKeys = try await gpgService.listKeys(secretOnly: false)
+            logger.info("Loaded \(publicKeys.count) public keys")
+            
             let secretKeys = try await gpgService.listKeys(secretOnly: true)
+            logger.info("Loaded \(secretKeys.count) secret keys")
             
             // Merge keys, marking secret ones
             var allKeys = publicKeys
@@ -91,10 +105,14 @@ final class KeyManagementViewModel {
             }
             
             keys = allKeys.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+            logger.info("Total keys after merge: \(self.keys.count)")
+            for key in keys {
+                logger.info("Key: \(key.name) <\(key.email)> trust=\(key.trustLevel.displayName)")
+            }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
-            print("Failed to load keys: \(error)")
+            logger.error("Failed to load keys: \(error.localizedDescription)")
         }
         
         isLoading = false
