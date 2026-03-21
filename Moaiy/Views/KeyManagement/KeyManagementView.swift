@@ -100,27 +100,36 @@ struct KeyCardView: View {
     
     var body: some View {
         HStack(spacing: 16) {
+            // Key icon with color based on key type
             Image(systemName: key.isSecret ? "key.fill" : "key")
                 .font(.title2)
-                .foregroundStyle(key.isSecret ? Color.moiayAccent : .secondary)
+                .foregroundStyle(keyIconColor)
                 .frame(width: 40, height: 40)
-                .background(key.isSecret ? Color.moiayAccent.opacity(0.1) : Color.secondary.opacity(0.1))
+                .background(keyIconColor.opacity(0.1))
                 .clipShape(Circle())
             
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
+                HStack(spacing: 8) {
                     Text(key.name)
                         .font(.headline)
                     
-                    if key.isSecret {
-                        Text("Secret")
-                            .font(.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.moiayAccent.opacity(0.2))
-                            .foregroundStyle(Color.moiayAccent)
-                            .clipShape(Capsule())
-                    }
+                    // Key type badge: Private Key or Public Key
+                    Text(key.isSecret ? "Private Key" : "Public Key")
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(keyTypeBadgeColor.opacity(0.2))
+                        .foregroundStyle(keyTypeBadgeColor)
+                        .clipShape(Capsule())
+                    
+                    // Trust level badge
+                    Text(key.trustLevel.displayName)
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(trustLevelColor.opacity(0.2))
+                        .foregroundStyle(trustLevelColor)
+                        .clipShape(Capsule())
                 }
                 
                 Text(key.email)
@@ -160,6 +169,31 @@ struct KeyCardView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
+    }
+    
+    // MARK: - Color Computed Properties
+    
+    private var keyIconColor: Color {
+        key.isSecret ? Color.moiayAccent : .secondary
+    }
+    
+    private var keyTypeBadgeColor: Color {
+        key.isSecret ? Color.moiayAccent : .blue
+    }
+    
+    private var trustLevelColor: Color {
+        switch key.trustLevel {
+        case .ultimate:
+            return .green
+        case .full:
+            return .blue
+        case .marginal:
+            return .orange
+        case .none:
+            return .red
+        case .unknown:
+            return .secondary
+        }
     }
 }
 
