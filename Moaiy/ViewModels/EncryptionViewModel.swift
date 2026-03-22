@@ -11,6 +11,24 @@ import Combine
 import AppKit
 #endif
 
+// MARK: - Operation History
+
+struct EncryptionHistoryItem: Identifiable, Codable {
+    let id: UUID
+    let type: EncryptionViewModel.OperationType
+    let timestamp: Date
+    let contentPreview: String
+    let success: Bool
+    
+    init(type: EncryptionViewModel.OperationType, content: String, success: Bool) {
+        self.id = UUID()
+        self.type = type
+        self.timestamp = Date()
+        self.contentPreview = String(content.prefix(100))
+        self.success = success
+    }
+}
+
 @MainActor
 @Observable
 final class EncryptionViewModel {
@@ -27,10 +45,15 @@ final class EncryptionViewModel {
     var lastOperationType: OperationType?
     var lastOperationTime: Date?
     
+    // Operation History
+    var operationHistory: [EncryptionHistoryItem] = []
+    var maxHistoryItems = 50
+    
     // MARK: - Private Properties
     
     private let gpgService = GPGService.shared
     private let keyManagementVM = KeyManagementViewModel()
+    private let historyKey = "com.moaiy.encryptionHistory"
     
     // MARK: - Computed Properties
     
@@ -58,12 +81,21 @@ final class EncryptionViewModel {
         availableRecipientKeys.filter { selectedRecipientKeys.contains($0.fingerprint) }
     }
     
+    var recentHistory: [EncryptionHistoryItem] {
+        Array(operationHistory.prefix(10))
+    }
+    
+    var successfulOperationsCount: Int {
+        operationHistory.filter { $0.success }.count
+    }
+    
     // MARK: - Initialization
     
     init() {
         Task {
             await keyManagementVM.loadKeys()
         }
+        loadHistory()
     }
     
     // MARK: - Text Operations
@@ -80,10 +112,12 @@ final class EncryptionViewModel {
             let recipients = Array(selectedRecipientKeys)
             outputText = try await gpgService.encrypt(text: inputText, recipients: recipients)
             lastOperationTime = Date()
+            addToHistory(type: .encryption, content: outputText, success: true)
             copyOutputToClipboard()
         } catch {
             errorMessage = error.localizedDescription
             outputText = ""
+            addToHistory(type: .encryption, content: inputText, success: false)
         }
         
         isEncrypting = false
@@ -101,9 +135,11 @@ final class EncryptionViewModel {
         do {
             outputText = try await gpgService.decrypt(text: inputText, passphrase: passphrase)
             lastOperationTime = Date()
+            addToHistory(type: .decryption, content: outputText, success: true)
         } catch {
             errorMessage = error.localizedDescription
             outputText = ""
+            addToHistory(type: .decryption, content: inputText, success: false)
         }
         
         isDecrypting = false
@@ -130,10 +166,12 @@ final class EncryptionViewModel {
             let recipients = Array(selectedRecipientKeys)
             try await gpgService.encryptFile(sourceURL: sourceURL, destinationURL: destinationURL, recipients: recipients)
             lastOperationTime = Date()
+            addToHistory(type: .fileEncryption, content: sourceURL.lastPathComponent, success: true)
             isEncrypting = false
             return destinationURL
         } catch {
             errorMessage = error.localizedDescription
+            addToHistory(type: .fileEncryption, content: sourceURL.lastPathComponent, success: false)
             isEncrypting = false
             throw error
         }
@@ -154,10 +192,12 @@ final class EncryptionViewModel {
         do {
             try await gpgService.decryptFile(sourceURL: sourceURL, destinationURL: destinationURL, passphrase: passphrase)
             lastOperationTime = Date()
+            addToHistory(type: .fileDecryption, content: sourceURL.lastPathComponent, success: true)
             isDecrypting = false
             return destinationURL
         } catch {
             errorMessage = error.localizedDescription
+            addToHistory(type: .fileDecryption, content: sourceURL.lastPathComponent, success: false)
             isDecrypting = false
             throw error
         }
@@ -230,12 +270,52 @@ final class EncryptionViewModel {
     func clearError() {
         errorMessage = nil
     }
+    
+    /// Clear operation history
+    func clearHistory() {
+        operationHistory.removeAll()
+        saveHistory()
+    }
+    
+    // MARK: - History Management
+    
+    private func addToHistory(type: OperationType, content: String, success: Bool) {
+        let item = EncryptionHistoryItem(type: type, content: content, success: success)
+        operationHistory.insert(item, at: 0)
+        
+        // Limit history size
+        if operationHistory.count > maxHistoryItems {
+            operationHistory = Array(operationHistory.prefix(maxHistoryItems))
+        }
+        
+        saveHistory()
+    }
+    
+    private func saveHistory() {
+        do {
+            let data = try JSONEncoder().encode(operationHistory)
+            UserDefaults.standard.set(data, forKey: historyKey)
+        } catch {
+            print("Failed to save encryption history: \(error)")
+        }
+    }
+    
+    private func loadHistory() {
+        guard let data = UserDefaults.standard.data(forKey: historyKey) else { return }
+        
+        do {
+            operationHistory = try JSONDecoder().decode([EncryptionHistoryItem].self, from: data)
+        } catch {
+            print("Failed to load encryption history: \(error)")
+            operationHistory = []
+        }
+    }
 }
 
 // MARK: - Supporting Types
 
 extension EncryptionViewModel {
-    enum OperationType: String {
+    enum OperationType: String, Codable {
         case encryption = "Encryption"
         case decryption = "Decryption"
         case fileEncryption = "File Encryption"
@@ -247,6 +327,15 @@ extension EncryptionViewModel {
         
         var isEncryption: Bool {
             self == .encryption || self == .fileEncryption
+        }
+        
+        var icon: String {
+            switch self {
+            case .encryption, .fileEncryption:
+                return "lock.fill"
+            case .decryption, .fileDecryption:
+                return "lock.open.fill"
+            }
         }
     }
 }
