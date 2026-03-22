@@ -57,8 +57,10 @@ final class EncryptionViewModel {
     
     // MARK: - Computed Properties
     
+    /// All keys that can be used for encryption (both public and secret keys have public components)
     var availableRecipientKeys: [GPGKey] {
-        keyManagementVM.publicKeys
+        // All keys can be used for encryption - secret keys also have public components
+        keyManagementVM.keys
     }
     
     var availableSignerKeys: [GPGKey] {
