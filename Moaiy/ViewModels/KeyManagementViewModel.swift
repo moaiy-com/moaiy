@@ -11,9 +11,9 @@ import os.log
 @MainActor
 @Observable
 final class KeyManagementViewModel {
-    
+
     private let logger = Logger(subsystem: "com.moaiy.app", category: "KeyManagement")
-    
+
     // MARK: - Published State
 
     var keys: [GPGKey] = []
@@ -35,6 +35,9 @@ final class KeyManagementViewModel {
     private var retryCount = 0
     private let maxRetries = 3
     private var retryTask: Task<Void, Never>?
+
+    // Expiration reminder service
+    let expirationReminder = ExpirationReminderService()
     
     // MARK: - Private Properties
     
@@ -159,6 +162,10 @@ final class KeyManagementViewModel {
             }
             errorMessage = nil
             retryCount = 0 // Reset retry count on success
+
+            // Update expiration reminders
+            expirationReminder.updateKeys(keys)
+            await expirationReminder.scheduleReminders()
         } catch {
             errorMessage = error.localizedDescription
             logger.error("Failed to load keys: \(error.localizedDescription)")
