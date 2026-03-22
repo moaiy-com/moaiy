@@ -734,6 +734,8 @@ final class GPGService {
         keyType: KeyType,
         passphrase: String?
     ) -> String {
+        // GPG batch mode handles spaces in Name-Real correctly when passed via stdin
+        // No need to escape the name
         var params: String
 
         switch keyType {

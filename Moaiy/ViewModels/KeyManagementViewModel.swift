@@ -274,14 +274,31 @@ final class KeyManagementViewModel {
     }
     
     // MARK: - Key Deletion
-    
-    /// Delete a key
-    func deleteKey(_ key: GPGKey) async throws {
+
+    /// Delete a key with specified option
+    /// - Parameters:
+    ///   - key: The key to delete
+    ///   - option: Which part of the key to delete (secret only, public only, or both)
+    func deleteKey(_ key: GPGKey, option: DeleteKeyOption = .both) async throws {
         isLoading = true
         errorMessage = nil
-        
+
         do {
-            try await gpgService.deleteKey(keyID: key.fingerprint, secret: key.isSecret)
+            switch option {
+            case .secretOnly:
+                // Delete only the secret key
+                try await gpgService.deleteKey(keyID: key.fingerprint, secret: true)
+            case .publicOnly:
+                // Delete only the public key
+                try await gpgService.deleteKey(keyID: key.fingerprint, secret: false)
+            case .both:
+                // Delete both secret and public keys
+                // Note: GPG requires deleting secret key first
+                if key.isSecret {
+                    try await gpgService.deleteKey(keyID: key.fingerprint, secret: true)
+                }
+                try await gpgService.deleteKey(keyID: key.fingerprint, secret: false)
+            }
             await loadKeys()
         } catch {
             errorMessage = error.localizedDescription

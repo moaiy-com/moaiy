@@ -12,7 +12,7 @@ struct KeyDetailView: View {
     @Environment(KeyManagementViewModel.self) private var viewModel
     
     @State private var showingExportSheet = false
-    @State private var showingDeleteConfirmation = false
+    @State private var showingDeleteSheet = false
     @State private var showingTrustManagement = false
     @State private var showingKeySigning = false
     @State private var showingKeyEdit = false
@@ -33,7 +33,7 @@ struct KeyDetailView: View {
                 KeyActionsSection(
                     key: key,
                     showingExportSheet: $showingExportSheet,
-                    showingDeleteConfirmation: $showingDeleteConfirmation,
+                    showingDeleteSheet: $showingDeleteSheet,
                     showingKeySigning: $showingKeySigning,
                     isDeleting: $isDeleting
                 )
@@ -69,13 +69,15 @@ struct KeyDetailView: View {
             KeyEditSheet(key: key)
                 .environment(viewModel)
         }
-        .alert("action_delete_key", isPresented: $showingDeleteConfirmation) {
-            Button("action_cancel", role: .cancel) { }
-            Button("action_delete", role: .destructive) {
-                deleteKey()
-            }
-        } message: {
-            Text("confirm_delete_key_message")
+        .sheet(isPresented: $showingDeleteSheet) {
+            DeleteKeySheet(
+                key: key,
+                isPresented: $showingDeleteSheet,
+                isDeleting: $isDeleting,
+                deleteError: $deleteError,
+                onDeleteSuccess: { dismissNavigation() }
+            )
+                .environment(viewModel)
         }
         .alert("error_delete_failed", isPresented: .constant(deleteError != nil)) {
             Button("OK") {
@@ -84,23 +86,6 @@ struct KeyDetailView: View {
         } message: {
             if let error = deleteError {
                 Text(error)
-            }
-        }
-    }
-    
-    private func deleteKey() {
-        isDeleting = true
-        deleteError = nil
-
-        Task { @MainActor in
-            do {
-                try await viewModel.deleteKey(key)
-                isDeleting = false
-                // Navigate back to key list
-                dismissNavigation()
-            } catch {
-                deleteError = error.localizedDescription
-                isDeleting = false
             }
         }
     }
@@ -300,7 +285,7 @@ struct KeyStatusSection: View {
 struct KeyActionsSection: View {
     let key: GPGKey
     @Binding var showingExportSheet: Bool
-    @Binding var showingDeleteConfirmation: Bool
+    @Binding var showingDeleteSheet: Bool
     @Binding var showingKeySigning: Bool
     @Binding var isDeleting: Bool
 
@@ -335,7 +320,7 @@ struct KeyActionsSection: View {
                 .padding(.vertical, 8)
             
             // Destructive action
-            Button(role: .destructive, action: { showingDeleteConfirmation = true }) {
+            Button(role: .destructive, action: { showingDeleteSheet = true }) {
                 if isDeleting {
                     ProgressView()
                         .controlSize(.small)
@@ -535,6 +520,217 @@ struct ExportKeySheet: View {
                 isExporting = false
             }
         }
+    }
+}
+
+// MARK: - Delete Key Sheet
+
+enum DeleteKeyOption: String, Identifiable {
+    case secretOnly
+    case publicOnly
+    case both
+
+    var id: String { rawValue }
+}
+
+struct DeleteKeySheet: View {
+    let key: GPGKey
+    @Binding var isPresented: Bool
+    @Binding var isDeleting: Bool
+    @Binding var deleteError: String?
+    var onDeleteSuccess: (() -> Void)?
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(KeyManagementViewModel.self) private var viewModel
+    @State private var selectedOption: DeleteKeyOption = .both
+
+    var body: some View {
+        VStack(spacing: 24) {
+            // Header
+            VStack(spacing: 8) {
+                Image(systemName: "trash.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.red)
+
+                Text("action_delete_key")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                Text("delete_key_select_option")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            // Key info
+            VStack(spacing: 8) {
+                HStack {
+                    Text("field_name")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(key.name)
+                        .fontWeight(.medium)
+                }
+
+                HStack {
+                    Text("field_email")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(key.email)
+                        .fontWeight(.medium)
+                }
+            }
+            .padding()
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            // Delete options
+            VStack(spacing: 12) {
+                Text(key.isSecret ? "delete_key_has_secret" : "delete_key_public_only")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if key.isSecret {
+                    // Option 1: Private key only
+                    DeleteOptionRow(
+                        title: "delete_option_private",
+                        description: "delete_option_private_description",
+                        icon: "key.fill",
+                        color: .orange,
+                        isSelected: selectedOption == .secretOnly
+                    ) {
+                        selectedOption = .secretOnly
+                    }
+
+                    // Option 2: Public key only
+                    DeleteOptionRow(
+                        title: "delete_option_public",
+                        description: "delete_option_public_description",
+                        icon: "key",
+                        color: .blue,
+                        isSelected: selectedOption == .publicOnly
+                    ) {
+                        selectedOption = .publicOnly
+                    }
+
+                    // Option 3: Both keys
+                    DeleteOptionRow(
+                        title: "delete_option_both",
+                        description: "delete_option_both_description",
+                        icon: "trash.fill",
+                        color: .red,
+                        isSelected: selectedOption == .both
+                    ) {
+                        selectedOption = .both
+                    }
+                } else {
+                    // Public key only - single option
+                    DeleteOptionRow(
+                        title: "delete_option_public",
+                        description: "delete_option_public_description",
+                        icon: "key",
+                        color: .red,
+                        isSelected: true
+                    ) { }
+                }
+            }
+
+            // Warning
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text("delete_key_warning")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Actions
+            HStack(spacing: 12) {
+                Button("action_cancel") {
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(isDeleting)
+
+                Button(role: .destructive) {
+                    performDelete()
+                } label: {
+                    if isDeleting {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text("action_delete")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(isDeleting)
+            }
+        }
+        .padding(32)
+        .frame(width: 480)
+    }
+
+    private func performDelete() {
+        isDeleting = true
+        deleteError = nil
+
+        Task { @MainActor in
+            do {
+                try await viewModel.deleteKey(key, option: selectedOption)
+                isDeleting = false
+                dismiss()
+                onDeleteSuccess?()
+            } catch {
+                deleteError = error.localizedDescription
+                isDeleting = false
+            }
+        }
+    }
+}
+
+struct DeleteOptionRow: View {
+    let title: LocalizedStringKey
+    let description: LocalizedStringKey
+    let icon: String
+    let color: Color
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundStyle(color)
+                    .frame(width: 32)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(color)
+                }
+            }
+            .padding(12)
+            .background(isSelected ? color.opacity(0.1) : Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? color : Color.clear, lineWidth: 2)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -177,7 +177,7 @@ struct KeyListView: View {
     @Bindable var viewModel: KeyManagementViewModel
     @Binding var selectedKey: GPGKey?
     @Binding var keyToDelete: GPGKey?
-    
+
     var body: some View {
         List(viewModel.filteredKeys) { key in
             Button(action: { selectedKey = key }) {
@@ -185,6 +185,7 @@ struct KeyListView: View {
             }
             .buttonStyle(.plain)
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            .listRowSeparator(.hidden)
         }
         .listStyle(.inset)
         .refreshable {
