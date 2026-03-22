@@ -30,6 +30,11 @@ final class KeyManagementViewModel {
     // Search history
     var searchHistory: [String] = []
     private let maxSearchHistory = 10
+
+    // Retry configuration
+    private var retryCount = 0
+    private let maxRetries = 3
+    private var retryTask: Task<Void, Never>?
     
     // MARK: - Private Properties
     
@@ -108,23 +113,23 @@ final class KeyManagementViewModel {
     }
     
     // MARK: - Key Loading
-    
-    /// Load all keys from GPG
+
+    /// Load all keys from GPG with auto-retry
     func loadKeys() async {
         logger.info("Loading keys...")
         logger.info("GPGService.isReady = \(self.gpgService.isReady)")
-        
+
         isLoading = true
         errorMessage = nil
-        
+
         do {
             // Load both public and secret keys
             let publicKeys = try await gpgService.listKeys(secretOnly: false)
             logger.info("Loaded \(publicKeys.count) public keys")
-            
+
             let secretKeys = try await gpgService.listKeys(secretOnly: true)
             logger.info("Loaded \(secretKeys.count) secret keys")
-            
+
             // Merge keys, marking secret ones
             var allKeys = publicKeys
             for secretKey in secretKeys {
@@ -146,18 +151,34 @@ final class KeyManagementViewModel {
                     allKeys.append(secretKey)
                 }
             }
-            
+
             keys = allKeys.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
             logger.info("Total keys after merge: \(self.keys.count)")
             for key in keys {
                 logger.info("Key: \(key.name) <\(key.email)> trust=\(key.trustLevel.displayName)")
             }
             errorMessage = nil
+            retryCount = 0 // Reset retry count on success
         } catch {
             errorMessage = error.localizedDescription
             logger.error("Failed to load keys: \(error.localizedDescription)")
+
+            // Auto-retry with exponential backoff
+            if retryCount < maxRetries {
+                retryCount += 1
+                let delay = UInt64(pow(2.0, Double(retryCount)) * 1_000_000_000) // 2^n seconds
+                logger.info("Scheduling retry \(self.retryCount)/\(self.maxRetries) in \(delay / 1_000_000_000) seconds")
+
+                retryTask?.cancel()
+                retryTask = Task {
+                    try? await Task.sleep(nanoseconds: delay)
+                    if !Task.isCancelled {
+                        await loadKeys()
+                    }
+                }
+            }
         }
-        
+
         isLoading = false
     }
     
@@ -338,9 +359,11 @@ final class KeyManagementViewModel {
 
     func clearError() {
         errorMessage = nil
+        retryCount = 0
     }
 
     func refresh() async {
+        retryCount = 0 // Reset retry count on manual refresh
         await loadKeys()
     }
 

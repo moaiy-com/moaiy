@@ -13,6 +13,8 @@ struct KeyManagementView: View {
     @State private var showingImportKey = false
     @State private var selectedKey: GPGKey?
     @State private var showingFilters = false
+    @State private var keyToDelete: GPGKey?
+    @FocusState private var isListFocused: Bool
 
     var body: some View {
         Group {
@@ -35,11 +37,20 @@ struct KeyManagementView: View {
                             Button(action: { selectedKey = nil }) {
                                 Label("action_back", systemImage: "chevron.left")
                             }
+                            .keyboardShortcut(.escape, modifiers: [])
                         }
                     }
             } else {
                 // Show list view
-                KeyListView(viewModel: viewModel, selectedKey: $selectedKey)
+                KeyListView(viewModel: viewModel, selectedKey: $selectedKey, keyToDelete: $keyToDelete)
+                    .focused($isListFocused)
+                    .onKeyPress(.delete) {
+                        if let key = selectedKey {
+                            keyToDelete = key
+                            return .handled
+                        }
+                        return .ignored
+                    }
             }
         }
         .navigationTitle("section_key_management")
@@ -83,6 +94,35 @@ struct KeyManagementView: View {
         }
         .sheet(isPresented: $showingFilters) {
             FilterSheet(viewModel: viewModel)
+        }
+        .confirmationDialog(
+            "confirm_delete_key_title",
+            isPresented: .init(
+                get: { keyToDelete != nil },
+                set: { if !$0 { keyToDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("action_delete", role: .destructive) {
+                if let key = keyToDelete {
+                    Task {
+                        do {
+                            try await viewModel.deleteKey(key)
+                            selectedKey = nil
+                        } catch {
+                            // Error will be handled by viewModel.errorMessage
+                        }
+                    }
+                }
+                keyToDelete = nil
+            }
+            Button("action_cancel", role: .cancel) {
+                keyToDelete = nil
+            }
+        } message: {
+            if let key = keyToDelete {
+                Text("confirm_delete_key_message \(key.name)")
+            }
         }
         .alert("error_occurred", isPresented: .constant(viewModel.errorMessage != nil)) {
             Button("action_retry") {
@@ -135,16 +175,20 @@ struct EmptyKeysView: View {
 struct KeyListView: View {
     @Bindable var viewModel: KeyManagementViewModel
     @Binding var selectedKey: GPGKey?
+    @Binding var keyToDelete: GPGKey?
     
     var body: some View {
         List(viewModel.filteredKeys) { key in
             Button(action: { selectedKey = key }) {
-                KeyCardView(key: key)
+                KeyCardView(key: key, onDelete: { keyToDelete = key })
             }
             .buttonStyle(.plain)
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
         }
         .listStyle(.inset)
+        .refreshable {
+            await viewModel.refresh()
+        }
     }
 }
 
@@ -152,6 +196,7 @@ struct KeyListView: View {
 
 struct KeyCardView: View {
     let key: GPGKey
+    var onDelete: (() -> Void)? = nil
     @Environment(\.controlActiveState) private var controlActiveState
 
     var body: some View {
@@ -269,7 +314,9 @@ struct KeyCardView: View {
 
             Divider()
 
-            Button(role: .destructive, action: { }) {
+            Button(role: .destructive, action: {
+                onDelete?()
+            }) {
                 Label("action_delete_key", systemImage: "trash.fill")
             }
         }
