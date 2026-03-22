@@ -14,6 +14,8 @@ struct KeyDetailView: View {
     @State private var showingExportSheet = false
     @State private var showingDeleteConfirmation = false
     @State private var showingTrustManagement = false
+    @State private var showingKeySigning = false
+    @State private var showingKeyEdit = false
     @State private var isDeleting = false
     @State private var deleteError: String?
     @Environment(\.dismiss) private var dismissNavigation
@@ -32,6 +34,7 @@ struct KeyDetailView: View {
                     key: key,
                     showingExportSheet: $showingExportSheet,
                     showingDeleteConfirmation: $showingDeleteConfirmation,
+                    showingKeySigning: $showingKeySigning,
                     isDeleting: $isDeleting
                 )
             }
@@ -39,6 +42,11 @@ struct KeyDetailView: View {
         }
         .navigationTitle(key.name)
         .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button(action: { showingKeyEdit = true }) {
+                    Label("action_edit", systemImage: "pencil")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { showingExportSheet = true }) {
                     Label("action_export_public_key", systemImage: "square.and.arrow.up")
@@ -51,6 +59,14 @@ struct KeyDetailView: View {
         }
         .sheet(isPresented: $showingTrustManagement) {
             TrustManagementSheet(key: key)
+                .environment(viewModel)
+        }
+        .sheet(isPresented: $showingKeySigning) {
+            KeySigningSheet(keyToSign: key)
+                .environment(viewModel)
+        }
+        .sheet(isPresented: $showingKeyEdit) {
+            KeyEditSheet(key: key)
                 .environment(viewModel)
         }
         .alert("action_delete_key", isPresented: $showingDeleteConfirmation) {
@@ -290,8 +306,9 @@ struct KeyActionsSection: View {
     let key: GPGKey
     @Binding var showingExportSheet: Bool
     @Binding var showingDeleteConfirmation: Bool
+    @Binding var showingKeySigning: Bool
     @Binding var isDeleting: Bool
-    
+
     var body: some View {
         VStack(spacing: 12) {
             // Primary actions
@@ -301,7 +318,7 @@ struct KeyActionsSection: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            
+
             // Secondary actions
             HStack(spacing: 12) {
                 Button(action: { showingExportSheet = true }) {
@@ -310,9 +327,9 @@ struct KeyActionsSection: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
-                
-                Button(action: { }) {
-                    Label("action_decrypt_file", systemImage: "lock.open.fill")
+
+                Button(action: { showingKeySigning = true }) {
+                    Label("sign_key_button", systemImage: "signature")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
