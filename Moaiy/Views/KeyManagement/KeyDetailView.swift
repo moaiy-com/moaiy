@@ -13,6 +13,7 @@ struct KeyDetailView: View {
     
     @State private var showingExportSheet = false
     @State private var showingDeleteConfirmation = false
+    @State private var showingTrustManagement = false
     @State private var isDeleting = false
     @State private var deleteError: String?
     @Environment(\.dismiss) private var dismissNavigation
@@ -22,10 +23,10 @@ struct KeyDetailView: View {
             VStack(spacing: 24) {
                 // Header Section
                 KeyDetailHeader(key: key)
-                
+
                 // Status Section
-                KeyStatusSection(key: key)
-                
+                KeyStatusSection(key: key, showingTrustManagement: $showingTrustManagement)
+
                 // Actions
                 KeyActionsSection(
                     key: key,
@@ -46,6 +47,10 @@ struct KeyDetailView: View {
         }
         .sheet(isPresented: $showingExportSheet) {
             ExportKeySheet(key: key)
+                .environment(viewModel)
+        }
+        .sheet(isPresented: $showingTrustManagement) {
+            TrustManagementSheet(key: key)
                 .environment(viewModel)
         }
         .alert("action_delete_key", isPresented: $showingDeleteConfirmation) {
@@ -168,7 +173,8 @@ struct KeyDetailHeader: View {
 
 struct KeyStatusSection: View {
     let key: GPGKey
-    
+    @Binding var showingTrustManagement: Bool
+
     var body: some View {
         VStack(spacing: 16) {
             // Trust status
@@ -177,7 +183,7 @@ struct KeyStatusSection: View {
                     .font(.title2)
                     .foregroundStyle(trustColor)
                     .frame(width: 32)
-                
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(key.trustLevel.localizedName)
                         .font(.headline)
@@ -185,8 +191,14 @@ struct KeyStatusSection: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                
+
                 Spacer()
+
+                Button("action_manage") {
+                    showingTrustManagement = true
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
             
             // Expiration status
