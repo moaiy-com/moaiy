@@ -14,6 +14,8 @@ struct SettingsView: View {
     @AppStorage("backupFrequency") private var backupFrequency = 1
     @AppStorage("encryptionAlgorithm") private var encryptionAlgorithm = 0
     @AppStorage("fileNaming") private var fileNaming = 0
+
+    @State private var showingBackupManager = false
     
     var body: some View {
         Form {
@@ -36,7 +38,7 @@ struct SettingsView: View {
             
             Section {
                 Toggle("setting_auto_backup", isOn: $autoBackup)
-                
+
                 if autoBackup {
                     Picker("setting_backup_frequency", selection: $backupFrequency) {
                         Text("frequency_daily").tag(0)
@@ -44,6 +46,17 @@ struct SettingsView: View {
                         Text("frequency_monthly").tag(2)
                     }
                 }
+
+                Button(action: { showingBackupManager = true }) {
+                    HStack {
+                        Label("setting_backup_manager", systemImage: "externaldrive.fill.badge.icloud")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
             } header: {
                 Text("section_backup")
                     .font(.headline)
@@ -68,6 +81,10 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(minWidth: 400, minHeight: 400)
+        .sheet(isPresented: $showingBackupManager) {
+            BackupManagerView()
+                .environment(KeyManagementViewModel())
+        }
     }
 }
 
