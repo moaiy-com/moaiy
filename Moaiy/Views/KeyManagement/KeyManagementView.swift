@@ -87,6 +87,7 @@ struct KeyManagementView: View {
         }
         .sheet(isPresented: $showingCreateKey) {
             CreateKeyView()
+                .environment(viewModel)
         }
         .sheet(isPresented: $showingImportKey) {
             ImportKeySheet()

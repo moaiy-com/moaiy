@@ -239,6 +239,9 @@
         }
       }
     },
+    "action_done" : {
+
+    },
     "action_edit" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2474,6 +2477,23 @@
         }
       }
     },
+    "field_key_name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key Name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥名称"
+          }
+        }
+      }
+    },
     "field_password" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2905,6 +2925,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "RSA-2048"
+          }
+        }
+      }
+    },
+    "key_type_rsa2048_description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Faster than RSA-4096, still secure for most use cases"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "比 RSA-4096 更快，对大多数用例仍然安全"
           }
         }
       }
@@ -4641,7 +4678,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enter your name and email address for the key identity."
+            "value" : "Enter your key name and email address for the key identity."
           }
         },
         "zh-Hans" : {
@@ -4686,6 +4723,91 @@
         }
       }
     },
+    "wizard_creating_key" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creating Key..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在创建密钥..."
+          }
+        }
+      }
+    },
+    "wizard_creating_key_description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This may take a few seconds. Please wait..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这可能需要几秒钟，请稍候..."
+          }
+        }
+      }
+    },
+    "wizard_fingerprint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fingerprint"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "指纹"
+          }
+        }
+      }
+    },
+    "wizard_key_created" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key Created Successfully"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥创建成功"
+          }
+        }
+      }
+    },
+    "wizard_key_created_description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your new GPG key has been created and is ready to use."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "您的新 GPG 密钥已创建完成，可以开始使用。"
+          }
+        }
+      }
+    },
     "wizard_key_type_description" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4716,6 +4838,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设置密码保护您的私钥（可选但推荐）。"
+          }
+        }
+      }
+    },
+    "wizard_password_optional" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leave empty for no password protection"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "留空表示不设置密码保护"
           }
         }
       }

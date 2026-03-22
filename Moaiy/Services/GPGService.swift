@@ -180,23 +180,57 @@ final class GPGService {
             keyType: keyType,
             passphrase: passphrase
         )
-        
+
+        logger.debug("Key generation params:\n\(keyParams)")
+
         let result = try await executeGPG(
             arguments: ["--batch", "--gen-key", "--status-fd", "1"],
             input: keyParams
         )
-        
-        // Extract fingerprint from output
-        guard let output = result.stdout,
-              let fingerprintRange = output.range(of: "KEY_CREATED ([A-Z]+) ", options: .regularExpression) else {
-            throw GPGError.keyGenerationFailed("Failed to get key fingerprint")
+
+        // Log output for debugging
+        logger.debug("GPG stdout: \(result.stdout ?? "nil")")
+        logger.debug("GPG stderr: \(result.stderr ?? "nil")")
+        logger.debug("GPG exit code: \(result.exitCode)")
+
+        // Check for errors
+        if result.exitCode != 0 {
+            throw GPGError.keyGenerationFailed(result.stderr ?? "Unknown error (exit code: \(result.exitCode))")
         }
-        
-        let fingerprintStart = fingerprintRange.upperBound
-        let fingerprintEnd = output.index(fingerprintStart, offsetBy: 40)
-        let fingerprint = String(output[fingerprintStart..<fingerprintEnd])
-        
-        return fingerprint
+
+        // Extract fingerprint from output
+        guard let output = result.stdout else {
+            throw GPGError.keyGenerationFailed("No output from GPG")
+        }
+
+        // Try to find KEY_CREATED pattern: [GNUPG:] KEY_CREATED <type> <fingerprint>
+        // Example: [GNUPG:] KEY_CREATED P 1A2B3C4D5E6F7A8B9C0D1E2F3A4B5C6D7E8F9A0B
+        let lines = output.components(separatedBy: "\n")
+        for line in lines {
+            if line.contains("KEY_CREATED") {
+                let parts = line.components(separatedBy: " ")
+                // KEY_CREATED has format: [GNUPG:] KEY_CREATED <type> <fingerprint>
+                if parts.count >= 4 {
+                    let fingerprint = parts[3].trimmingCharacters(in: .whitespaces)
+                    if fingerprint.count == 40 {
+                        logger.info("Generated key with fingerprint: \(fingerprint)")
+                        return fingerprint
+                    }
+                }
+            }
+        }
+
+        // If we get here, the key might have been created but output format is different
+        // Try to list the keys to find the new one
+        logger.warning("Could not find KEY_CREATED pattern, trying to find key by email")
+        let keys = try await listKeys(secretOnly: false)
+        if let newKey = keys.first(where: { $0.email == email }) {
+            logger.info("Found newly created key: \(newKey.fingerprint)")
+            return newKey.fingerprint
+        }
+
+        logger.error("Could not find KEY_CREATED pattern in output: \(output)")
+        throw GPGError.keyGenerationFailed("Failed to get key fingerprint")
     }
     
     /// Import a key from file
@@ -700,28 +734,50 @@ final class GPGService {
         keyType: KeyType,
         passphrase: String?
     ) -> String {
-        var params = """
-        %echo Generating key
-        Key-Type: \(keyType.gpgKeyType)
-        Key-Length: \(keyType.keyLength)
-        Key-Usage: sign,encrypt
-        Subkey-Type: \(keyType.gpgSubkeyType)
-        Subkey-Length: \(keyType.subkeyLength)
-        Subkey-Usage: encrypt
-        Name-Real: \(name)
-        Name-Email: \(email)
-        Expire-Date: 0
-        
-        """
-        
+        var params: String
+
+        switch keyType {
+        case .rsa4096, .rsa2048:
+            // RSA keys use Key-Length
+            params = """
+            %echo Generating key
+            Key-Type: RSA
+            Key-Length: \(keyType.keyLength)
+            Key-Usage: sign,encrypt
+            Subkey-Type: RSA
+            Subkey-Length: \(keyType.subkeyLength)
+            Subkey-Usage: encrypt
+            Name-Real: \(name)
+            Name-Email: \(email)
+            Expire-Date: 0
+
+            """
+
+        case .ecc:
+            // ECC uses Key-Curve, primary key only signs (encryption done by subkey)
+            params = """
+            %echo Generating key
+            Key-Type: eddsa
+            Key-Curve: ed25519
+            Key-Usage: sign
+            Subkey-Type: ecdh
+            Subkey-Curve: cv25519
+            Subkey-Usage: encrypt
+            Name-Real: \(name)
+            Name-Email: \(email)
+            Expire-Date: 0
+
+            """
+        }
+
         if let passphrase = passphrase, !passphrase.isEmpty {
             params += "Passphrase: \(passphrase)\n"
         } else {
             params += "%no-protection\n"
         }
-        
+
         params += "%commit\n%echo Key generation complete\n"
-        
+
         return params
     }
     
