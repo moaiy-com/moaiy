@@ -171,7 +171,7 @@ struct CurrentTrustCard: View {
             
             if let details = trustDetails {
                 Divider()
-                
+
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("trust_signatures")
@@ -182,16 +182,25 @@ struct CurrentTrustCard: View {
                             .font(.caption)
                             .fontWeight(.semibold)
                     }
-                    
-                    if let lastChecked = details.lastChecked {
-                        HStack {
-                            Text("trust_last_checked")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text(lastChecked.formatted(date: .abbreviated, time: .shortened))
-                                .font(.caption)
-                        }
+
+                    HStack {
+                        Text("trust_owner_trust")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(details.ownerTrust.localizedName)
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+
+                    HStack {
+                        Text("trust_calculated_trust")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(details.calculatedTrust.localizedName)
+                            .font(.caption)
+                            .fontWeight(.semibold)
                     }
                 }
             }

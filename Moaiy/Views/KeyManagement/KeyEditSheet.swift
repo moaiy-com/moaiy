@@ -27,7 +27,7 @@ struct KeyEditSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var selectedTab: KeyEditTab = .expiration
-    @State private var showingSuccess = false
+    @State private var showSuccess = false
     @State private var successMessage: String?
 
     var body: some View {
@@ -75,17 +75,17 @@ struct KeyEditSheet: View {
                 case .expiration:
                     ExpirationEditView(key: key, onSuccess: { message in
                         successMessage = message
-                        showingSuccess = true
+                        showSuccess = true
                     })
                 case .userIds:
                     UserIDsEditView(key: key, onSuccess: { message in
                         successMessage = message
-                        showingSuccess = true
+                        showSuccess = true
                     })
                 case .passphrase:
                     PassphraseEditView(key: key, onSuccess: { message in
                         successMessage = message
-                        showingSuccess = true
+                        showSuccess = true
                     })
                 }
             }
@@ -215,31 +215,27 @@ struct ExpirationEditView: View {
         isUpdating = true
 
         Task {
-            do {
-                // Calculate expiration date
-                let expirationDate: Date?
-                switch expirationOption {
-                case .never:
-                    expirationDate = nil
-                case .oneYear:
-                    expirationDate = Calendar.current.date(byAdding: .year, value: 1, to: Date())
-                case .twoYears:
-                    expirationDate = Calendar.current.date(byAdding: .year, value: 2, to: Date())
-                case .fiveYears:
-                    expirationDate = Calendar.current.date(byAdding: .year, value: 5, to: Date())
-                case .custom:
-                    expirationDate = customDate
-                }
-
-                // TODO: Implement actual GPG key expiration update
-                // try await viewModel.updateKeyExpiration(key: key, expiresAt: expirationDate)
-
-                await Task.sleep(nanoseconds: 1_000_000_000) // Simulate operation
-                onSuccess("edit_expiration_success")
-            } catch {
-                errorMessage = error.localizedDescription
-                showError = true
+            // Calculate expiration date
+            let expirationDate: Date?
+            switch expirationOption {
+            case .never:
+                expirationDate = nil
+            case .oneYear:
+                expirationDate = Calendar.current.date(byAdding: .year, value: 1, to: Date())
+            case .twoYears:
+                expirationDate = Calendar.current.date(byAdding: .year, value: 2, to: Date())
+            case .fiveYears:
+                expirationDate = Calendar.current.date(byAdding: .year, value: 5, to: Date())
+            case .custom:
+                expirationDate = customDate
             }
+
+            // TODO: Implement actual GPG key expiration update
+            // try await viewModel.updateKeyExpiration(key: key, expiresAt: expirationDate)
+
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // Simulate operation
+            _ = expirationDate // Silence unused warning
+            onSuccess("edit_expiration_success")
             isUpdating = false
         }
     }
@@ -345,18 +341,13 @@ struct UserIDsEditView: View {
         isAdding = true
 
         Task {
-            do {
-                // TODO: Implement actual GPG user ID addition
-                // try await viewModel.addUserID(key: key, name: newUserName, email: newUserEmail)
+            // TODO: Implement actual GPG user ID addition
+            // try await viewModel.addUserID(key: key, name: newUserName, email: newUserEmail)
 
-                await Task.sleep(nanoseconds: 1_000_000_000) // Simulate operation
-                newUserName = ""
-                newUserEmail = ""
-                onSuccess("edit_userid_success")
-            } catch {
-                errorMessage = error.localizedDescription
-                showError = true
-            }
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // Simulate operation
+            newUserName = ""
+            newUserEmail = ""
+            onSuccess("edit_userid_success")
             isAdding = false
         }
     }
@@ -441,19 +432,14 @@ struct PassphraseEditView: View {
         isUpdating = true
 
         Task {
-            do {
-                // TODO: Implement actual GPG passphrase change
-                // try await viewModel.changePassphrase(key: key, oldPassphrase: currentPassphrase, newPassphrase: newPassphrase)
+            // TODO: Implement actual GPG passphrase change
+            // try await viewModel.changePassphrase(key: key, oldPassphrase: currentPassphrase, newPassphrase: newPassphrase)
 
-                await Task.sleep(nanoseconds: 1_000_000_000) // Simulate operation
-                currentPassphrase = ""
-                newPassphrase = ""
-                confirmPassphrase = ""
-                onSuccess("edit_passphrase_success")
-            } catch {
-                errorMessage = error.localizedDescription
-                showError = true
-            }
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // Simulate operation
+            currentPassphrase = ""
+            newPassphrase = ""
+            confirmPassphrase = ""
+            onSuccess("edit_passphrase_success")
             isUpdating = false
         }
     }
