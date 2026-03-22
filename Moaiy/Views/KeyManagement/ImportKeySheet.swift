@@ -88,28 +88,23 @@ struct ImportKeySheet: View {
     
     private func importKey() {
         guard let fileURL = importedFileURL else { return }
-        
+
         isImporting = true
         importError = nil
         importResult = nil
-        
-        Task {
+
+        Task { @MainActor in
             do {
                 let result = try await viewModel.importKey(from: fileURL)
-                await MainActor.run {
-                    importResult = result
-                    isImporting = false
-                    
-                    // Auto dismiss after success
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        dismiss()
-                    }
-                }
+                importResult = result
+                isImporting = false
+
+                // Auto dismiss after success
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                dismiss()
             } catch {
-                await MainActor.run {
-                    importError = error.localizedDescription
-                    isImporting = false
-                }
+                importError = error.localizedDescription
+                isImporting = false
             }
         }
     }

@@ -17,6 +17,10 @@
 		0BEF4DE62F6D80E00053CE56 /* GPGService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DE42F6D80E00053CE56 /* GPGService.swift */; };
 		0BEF4DF42F6D8D630053CE56 /* EncryptionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DF12F6D8D630053CE56 /* EncryptionViewModel.swift */; };
 		0BEF4DF52F6D8D630053CE56 /* KeyManagementViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DF22F6D8D630053CE56 /* KeyManagementViewModel.swift */; };
+		1A1000012F70000100000001 /* BackupManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2000012F70000100000001 /* BackupManagerView.swift */; };
+		1A1000022F70000100000002 /* ExpirationReminderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2000022F70000100000002 /* ExpirationReminderService.swift */; };
+		1A1000032F70000100000003 /* KeyStatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2000032F70000100000003 /* KeyStatisticsView.swift */; };
+		1A1000042F70000100000004 /* ExpirationReminderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2000042F70000100000004 /* ExpirationReminderSettingsView.swift */; };
 		B00000000001 /* MoaiyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000001 /* MoaiyApp.swift */; };
 		B00000000002 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000002 /* MainView.swift */; };
 		B00000000003 /* KeyManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000003 /* KeyManagementView.swift */; };
@@ -40,6 +44,10 @@
 		0BEF4DE42F6D80E00053CE56 /* GPGService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPGService.swift; sourceTree = "<group>"; };
 		0BEF4DF12F6D8D630053CE56 /* EncryptionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncryptionViewModel.swift; sourceTree = "<group>"; };
 		0BEF4DF22F6D8D630053CE56 /* KeyManagementViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyManagementViewModel.swift; sourceTree = "<group>"; };
+		1A2000012F70000100000001 /* BackupManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManagerView.swift; sourceTree = "<group>"; };
+		1A2000022F70000100000002 /* ExpirationReminderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpirationReminderService.swift; sourceTree = "<group>"; };
+		1A2000032F70000100000003 /* KeyStatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyStatisticsView.swift; sourceTree = "<group>"; };
+		1A2000042F70000100000004 /* ExpirationReminderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpirationReminderSettingsView.swift; sourceTree = "<group>"; };
 		A00000000001 /* MoaiyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoaiyApp.swift; sourceTree = "<group>"; };
 		A00000000002 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		A00000000003 /* KeyManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyManagementView.swift; sourceTree = "<group>"; };
@@ -122,6 +130,9 @@
 				D0000000000D /* Encryption */,
 				D0000000000E /* Settings */,
 				D0000000000F /* Components */,
+				D00000000014 /* Backup */,
+				D00000000015 /* Statistics */,
+				D00000000016 /* Expiration */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -131,6 +142,7 @@
 			children = (
 				0BEF4DE32F6D80E00053CE56 /* GPGError.swift */,
 				0BEF4DE42F6D80E00053CE56 /* GPGService.swift */,
+				1A2000022F70000100000002 /* ExpirationReminderService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -237,6 +249,30 @@
 			path = Feedback;
 			sourceTree = "<group>";
 		};
+		D00000000014 /* Backup */ = {
+			isa = PBXGroup;
+			children = (
+				1A2000012F70000100000001 /* BackupManagerView.swift */,
+			);
+			path = Backup;
+			sourceTree = "<group>";
+		};
+		D00000000015 /* Statistics */ = {
+			isa = PBXGroup;
+			children = (
+				1A2000032F70000100000003 /* KeyStatisticsView.swift */,
+			);
+			path = Statistics;
+			sourceTree = "<group>";
+		};
+		D00000000016 /* Expiration */ = {
+			isa = PBXGroup;
+			children = (
+				1A2000042F70000100000004 /* ExpirationReminderSettingsView.swift */,
+			);
+			path = Expiration;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -325,6 +361,10 @@
 				0BEF4DE62F6D80E00053CE56 /* GPGService.swift in Sources */,
 				B00000000007 /* Key.swift in Sources */,
 				B00000000008 /* Color+Theme.swift in Sources */,
+				1A1000012F70000100000001 /* BackupManagerView.swift in Sources */,
+				1A1000022F70000100000002 /* ExpirationReminderService.swift in Sources */,
+				1A1000032F70000100000003 /* KeyStatisticsView.swift in Sources */,
+				1A1000042F70000100000004 /* ExpirationReminderSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

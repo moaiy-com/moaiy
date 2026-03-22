@@ -212,7 +212,7 @@ struct BackupManagerView: View {
                 // Create save panel
                 let savePanel = NSSavePanel()
                 savePanel.title = "Save Backup"
-                savePanel.nameFieldStringValue = "Moaiy_Backup_\(Date().formatted(date: .abbreviated, time: .none)).zip"
+                savePanel.nameFieldStringValue = "Moaiy_Backup_\(Date().formatted(date: .abbreviated, time: .omitted)).zip"
                 savePanel.allowedContentTypes = [.zip]
                 savePanel.canCreateDirectories = true
 
@@ -245,8 +245,9 @@ struct BackupManagerView: View {
     }
 
     private func createBackupArchive(at url: URL) async throws {
-        // Create temporary directory
-        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("MoaiyBackup_\(UUID().uuidString)")
+        // Create temporary directory for backup contents
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MoaiyBackup_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
         defer {
@@ -285,13 +286,18 @@ struct BackupManagerView: View {
         let manifestFile = tempDir.appendingPathComponent("manifest.json")
         try manifestData.write(to: manifestFile)
 
-        // Create ZIP archive
-        // Note: In production, you'd use a ZIP library
-        // For now, we'll just copy the files as a simple backup
-        try FileManager.default.copyItem(at: tempDir, to: url)
+        // Create actual ZIP archive using system ditto command
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = ["-c", "-k", "--sequesterRsrc", "--keepParent",
+                             tempDir.path, url.path]
 
-        // Simulate ZIP creation delay
-        try await Task.sleep(nanoseconds: 500_000_000)
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            throw BackupError.invalidBackupFormat
+        }
     }
 
     private func restoreFromBackup() {
@@ -327,17 +333,64 @@ struct BackupManagerView: View {
     }
 
     private func restoreFromBackupArchive(at url: URL) async throws {
+        // Create temporary directory for extraction
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MoaiyRestore_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempDir)
+        }
+
+        // Determine backup type and extract if needed
+        var backupDir: URL
+
+        if url.pathExtension.lowercased() == "zip" {
+            // Extract ZIP archive using system ditto command
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+            process.arguments = ["-x", "-k", url.path, tempDir.path]
+
+            try process.run()
+            process.waitUntilExit()
+
+            guard process.terminationStatus == 0 else {
+                throw BackupError.invalidBackupFormat
+            }
+
+            // ditto extracts to a subdirectory with the archive name
+            // Find the extracted directory
+            let contents = try FileManager.default.contentsOfDirectory(
+                at: tempDir,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+
+            if let extractedDir = contents.first(where: { $0.hasDirectoryPath }) {
+                backupDir = extractedDir
+            } else {
+                backupDir = tempDir
+            }
+        } else {
+            // It's already a directory
+            backupDir = url
+        }
+
         // Read manifest
-        let manifestFile = url.appendingPathComponent("manifest.json")
+        let manifestFile = backupDir.appendingPathComponent("manifest.json")
         guard FileManager.default.fileExists(atPath: manifestFile.path) else {
             throw BackupError.manifestNotFound
         }
 
         let manifestData = try Data(contentsOf: manifestFile)
-        let manifest = try JSONDecoder().decode(BackupManifest.self, from: manifestData)
+        _ = try JSONDecoder().decode(BackupManifest.self, from: manifestData)
 
         // Import all keys
-        let files = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
+        let files = try FileManager.default.contentsOfDirectory(
+            at: backupDir,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
         let keyFiles = files.filter { $0.pathExtension == "asc" }
 
         for keyFile in keyFiles {
@@ -348,9 +401,6 @@ struct BackupManagerView: View {
                 print("Failed to import key from \(keyFile.lastPathComponent): \(error)")
             }
         }
-
-        // Simulate restore delay
-        try await Task.sleep(nanoseconds: 500_000_000)
     }
 
     // MARK: - Persistence
@@ -379,26 +429,14 @@ struct BackupManagerView: View {
 // MARK: - Supporting Types
 
 struct BackupRecord: Identifiable, Codable {
-    let id = UUID()
+    let id: UUID
     let date: Date
     let location: URL
     let keyCount: Int
     let includeSecretKeys: Bool
 
-    enum CodingKeys: String, CodingKey {
-        case id, date, location, keyCount, includeSecretKeys
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(UUID.self, forKey: .id)
-        date = try container.decode(Date.self, forKey: .date)
-        location = try container.decode(URL.self, forKey: .location)
-        keyCount = try container.decode(Int.self, forKey: .keyCount)
-        includeSecretKeys = try container.decode(Bool.self, forKey: .includeSecretKeys)
-    }
-
     init(date: Date, location: URL, keyCount: Int, includeSecretKeys: Bool) {
+        self.id = UUID()
         self.date = date
         self.location = location
         self.keyCount = keyCount

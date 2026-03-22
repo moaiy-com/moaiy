@@ -91,21 +91,16 @@ struct KeyDetailView: View {
     private func deleteKey() {
         isDeleting = true
         deleteError = nil
-        
-        Task {
+
+        Task { @MainActor in
             do {
                 try await viewModel.deleteKey(key)
-                
-                await MainActor.run {
-                    isDeleting = false
-                    // Navigate back to key list
-                    dismissNavigation()
-                }
+                isDeleting = false
+                // Navigate back to key list
+                dismissNavigation()
             } catch {
-                await MainActor.run {
-                    deleteError = error.localizedDescription
-                    isDeleting = false
-                }
+                deleteError = error.localizedDescription
+                isDeleting = false
             }
         }
     }
