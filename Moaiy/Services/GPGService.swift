@@ -321,7 +321,7 @@ final class GPGService {
     ///   - signingKey: Key ID to sign with (required if sign is true)
     /// - Returns: Encrypted text
     func encrypt(text: String, recipients: [String], sign: Bool = false, signingKey: String? = nil) async throws -> String {
-        var arguments = ["--encrypt", "--armor", "--batch"]
+        var arguments = ["--encrypt", "--armor", "--batch", "--trust-model", "always"]
         
         // Add recipients
         for recipient in recipients {
@@ -335,8 +335,16 @@ final class GPGService {
         
         let result = try await executeGPG(arguments: arguments, input: text)
         
-        guard let output = result.stdout else {
-            throw GPGError.encryptionFailed("No output from encryption")
+        // Check for GPG errors first
+        if result.exitCode != 0 {
+            let errorMsg = result.stderr ?? "Unknown GPG error (exit code: \(result.exitCode))"
+            throw GPGError.encryptionFailed(errorMsg)
+        }
+        
+        guard let output = result.stdout, !output.isEmpty else {
+            // Include stderr in error message for debugging
+            let errorMsg = result.stderr ?? "No output generated"
+            throw GPGError.encryptionFailed(errorMsg)
         }
         
         return output
@@ -353,8 +361,15 @@ final class GPGService {
             input: passphrase + "\n" + text
         )
         
-        guard let output = result.stdout else {
-            throw GPGError.decryptionFailed("No output from decryption")
+        // Check for GPG errors first
+        if result.exitCode != 0 {
+            let errorMsg = result.stderr ?? "Unknown GPG error (exit code: \(result.exitCode))"
+            throw GPGError.decryptionFailed(errorMsg)
+        }
+        
+        guard let output = result.stdout, !output.isEmpty else {
+            let errorMsg = result.stderr ?? "No output generated"
+            throw GPGError.decryptionFailed(errorMsg)
         }
         
         return output
