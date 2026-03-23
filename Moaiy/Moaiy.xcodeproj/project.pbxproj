@@ -27,10 +27,11 @@
 		B00000000004 /* CreateKeyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000004 /* CreateKeyView.swift */; };
 		B00000000005 /* EncryptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000005 /* EncryptionView.swift */; };
 		B00000000006 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000006 /* SettingsView.swift */; };
-		B00000000007 /* Key.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000007 /* Key.swift */; };
 		B00000000008 /* Color+Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000008 /* Color+Theme.swift */; };
-		B00000000009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000009 /* Assets.xcassets */; };
-		B0000000000A /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A0000000000A /* Localizable.xcstrings */; };
+		B00000000009 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000009 /* Constants.swift */; };
+		B0000000000A /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000A /* AppState.swift */; };
+		B0000000000E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A0000000000E /* Assets.xcassets */; };
+		B0000000000F /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A0000000000F /* Localizable.xcstrings */; };
 		2A1000012F71000100000001 /* PassphraseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2000012F71000100000001 /* PassphraseSheet.swift */; };
 		2A1000012F71000100000002 /* RecipientKeyPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2000012F71000100000002 /* RecipientKeyPicker.swift */; };
 		2A1000012F71000100000003 /* SecureInputField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2000012F71000100000003 /* SecureInputField.swift */; };
@@ -66,10 +67,11 @@
 		A00000000004 /* CreateKeyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateKeyView.swift; sourceTree = "<group>"; };
 		A00000000005 /* EncryptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncryptionView.swift; sourceTree = "<group>"; };
 		A00000000006 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		A00000000007 /* Key.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Key.swift; sourceTree = "<group>"; };
 		A00000000008 /* Color+Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Theme.swift"; sourceTree = "<group>"; };
-		A00000000009 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		A0000000000A /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		A00000000009 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+		A0000000000A /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		A0000000000E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A0000000000F /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		A0000000000B /* Entitlements.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Entitlements.entitlements; sourceTree = "<group>"; };
 		A0000000000C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A0000000000D /* Moaiy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moaiy.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -81,6 +83,7 @@
 			children = (
 				0BEF4DF12F6D8D630053CE56 /* EncryptionViewModel.swift */,
 				0BEF4DF22F6D8D630053CE56 /* KeyManagementViewModel.swift */,
+				A0000000000A /* AppState.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -129,7 +132,6 @@
 		D00000000005 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				A00000000007 /* Key.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -163,6 +165,7 @@
 		D00000000008 /* Utils */ = {
 			isa = PBXGroup;
 			children = (
+				A00000000009 /* Constants.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -178,8 +181,8 @@
 		D0000000000A /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				A00000000009 /* Assets.xcassets */,
-				A0000000000A /* Localizable.xcstrings */,
+				A0000000000E /* Assets.xcassets */,
+				A0000000000F /* Localizable.xcstrings */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -349,8 +352,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B00000000009 /* Assets.xcassets in Resources */,
-				B0000000000A /* Localizable.xcstrings in Resources */,
+				B0000000000E /* Assets.xcassets in Resources */,
+				B0000000000F /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -389,6 +392,8 @@
 				2A1000012F71000100000004 /* LoadingOverlay.swift in Sources */,
 				2A1000012F71000100000005 /* FileBookmarkManager.swift in Sources */,
 				2A1000012F71000100000006 /* OperationHistoryView.swift in Sources */,
+				B0000000000A /* AppState.swift in Sources */,
+				B00000000009 /* Constants.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
