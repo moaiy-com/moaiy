@@ -15,7 +15,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "T00000000012"
+               BlueprintIdentifier = "0B96E14C2F71021E009629C1"
                BuildableName = "MoaiyTests.xctest"
                BlueprintName = "MoaiyTests"
                ReferencedContainer = "container:Moaiy.xcodeproj">
@@ -58,7 +58,7 @@
             parallelizable = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "T00000000012"
+               BlueprintIdentifier = "0B96E14C2F71021E009629C1"
                BuildableName = "MoaiyTests.xctest"
                BlueprintName = "MoaiyTests"
                ReferencedContainer = "container:Moaiy.xcodeproj">
