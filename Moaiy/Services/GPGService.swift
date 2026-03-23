@@ -995,7 +995,7 @@ struct GPGKey: Identifiable, Hashable {
 }
 
 /// Key import result
-struct KeyImportResult {
+struct KeyImportResult: Codable {
     let imported: Int
     let unchanged: Int
     let newKeyIDs: [String]
