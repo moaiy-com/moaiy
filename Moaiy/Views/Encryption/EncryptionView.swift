@@ -96,15 +96,26 @@ struct EncryptionView: View {
                 onConfirm: { passphrase in
                     showPassphraseSheet = false
                     Task {
-                        await viewModel.decryptText(passphrase: passphrase)
-                        if viewModel.errorMessage == nil {
-                            successMessage = "decryption_success"
-                            showSuccessMessage = true
+                        // Check if we have pending file decryptions
+                        if !viewModel.pendingDecryptionFiles.isEmpty {
+                            let completed = await viewModel.processPendingFileDecryptions(passphrase: passphrase)
+                            if viewModel.errorMessage == nil && completed > 0 {
+                                successMessage = "file_decryption_complete \(completed)"
+                                showSuccessMessage = true
+                            }
+                        } else {
+                            // Regular text decryption
+                            await viewModel.decryptText(passphrase: passphrase)
+                            if viewModel.errorMessage == nil {
+                                successMessage = "decryption_success"
+                                showSuccessMessage = true
+                            }
                         }
                     }
                 },
                 onCancel: {
                     showPassphraseSheet = false
+                    viewModel.cancelPendingDecryptions()
                 }
             )
         }
@@ -323,12 +334,12 @@ struct FileEncryptionView: View {
                         .strokeBorder(
                             style: StrokeStyle(lineWidth: 2, dash: [8, 4])
                         )
-                        .foregroundStyle(isTargeted ? Color.moiayAccent : .secondary)
+                        .foregroundStyle(isTargeted ? Color.moaiyAccent : .secondary)
                     
                     VStack(spacing: 16) {
                         Image(systemName: operationMode == .encrypt ? "doc.badge.lock" : "doc.badge.unlock")
                             .font(.system(size: 48))
-                            .foregroundStyle(isTargeted ? Color.moiayAccent : .secondary)
+                            .foregroundStyle(isTargeted ? Color.moaiyAccent : .secondary)
                         
                         Text(operationMode == .encrypt ? "drop_zone_encrypt_title" : "drop_zone_decrypt_title")
                             .font(.headline)
@@ -339,7 +350,7 @@ struct FileEncryptionView: View {
                     }
                 }
                 .frame(maxWidth: 500, maxHeight: 300)
-                .background(isTargeted ? Color.moiayAccent.opacity(0.05) : Color.clear)
+                .background(isTargeted ? Color.moaiyAccent.opacity(0.05) : Color.clear)
                 .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
                     handleFileDrop(providers: providers)
                     return true
@@ -450,7 +461,9 @@ struct FileEncryptionView: View {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.message = "Select files to \(operationMode == .encrypt ? "encrypt" : "decrypt")"
+        panel.message = String(localized: operationMode == .encrypt 
+            ? "select_files_encrypt_message" 
+            : "select_files_decrypt_message")
         
         if panel.runModal() == .OK {
             for url in panel.urls {
@@ -474,6 +487,8 @@ struct FileEncryptionView: View {
     
     private func processFiles() {
         if operationMode == .decrypt {
+            // Set pending files and show passphrase sheet
+            viewModel.setPendingDecryptionFiles(selectedFiles)
             showPassphraseSheet = true
         } else {
             Task {
@@ -517,50 +532,6 @@ struct FileEncryptionView: View {
         
         if viewModel.errorMessage == nil {
             successMessage = "file_encryption_complete \(Int(completedFiles))"
-            showSuccessMessage = true
-            selectedFiles.removeAll()
-        }
-    }
-    
-    func decryptFiles(passphrase: String) async {
-        isProcessing = true
-        processingProgress = 0
-        let totalFiles = Double(selectedFiles.count)
-        var completedFiles = 0.0
-        
-        for sourceURL in selectedFiles {
-            currentProcessingFile = sourceURL.lastPathComponent
-            
-            // Start accessing security-scoped resource
-            let hasAccess = await bookmarkManager.startAccessing(url: sourceURL)
-            
-            defer {
-                if hasAccess {
-                    Task { await bookmarkManager.stopAccessing(url: sourceURL) }
-                }
-            }
-            
-            // Remove .gpg extension for output
-            let destName = sourceURL.lastPathComponent.hasSuffix(".gpg") 
-                ? String(sourceURL.lastPathComponent.dropLast(4))
-                : sourceURL.lastPathComponent + ".decrypted"
-            let destinationURL = sourceURL.deletingLastPathComponent()
-                .appendingPathComponent(destName)
-            
-            do {
-                _ = try await viewModel.decryptFile(sourceURL: sourceURL, destinationURL: destinationURL, passphrase: passphrase)
-                completedFiles += 1
-                processingProgress = completedFiles / totalFiles
-            } catch {
-                // Error is handled by viewModel.errorMessage
-            }
-        }
-        
-        isProcessing = false
-        currentProcessingFile = nil
-        
-        if viewModel.errorMessage == nil {
-            successMessage = "file_decryption_complete \(Int(completedFiles))"
             showSuccessMessage = true
             selectedFiles.removeAll()
         }

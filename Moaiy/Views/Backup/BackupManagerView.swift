@@ -484,7 +484,7 @@ struct BackupStatusCard: View {
         HStack(spacing: 16) {
             Image(systemName: "externaldrive.fill.badge.icloud")
                 .font(.system(size: 40))
-                .foregroundStyle(Color.moiayAccent)
+                .foregroundStyle(Color.moaiyAccent)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("backup_status_title")

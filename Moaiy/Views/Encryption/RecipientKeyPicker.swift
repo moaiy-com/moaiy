@@ -18,7 +18,7 @@ struct RecipientKeyPicker: View {
             Button(action: { isExpanded.toggle() }) {
                 HStack {
                     Image(systemName: "person.2.fill")
-                        .foregroundStyle(Color.moiayAccent)
+                        .foregroundStyle(Color.moaiyAccent)
                     
                     Text("recipient_keys_title")
                         .font(.headline)
@@ -30,7 +30,7 @@ struct RecipientKeyPicker: View {
                             .font(.caption)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 2)
-                            .background(Color.moiayAccent)
+                            .background(Color.moaiyAccent)
                             .foregroundStyle(.white)
                             .clipShape(Capsule())
                     }
@@ -130,7 +130,7 @@ struct RecipientKeyRow: View {
             HStack(spacing: 12) {
                 // Selection indicator
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? Color.moiayAccent : .secondary)
+                    .foregroundStyle(isSelected ? Color.moaiyAccent : .secondary)
                     .font(.title3)
                 
                 // Key info
@@ -167,7 +167,7 @@ struct RecipientKeyRow: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
-            .background(isSelected ? Color.moiayAccent.opacity(0.1) : Color.clear)
+            .background(isSelected ? Color.moaiyAccent.opacity(0.1) : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)

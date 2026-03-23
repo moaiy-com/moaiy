@@ -24,7 +24,7 @@ struct ImportKeySheet: View {
             VStack(spacing: 8) {
                 Image(systemName: "square.and.arrow.down")
                     .font(.system(size: 48))
-                    .foregroundStyle(Color.moiayAccent)
+                    .foregroundStyle(Color.moaiyAccent)
                 
                 Text("action_import_key")
                     .font(.title2)
@@ -120,7 +120,7 @@ struct DropZoneView: View {
         VStack(spacing: 16) {
             Image(systemName: isTargeted ? "doc.badge.plus" : "doc.text")
                 .font(.system(size: 48))
-                .foregroundStyle(isTargeted ? Color.moiayAccent : .secondary)
+                .foregroundStyle(isTargeted ? Color.moaiyAccent : .secondary)
             
             Text("drop_zone_title")
                 .font(.headline)
@@ -136,11 +136,11 @@ struct DropZoneView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 200)
-        .background(isTargeted ? Color.moiayAccent.opacity(0.1) : Color(nsColor: .controlBackgroundColor))
+        .background(isTargeted ? Color.moaiyAccent.opacity(0.1) : Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(isTargeted ? Color.moiayAccent : Color.secondary.opacity(0.3), lineWidth: 2, antialiased: true)
+                .stroke(isTargeted ? Color.moaiyAccent : Color.secondary.opacity(0.3), lineWidth: 2, antialiased: true)
         )
         .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
             handleDrop(providers: providers)
@@ -190,7 +190,7 @@ struct FilePreviewCard: View {
         HStack(spacing: 12) {
             Image(systemName: "doc.text.fill")
                 .font(.title)
-                .foregroundStyle(Color.moiayAccent)
+                .foregroundStyle(Color.moaiyAccent)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(url.lastPathComponent)

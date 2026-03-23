@@ -21,7 +21,7 @@ struct PassphraseSheet: View {
             // Icon
             Image(systemName: "lock.shield")
                 .font(.system(size: 48))
-                .foregroundStyle(Color.moiayAccent)
+                .foregroundStyle(Color.moaiyAccent)
             
             // Title
             VStack(spacing: 8) {

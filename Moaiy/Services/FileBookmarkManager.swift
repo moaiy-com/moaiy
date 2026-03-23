@@ -13,7 +13,7 @@ actor FileBookmarkManager {
     static let shared = FileBookmarkManager()
     
     private let defaults = UserDefaults.standard
-    private let bookmarksKey = "com.moaiy.fileBookmarks"
+    private let bookmarksKey = Constants.StorageKeys.fileBookmarks
     
     private init() {}
     

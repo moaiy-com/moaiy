@@ -101,12 +101,12 @@ struct KeyDetailHeader: View {
             // Key icon
             ZStack {
                 Circle()
-                    .fill(key.isSecret ? Color.moiayAccent.opacity(0.1) : Color.blue.opacity(0.1))
+                    .fill(key.isSecret ? Color.moaiyAccent.opacity(0.1) : Color.blue.opacity(0.1))
                     .frame(width: 64, height: 64)
                 
                 Image(systemName: key.isSecret ? "key.fill" : "key")
                     .font(.title)
-                    .foregroundStyle(key.isSecret ? Color.moiayAccent : .blue)
+                    .foregroundStyle(key.isSecret ? Color.moaiyAccent : .blue)
             }
             
             VStack(alignment: .leading, spacing: 4) {
@@ -161,7 +161,7 @@ struct KeyDetailHeader: View {
     }
     
     private var keyTypeBadgeColor: Color {
-        key.isSecret ? Color.moiayAccent : .blue
+        key.isSecret ? Color.moaiyAccent : .blue
     }
 }
 
@@ -239,7 +239,7 @@ struct KeyStatusSection: View {
             HStack(spacing: 12) {
                 Image(systemName: "checkmark.shield.fill")
                     .font(.title2)
-                    .foregroundStyle(Color.moiayAccent)
+                    .foregroundStyle(Color.moaiyAccent)
                     .frame(width: 32)
                 
                 VStack(alignment: .leading, spacing: 2) {
@@ -355,8 +355,8 @@ struct CapabilityBadge: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(Color.moiayAccent.opacity(0.1))
-        .foregroundStyle(Color.moiayAccent)
+        .background(Color.moaiyAccent.opacity(0.1))
+        .foregroundStyle(Color.moaiyAccent)
         .clipShape(Capsule())
     }
 }
@@ -375,7 +375,7 @@ struct ExportKeySheet: View {
             VStack(spacing: 8) {
                 Image(systemName: "square.and.arrow.up")
                     .font(.system(size: 48))
-                    .foregroundStyle(Color.moiayAccent)
+                    .foregroundStyle(Color.moaiyAccent)
                 
                 Text("action_export_public_key")
                     .font(.title2)

@@ -25,7 +25,7 @@ extension Color {
     )
     
     /// Accent color - Gold (like the sunset on Easter Island)
-    static let moiayAccent = Color(
+    static let moaiyAccent = Color(
         red: 212 / 255,
         green: 175 / 255,
         blue: 55 / 255

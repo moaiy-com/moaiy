@@ -154,7 +154,7 @@ struct ExpirationEditView: View {
                     Button(action: { expirationOption = option }) {
                         HStack {
                             Image(systemName: expirationOption == option ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(expirationOption == option ? Color.moiayAccent : .secondary)
+                                .foregroundStyle(expirationOption == option ? Color.moaiyAccent : .secondary)
 
                             Text(option.rawValue)
                                 .font(.subheadline)
@@ -280,8 +280,8 @@ struct UserIDsEditView: View {
                         .font(.caption)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.moiayAccent.opacity(0.2))
-                        .foregroundStyle(Color.moiayAccent)
+                        .background(Color.moaiyAccent.opacity(0.2))
+                        .foregroundStyle(Color.moaiyAccent)
                         .clipShape(Capsule())
                 }
                 .padding()

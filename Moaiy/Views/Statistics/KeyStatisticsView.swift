@@ -44,7 +44,7 @@ struct KeyStatisticsView: View {
                             title: "statistics_secret_keys",
                             value: "\(viewModel.secretKeys.count)",
                             icon: "key.viewfinder",
-                            color: Color.moiayAccent
+                            color: Color.moaiyAccent
                         )
 
                         StatCard(
@@ -205,7 +205,7 @@ struct KeyStatisticsView: View {
 
                             ActivityRow(
                                 icon: "signature",
-                                color: Color.moiayAccent,
+                                color: Color.moaiyAccent,
                                 title: "statistics_keys_signed",
                                 value: "0"
                             )

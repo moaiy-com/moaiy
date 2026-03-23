@@ -29,11 +29,11 @@ final class KeyManagementViewModel {
 
     // Search history
     var searchHistory: [String] = []
-    private let maxSearchHistory = 10
+    private let maxSearchHistory = Constants.UI.maxSearchHistory
 
     // Retry configuration
     private var retryCount = 0
-    private let maxRetries = 3
+    private let maxRetries = Constants.GPG.maxRetries
     private var retryTask: Task<Void, Never>?
 
     // Expiration reminder service

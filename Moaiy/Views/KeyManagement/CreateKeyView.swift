@@ -58,7 +58,7 @@ struct CreateKeyView: View {
                     )
                     if step < 2 {
                         Rectangle()
-                            .fill(currentStep > step ? Color.moiayAccent : Color.secondary.opacity(0.3))
+                            .fill(currentStep > step ? Color.moaiyAccent : Color.secondary.opacity(0.3))
                             .frame(height: 2)
                     }
                 }
@@ -276,7 +276,7 @@ struct StepIndicator: View {
         VStack(spacing: 8) {
             ZStack {
                 Circle()
-                    .fill(isActive ? Color.moiayAccent : Color.secondary.opacity(0.3))
+                    .fill(isActive ? Color.moaiyAccent : Color.secondary.opacity(0.3))
                     .frame(width: 32, height: 32)
                 
                 if isActive && !isCurrent {
@@ -380,7 +380,7 @@ struct KeyTypeOption: View {
             HStack(spacing: 12) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title2)
-                    .foregroundStyle(isSelected ? Color.moiayAccent : .secondary)
+                    .foregroundStyle(isSelected ? Color.moaiyAccent : .secondary)
                 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -404,11 +404,11 @@ struct KeyTypeOption: View {
                 Spacer()
             }
             .padding()
-            .background(isSelected ? Color.moiayAccent.opacity(0.1) : Color.clear)
+            .background(isSelected ? Color.moaiyAccent.opacity(0.1) : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? Color.moiayAccent : Color.secondary.opacity(0.2), lineWidth: 1)
+                    .stroke(isSelected ? Color.moaiyAccent : Color.secondary.opacity(0.2), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)

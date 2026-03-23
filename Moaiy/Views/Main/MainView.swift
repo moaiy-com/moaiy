@@ -44,7 +44,11 @@ struct MainView: View {
             }
             .listStyle(.sidebar)
             .navigationTitle("Moaiy")
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 250)
+            .navigationSplitViewColumnWidth(
+                min: Constants.UI.minSidebarWidth,
+                ideal: Constants.UI.idealSidebarWidth,
+                max: Constants.UI.maxSidebarWidth
+            )
         } detail: {
             if let section = selectedSection {
                 switch section {

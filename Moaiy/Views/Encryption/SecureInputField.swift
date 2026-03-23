@@ -52,7 +52,7 @@ struct SecureInputField: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(isFocused ? Color.moiayAccent : Color.secondary.opacity(0.3), lineWidth: 1)
+                    .stroke(isFocused ? Color.moaiyAccent : Color.secondary.opacity(0.3), lineWidth: 1)
             )
         }
     }

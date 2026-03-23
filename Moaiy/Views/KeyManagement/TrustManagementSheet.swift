@@ -261,15 +261,15 @@ struct TrustLevelRow: View {
                 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.moiayAccent)
+                        .foregroundStyle(Color.moaiyAccent)
                 }
             }
             .padding(12)
-            .background(isSelected ? Color.moiayAccent.opacity(0.1) : Color.clear)
+            .background(isSelected ? Color.moaiyAccent.opacity(0.1) : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? Color.moiayAccent : Color.secondary.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+                    .stroke(isSelected ? Color.moaiyAccent : Color.secondary.opacity(0.2), lineWidth: isSelected ? 2 : 1)
             )
         }
         .buttonStyle(.plain)

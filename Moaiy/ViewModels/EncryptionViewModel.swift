@@ -47,13 +47,25 @@ final class EncryptionViewModel {
     
     // Operation History
     var operationHistory: [EncryptionHistoryItem] = []
-    var maxHistoryItems = 50
+    var maxHistoryItems = Constants.UI.maxOperationHistory
+    
+    // MARK: - File Decryption State
+    
+    /// Pending files for decryption (set when passphrase is required)
+    var pendingDecryptionFiles: [URL] = []
+    var fileDecryptionProgress: Double = 0
+    var isProcessingFiles = false
+    var currentProcessingFileName: String?
     
     // MARK: - Private Properties
     
     private let gpgService = GPGService.shared
-    private let keyManagementVM = KeyManagementViewModel()
-    private let historyKey = "com.moaiy.encryptionHistory"
+    
+    /// Reference to shared key management view model
+    let keyManagementVM: KeyManagementViewModel
+    
+    private let historyKey = Constants.StorageKeys.encryptionHistory
+    private let bookmarkManager = FileBookmarkManager.shared
     
     // MARK: - Computed Properties
     
@@ -93,10 +105,9 @@ final class EncryptionViewModel {
     
     // MARK: - Initialization
     
-    init() {
-        Task {
-            await keyManagementVM.loadKeys()
-        }
+    /// Initialize with optional key management view model (uses shared instance by default)
+    init(keyManagement: KeyManagementViewModel = AppState.shared.keyManagement) {
+        self.keyManagementVM = keyManagement
         loadHistory()
     }
     
@@ -203,6 +214,81 @@ final class EncryptionViewModel {
             isDecrypting = false
             throw error
         }
+    }
+    
+    // MARK: - Batch File Decryption
+    
+    /// Set pending files for decryption (triggers passphrase input)
+    /// - Parameter files: Files to decrypt
+    func setPendingDecryptionFiles(_ files: [URL]) {
+        pendingDecryptionFiles = files
+    }
+    
+    /// Process pending file decryptions with the provided passphrase
+    /// - Parameter passphrase: Passphrase for decryption
+    /// - Returns: Number of successfully decrypted files
+    @discardableResult
+    func processPendingFileDecryptions(passphrase: String) async -> Int {
+        guard !pendingDecryptionFiles.isEmpty else { return 0 }
+        
+        isProcessingFiles = true
+        fileDecryptionProgress = 0
+        errorMessage = nil
+        lastOperationType = .fileDecryption
+        
+        let totalFiles = Double(pendingDecryptionFiles.count)
+        var completedFiles = 0
+        
+        for sourceURL in pendingDecryptionFiles {
+            currentProcessingFileName = sourceURL.lastPathComponent
+            
+            // Start accessing security-scoped resource
+            let hasAccess = await bookmarkManager.startAccessing(url: sourceURL)
+            
+            defer {
+                if hasAccess {
+                    Task { await bookmarkManager.stopAccessing(url: sourceURL) }
+                }
+            }
+            
+            // Remove .gpg extension for output
+            let destName = sourceURL.lastPathComponent.hasSuffix(".gpg")
+                ? String(sourceURL.lastPathComponent.dropLast(4))
+                : sourceURL.lastPathComponent + ".decrypted"
+            let destinationURL = sourceURL.deletingLastPathComponent()
+                .appendingPathComponent(destName)
+            
+            do {
+                _ = try await gpgService.decryptFile(
+                    sourceURL: sourceURL,
+                    destinationURL: destinationURL,
+                    passphrase: passphrase
+                )
+                completedFiles += 1
+                addToHistory(type: .fileDecryption, content: sourceURL.lastPathComponent, success: true)
+            } catch {
+                addToHistory(type: .fileDecryption, content: sourceURL.lastPathComponent, success: false)
+                // Continue with remaining files even if one fails
+            }
+            
+            fileDecryptionProgress = Double(completedFiles) / totalFiles
+        }
+        
+        isProcessingFiles = false
+        currentProcessingFileName = nil
+        lastOperationTime = Date()
+        
+        // Clear pending files after processing
+        pendingDecryptionFiles.removeAll()
+        
+        return completedFiles
+    }
+    
+    /// Cancel pending file decryptions
+    func cancelPendingDecryptions() {
+        pendingDecryptionFiles.removeAll()
+        isProcessingFiles = false
+        currentProcessingFileName = nil
     }
     
     // MARK: - Key Selection

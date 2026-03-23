@@ -26,7 +26,10 @@ struct MoaiyApp: App {
                 }
         }
         .windowStyle(.automatic)
-        .defaultSize(width: 1000, height: 700)
+        .defaultSize(
+            width: Constants.UI.defaultWindowWidth,
+            height: Constants.UI.defaultWindowHeight
+        )
         
         #if os(macOS)
         Settings {

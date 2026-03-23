@@ -8,6 +8,87 @@
 import Foundation
 import os.log
 
+// MARK: - GPG Process Actor
+
+/// Actor for executing GPG commands off the main thread
+actor GPGProcessExecutor {
+    
+    private let logger = Logger(subsystem: "com.moaiy.app", category: "GPGProcess")
+    
+    /// Execute a GPG command
+    func execute(
+        executableURL: URL,
+        arguments: [String],
+        environment: [String: String],
+        gpgHome: URL?,
+        input: String?,
+        timeout: TimeInterval = Constants.GPG.defaultTimeout
+    ) async throws -> GPGExecutionResult {
+        
+        let process = Process()
+        process.executableURL = executableURL
+        process.arguments = arguments
+        
+        // Set environment
+        var env = ProcessInfo.processInfo.environment
+        if let gpgHome = gpgHome {
+            env["GNUPGHOME"] = gpgHome.path
+        }
+        for (key, value) in environment {
+            env[key] = value
+        }
+        process.environment = env
+        
+        // Setup pipes
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        var stdinPipe: Pipe?
+        
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+        
+        if input != nil {
+            stdinPipe = Pipe()
+            process.standardInput = stdinPipe
+        }
+        
+        // Execute with timeout
+        try process.run()
+        
+        // Write input if provided
+        if let input = input, let stdinPipe = stdinPipe {
+            let inputData = input.data(using: .utf8) ?? Data()
+            stdinPipe.fileHandleForWriting.write(inputData)
+            try? stdinPipe.fileHandleForWriting.close()
+        }
+        
+        // Wait for completion with timeout
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning && Date() < deadline {
+            try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        }
+        
+        if process.isRunning {
+            process.terminate()
+            throw GPGError.executionFailed("Operation timed out after \(Int(timeout)) seconds")
+        }
+        
+        // Read output
+        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        
+        let stdout = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stderr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        return GPGExecutionResult(
+            exitCode: Int(process.terminationStatus),
+            stdout: stdout?.isEmpty == false ? stdout : nil,
+            stderr: stderr?.isEmpty == false ? stderr : nil,
+            data: stdoutData.isEmpty ? nil : stdoutData
+        )
+    }
+}
+
 /// Service class for GPG operations
 @MainActor
 @Observable
@@ -33,10 +114,16 @@ final class GPGService {
         gpgURL?.path ?? ""
     }
     
+    /// Actor for executing GPG commands off the main thread
+    private let processExecutor = GPGProcessExecutor()
+    
     // MARK: - Constants
     
-    private let gpgBundleName = "gpg.bundle"
-    private let gpgExecutableName = "gpg"
+    private let gpgBundleName = Constants.GPG.bundleName
+    private let gpgExecutableName = Constants.GPG.executableName
+    
+    /// Default timeout for GPG operations (in seconds)
+    static let defaultTimeout = Constants.GPG.defaultTimeout
     
     // MARK: - Initialization
     
@@ -259,10 +346,7 @@ final class GPGService {
             arguments.insert("--armor", at: 0)
         }
 
-        // Run on background thread to avoid blocking main thread
-        let result = try await Task.detached(priority: .userInitiated) {
-            try await self.executeGPG(arguments: arguments)
-        }.value
+        let result = try await executeGPG(arguments: arguments)
 
         guard let data = result.data else {
             throw GPGError.exportFailed("No key data exported")
@@ -283,13 +367,10 @@ final class GPGService {
             arguments.insert("--armor", at: 0)
         }
 
-        // Run on background thread to avoid blocking main thread
-        let result = try await Task.detached(priority: .userInitiated) {
-            try await self.executeGPG(
-                arguments: arguments,
-                environment: ["GPG_PASSPHRASE": passphrase]
-            )
-        }.value
+        let result = try await executeGPG(
+            arguments: arguments,
+            environment: ["GPG_PASSPHRASE": passphrase]
+        )
 
         guard let data = result.data else {
             throw GPGError.exportFailed("No key data exported")
@@ -592,79 +673,25 @@ final class GPGService {
     
     // MARK: - Private Helpers
     
-    /// Execute GPG command
+    /// Execute GPG command using the process executor actor
     private func executeGPG(
         arguments: [String],
         input: String? = nil,
-        environment: [String: String] = [:]
+        environment: [String: String] = [:],
+        timeout: TimeInterval = GPGService.defaultTimeout
     ) async throws -> GPGExecutionResult {
         guard let gpgURL = gpgURL else {
             throw GPGError.gpgNotFound
         }
         
-        let process = Process()
-        process.executableURL = gpgURL
-        process.arguments = arguments
-        
-        // Set environment
-        var env = ProcessInfo.processInfo.environment
-        
-        // Set GPG home directory
-        if let gpgHome = gpgHome {
-            env["GNUPGHOME"] = gpgHome.path
-        }
-        
-        // Add custom environment variables
-        for (key, value) in environment {
-            env[key] = value
-        }
-        
-        process.environment = env
-        
-        // Setup pipes
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        var stdinPipe: Pipe?
-        
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-        
-        if input != nil {
-            stdinPipe = Pipe()
-            process.standardInput = stdinPipe
-        }
-        
-        // Execute
-        do {
-            try process.run()
-            
-            // Write input if provided
-            if let input = input, let stdinPipe = stdinPipe {
-                let inputData = input.data(using: .utf8)
-                stdinPipe.fileHandleForWriting.write(inputData ?? Data())
-                try? stdinPipe.fileHandleForWriting.close()
-            }
-            
-            process.waitUntilExit()
-        } catch {
-            throw GPGError.executionFailed(error.localizedDescription)
-        }
-        
-        // Read output
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-        
-        let stdout = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let stderr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        let result = GPGExecutionResult(
-            exitCode: Int(process.terminationStatus),
-            stdout: stdout?.isEmpty == false ? stdout : nil,
-            stderr: stderr?.isEmpty == false ? stderr : nil,
-            data: stdoutData.isEmpty ? nil : stdoutData
+        return try await processExecutor.execute(
+            executableURL: gpgURL,
+            arguments: arguments,
+            environment: environment,
+            gpgHome: gpgHome,
+            input: input,
+            timeout: timeout
         )
-        
-        return result
     }
     
     /// Parse key list output

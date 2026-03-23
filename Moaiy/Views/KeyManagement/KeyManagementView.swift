@@ -327,11 +327,11 @@ struct KeyCardView: View {
     // MARK: - Color Computed Properties
     
     private var keyIconColor: Color {
-        key.isSecret ? Color.moiayAccent : .secondary
+        key.isSecret ? Color.moaiyAccent : .secondary
     }
     
     private var keyTypeBadgeColor: Color {
-        key.isSecret ? Color.moiayAccent : .blue
+        key.isSecret ? Color.moaiyAccent : .blue
     }
     
     private var trustLevelColor: Color {

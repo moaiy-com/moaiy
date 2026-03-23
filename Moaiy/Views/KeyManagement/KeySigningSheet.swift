@@ -104,15 +104,15 @@ struct KeySigningSheet: View {
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 8)
-                                .background(selectedTrustLevel == level ? Color.moiayAccent.opacity(0.2) : Color.clear)
+                                .background(selectedTrustLevel == level ? Color.moaiyAccent.opacity(0.2) : Color.clear)
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .stroke(selectedTrustLevel == level ? Color.moiayAccent : Color.secondary.opacity(0.3), lineWidth: selectedTrustLevel == level ? 2 : 1)
+                                        .stroke(selectedTrustLevel == level ? Color.moaiyAccent : Color.secondary.opacity(0.3), lineWidth: selectedTrustLevel == level ? 2 : 1)
                                 )
                             }
                             .buttonStyle(.plain)
-                            .foregroundStyle(selectedTrustLevel == level ? Color.moiayAccent : .primary)
+                            .foregroundStyle(selectedTrustLevel == level ? Color.moaiyAccent : .primary)
                         }
                     }
                 }
@@ -212,9 +212,9 @@ struct KeyInfoCard: View {
         HStack(spacing: 16) {
             Image(systemName: "key.fill")
                 .font(.title)
-                .foregroundStyle(Color.moiayAccent)
+                .foregroundStyle(Color.moaiyAccent)
                 .frame(width: 48, height: 48)
-                .background(Color.moiayAccent.opacity(0.1))
+                .background(Color.moaiyAccent.opacity(0.1))
                 .clipShape(Circle())
             
             VStack(alignment: .leading, spacing: 4) {
