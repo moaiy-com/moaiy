@@ -498,9 +498,24 @@ final class GPGService {
             ],
             input: passphrase
         )
-        
+
         if result.exitCode != 0 {
             throw GPGError.decryptionFailed(result.stderr ?? "Unknown error")
+        }
+    }
+
+    /// Verify if a file is a valid GPG file
+    /// Uses --list-packets for fast validation without processing
+    /// - Parameter fileURL: File URL to verify
+    /// - Returns: True if file is a valid GPG file
+    func verifyGPGFile(at fileURL: URL) async -> Bool {
+        do {
+            let result = try await executeGPG(
+                arguments: ["--list-packets", "--dry-run", fileURL.path]
+            )
+            return result.exitCode == 0
+        } catch {
+            return false
         }
     }
     

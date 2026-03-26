@@ -153,3 +153,8 @@ secrets/
 *.tar.gz
 *.dmg
 *.pkg
+Moaiy/build_errors
+
+# GPG Bundle (large binary files)
+Moaiy/Resources/gpg.bundle/
+
