@@ -16,6 +16,15 @@ struct SettingsView: View {
     @AppStorage("fileNaming") private var fileNaming = 0
 
     @State private var showingBackupManager = false
+    @State private var gpgVersion: String = ""
+    
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    }
+    
+    private var appBuild: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+    }
     
     var body: some View {
         Form {
@@ -78,12 +87,52 @@ struct SettingsView: View {
                 Text("section_encryption")
                     .font(.headline)
             }
+            
+            Section {
+                HStack {
+                    Text("about_app_version")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(appVersion) (\(appBuild))")
+                        .foregroundStyle(.primary)
+                }
+                
+                HStack {
+                    Text("about_gpg_version")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if gpgVersion.isEmpty {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .frame(width: 16, height: 16)
+                    } else {
+                        Text(gpgVersion)
+                            .foregroundStyle(.primary)
+                    }
+                }
+            } header: {
+                Text("section_about")
+                    .font(.headline)
+            }
         }
         .formStyle(.grouped)
         .frame(minWidth: 400, minHeight: 400)
+        .task {
+            await loadGPGVersion()
+        }
         .sheet(isPresented: $showingBackupManager) {
             BackupManagerView()
                 .environment(KeyManagementViewModel())
+        }
+    }
+    
+    @MainActor
+    private func loadGPGVersion() async {
+        let service = GPGService.shared
+        if let version = service.gpgVersion {
+            gpgVersion = version
+        } else {
+            gpgVersion = "about_gpg_not_available"
         }
     }
 }
