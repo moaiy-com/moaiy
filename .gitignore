@@ -153,3 +153,4 @@ secrets/
 *.tar.gz
 *.dmg
 *.pkg
+Moaiy/build_errors
