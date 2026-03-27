@@ -12,6 +12,14 @@ enum KeyEditTab: String, CaseIterable {
     case userIds = "User IDs"
     case passphrase = "Passphrase"
 
+    var titleKey: LocalizedStringKey {
+        switch self {
+        case .expiration: return "edit_select_expiration"
+        case .userIds: return "edit_current_userids"
+        case .passphrase: return "edit_new_passphrase"
+        }
+    }
+
     var icon: String {
         switch self {
         case .expiration: return "clock.fill"
@@ -23,7 +31,6 @@ enum KeyEditTab: String, CaseIterable {
 
 struct KeyEditSheet: View {
     let key: GPGKey
-    @Environment(KeyManagementViewModel.self) private var viewModel
     @Environment(\.dismiss) private var dismiss
 
     @State private var selectedTab: KeyEditTab = .expiration
@@ -59,7 +66,7 @@ struct KeyEditSheet: View {
             // Tab picker
             Picker("", selection: $selectedTab) {
                 ForEach(KeyEditTab.allCases, id: \.self) { tab in
-                    Label(tab.rawValue, systemImage: tab.icon)
+                    Label(tab.titleKey, systemImage: tab.icon)
                         .tag(tab)
                 }
             }
@@ -107,9 +114,11 @@ struct KeyEditSheet: View {
 struct ExpirationEditView: View {
     let key: GPGKey
     let onSuccess: (String) -> Void
+    @Environment(KeyManagementViewModel.self) private var viewModel
 
     @State private var expirationOption: ExpirationOption = .never
-    @State private var customDate = Calendar.current.date(byAdding: .year, value: 1, to: Date())!
+    @State private var customDate = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
+    @State private var passphrase = ""
     @State private var isUpdating = false
     @State private var showError = false
     @State private var errorMessage: String?
@@ -184,6 +193,13 @@ struct ExpirationEditView: View {
                 .datePickerStyle(.compact)
             }
 
+            VStack(alignment: .leading, spacing: 8) {
+                Text("edit_current_passphrase")
+                    .font(.subheadline)
+                SecureField("edit_passphrase_placeholder", text: $passphrase)
+                    .textFieldStyle(.roundedBorder)
+            }
+
             Spacer()
 
             // Action button
@@ -214,8 +230,7 @@ struct ExpirationEditView: View {
     private func updateExpiration() {
         isUpdating = true
 
-        Task {
-            // Calculate expiration date
+        Task { @MainActor in
             let expirationDate: Date?
             switch expirationOption {
             case .never:
@@ -230,12 +245,18 @@ struct ExpirationEditView: View {
                 expirationDate = customDate
             }
 
-            // TODO: Implement actual GPG key expiration update
-            // try await viewModel.updateKeyExpiration(key: key, expiresAt: expirationDate)
-
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // Simulate operation
-            _ = expirationDate // Silence unused warning
-            onSuccess("edit_expiration_success")
+            do {
+                try await viewModel.updateKeyExpiration(
+                    for: key,
+                    expiresAt: expirationDate,
+                    passphrase: passphrase.isEmpty ? nil : passphrase
+                )
+                passphrase = ""
+                onSuccess(String(localized: "edit_expiration_success"))
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
             isUpdating = false
         }
     }
@@ -246,9 +267,11 @@ struct ExpirationEditView: View {
 struct UserIDsEditView: View {
     let key: GPGKey
     let onSuccess: (String) -> Void
+    @Environment(KeyManagementViewModel.self) private var viewModel
 
     @State private var newUserName = ""
     @State private var newUserEmail = ""
+    @State private var passphrase = ""
     @State private var isAdding = false
     @State private var showError = false
     @State private var errorMessage: String?
@@ -300,6 +323,9 @@ struct UserIDsEditView: View {
                 TextField("edit_email_placeholder", text: $newUserEmail)
                     .textFieldStyle(.roundedBorder)
 
+                SecureField("edit_passphrase_placeholder", text: $passphrase)
+                    .textFieldStyle(.roundedBorder)
+
                 Button(action: addUserID) {
                     if isAdding {
                         ProgressView()
@@ -340,14 +366,22 @@ struct UserIDsEditView: View {
     private func addUserID() {
         isAdding = true
 
-        Task {
-            // TODO: Implement actual GPG user ID addition
-            // try await viewModel.addUserID(key: key, name: newUserName, email: newUserEmail)
-
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // Simulate operation
-            newUserName = ""
-            newUserEmail = ""
-            onSuccess("edit_userid_success")
+        Task { @MainActor in
+            do {
+                try await viewModel.addUserID(
+                    to: key,
+                    name: newUserName,
+                    email: newUserEmail,
+                    passphrase: passphrase.isEmpty ? nil : passphrase
+                )
+                newUserName = ""
+                newUserEmail = ""
+                passphrase = ""
+                onSuccess(String(localized: "edit_userid_success"))
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
             isAdding = false
         }
     }
@@ -358,6 +392,7 @@ struct UserIDsEditView: View {
 struct PassphraseEditView: View {
     let key: GPGKey
     let onSuccess: (String) -> Void
+    @Environment(KeyManagementViewModel.self) private var viewModel
 
     @State private var currentPassphrase = ""
     @State private var newPassphrase = ""
@@ -431,15 +466,21 @@ struct PassphraseEditView: View {
     private func updatePassphrase() {
         isUpdating = true
 
-        Task {
-            // TODO: Implement actual GPG passphrase change
-            // try await viewModel.changePassphrase(key: key, oldPassphrase: currentPassphrase, newPassphrase: newPassphrase)
-
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // Simulate operation
-            currentPassphrase = ""
-            newPassphrase = ""
-            confirmPassphrase = ""
-            onSuccess("edit_passphrase_success")
+        Task { @MainActor in
+            do {
+                try await viewModel.changePassphrase(
+                    for: key,
+                    oldPassphrase: currentPassphrase,
+                    newPassphrase: newPassphrase
+                )
+                currentPassphrase = ""
+                newPassphrase = ""
+                confirmPassphrase = ""
+                onSuccess(String(localized: "edit_passphrase_success"))
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
             isUpdating = false
         }
     }

@@ -106,11 +106,22 @@ final class KeyManagementViewModel {
     
     init() {
         Task {
-            // Wait for GPGService to be ready
-            while !gpgService.isReady {
-                logger.debug("Waiting for GPGService to be ready...")
-                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            // Wait for GPGService readiness with a hard timeout to avoid infinite wait.
+            let timeout: UInt64 = 15_000_000_000
+            let interval: UInt64 = 100_000_000
+            var elapsed: UInt64 = 0
+
+            while !gpgService.isReady && elapsed < timeout {
+                try? await Task.sleep(nanoseconds: interval)
+                elapsed += interval
             }
+
+            guard gpgService.isReady else {
+                logger.error("GPGService readiness timed out")
+                errorMessage = String(localized: "error_gpg_not_found")
+                return
+            }
+
             await loadKeys()
         }
     }
@@ -223,14 +234,18 @@ final class KeyManagementViewModel {
         errorMessage = nil
         
         do {
-            guard url.startAccessingSecurityScopedResource() else {
+            let hasSecurityScope = url.startAccessingSecurityScopedResource()
+            defer {
+                if hasSecurityScope {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            // Temporary files inside our container are often readable without a security scope.
+            guard FileManager.default.isReadableFile(atPath: url.path) else {
                 throw GPGError.fileAccessDenied(url.path)
             }
-            
-            defer {
-                url.stopAccessingSecurityScopedResource()
-            }
-            
+
             let result = try await gpgService.importKey(from: url)
             await loadKeys()
             return result
@@ -378,6 +393,91 @@ final class KeyManagementViewModel {
             throw error
         }
     }
+
+    // MARK: - Key Edit Operations
+
+    /// Update expiration date for an existing key
+    func updateKeyExpiration(for key: GPGKey, expiresAt: Date?, passphrase: String?) async throws {
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            try await gpgService.updateKeyExpiration(
+                keyID: key.fingerprint,
+                expiresAt: expiresAt,
+                passphrase: passphrase
+            )
+            await loadKeys()
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+            throw error
+        }
+    }
+
+    /// Add user ID to an existing key
+    func addUserID(to key: GPGKey, name: String, email: String, passphrase: String?) async throws {
+        isLoading = true
+        errorMessage = nil
+
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            isLoading = false
+            throw GPGError.invalidOutput(String(localized: "error_invalid_output"))
+        }
+        guard isValidEmail(trimmedEmail) else {
+            isLoading = false
+            throw GPGError.invalidOutput(String(localized: "error_invalid_output"))
+        }
+
+        do {
+            try await gpgService.addUserID(
+                keyID: key.fingerprint,
+                name: trimmedName,
+                email: trimmedEmail,
+                passphrase: passphrase
+            )
+            await loadKeys()
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+            throw error
+        }
+    }
+
+    /// Change passphrase for a secret key
+    func changePassphrase(for key: GPGKey, oldPassphrase: String, newPassphrase: String) async throws {
+        guard key.isSecret else {
+            throw GPGError.keyNotFound("Secret key for \(key.fingerprint)")
+        }
+
+        let oldPassphrase = oldPassphrase.trimmingCharacters(in: .newlines)
+        let newPassphrase = newPassphrase.trimmingCharacters(in: .newlines)
+
+        guard !oldPassphrase.isEmpty else {
+            throw GPGError.invalidPassphrase
+        }
+        guard !newPassphrase.isEmpty else {
+            throw GPGError.invalidPassphrase
+        }
+
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            try await gpgService.changePassphrase(
+                keyID: key.fingerprint,
+                oldPassphrase: oldPassphrase,
+                newPassphrase: newPassphrase
+            )
+            await loadKeys()
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+            throw error
+        }
+    }
     
     // MARK: - Helpers
 
@@ -412,6 +512,11 @@ final class KeyManagementViewModel {
 
     func clearSearchHistory() {
         searchHistory = []
+    }
+
+    private func isValidEmail(_ email: String) -> Bool {
+        let emailPattern = #"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"#
+        return email.range(of: emailPattern, options: .regularExpression) != nil
     }
 
     // MARK: - Filter Management
