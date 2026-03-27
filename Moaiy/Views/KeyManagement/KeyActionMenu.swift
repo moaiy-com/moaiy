@@ -9,24 +9,23 @@ import SwiftUI
 
 struct KeyActionMenu: View {
     let key: GPGKey
-    @Environment(\.dismiss) private var dismiss
-    @Environment(KeyManagementViewModel.self) private var viewModel
+    var onDelete: (() -> Void)?
     
     @State private var showingUploadSheet = false
     
     var body: some View {
         Menu {
             Section("Operations") {
-                Button {
+                Button(action: {}) {
                     Label("action_encrypt", systemImage: "lock.fill")
                 }
-                Button {
+                Button(action: {}) {
                     Label("action_decrypt", systemImage: "lock.open.fill")
                 }
-                Button {
+                Button(action: {}) {
                     Label("action_sign", systemImage: "signature")
                 }
-                Button {
+                Button(action: {}) {
                     Label("action_verify", systemImage: "checkmark.seal")
                 }
             }
@@ -34,11 +33,12 @@ struct KeyActionMenu: View {
             Divider()
             
             Section("Advanced") {
-                Button {
-                    Label("action_upload_to_keyserver", systemImage: "cloud.fill")
+                Button(action: {
                     showingUploadSheet = true
+                }) {
+                    Label("action_upload_to_keyserver", systemImage: "cloud.fill")
                 }
-                Button {
+                Button(action: {}) {
                     Label("action_backup", systemImage: "externaldrive.fill")
                 }
             }
@@ -46,11 +46,11 @@ struct KeyActionMenu: View {
             Divider()
             
             Section {
-                Button {
+                Button(action: {}) {
                     Label("action_export_public_key", systemImage: "square.and.arrow.up")
                 }
                 if key.isSecret {
-                    Button {
+                    Button(action: {}) {
                         Label("action_export_private_key", systemImage: "key.fill")
                     }
                 }
@@ -59,11 +59,17 @@ struct KeyActionMenu: View {
             Divider()
             
             Section {
-                Button(role: .destructive) {
+                Button(role: .destructive, action: {
+                    onDelete?()
+                }) {
                     Label("action_delete_key", systemImage: "trash.fill")
                 }
             }
+        } label: {
+            Image(systemName: "ellipsis.circle")
         }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
         .sheet(isPresented: $showingUploadSheet) {
             UploadToKeyserverSheet(
                 key: key,

@@ -8,7 +8,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct DropZoneView: View {
+struct KeyDropZoneView: View {
     var onDrop: (([URL]) -> Void)?
     @State private var isTargeted = false
     @State private var isProcessing = false
@@ -69,6 +69,6 @@ struct DropZoneView: View {
 }
 
 #Preview {
-    DropZoneView()
+    KeyDropZoneView()
         .frame(width: 300, height: 100)
 }

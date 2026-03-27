@@ -128,7 +128,7 @@ struct ResultRowView: View {
                 
                 Text(result.message)
                     .font(.caption)
-                    .foregroundStyle(result.success ? .secondary : .red)
+                    .foregroundStyle(result.success ? Color.secondary : Color.red)
                     .lineLimit(2)
             }
             

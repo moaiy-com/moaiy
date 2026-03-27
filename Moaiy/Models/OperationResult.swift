@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 enum OperationType: String, Codable {
     case encrypt
@@ -52,8 +53,6 @@ enum OperationType: String, Codable {
         }
     }
 }
-
-import SwiftUI
 
 struct OperationResult: Identifiable, Hashable {
     let id = UUID()

@@ -7,12 +7,9 @@
 
 import SwiftUI
 
-import os.log
-
 struct KeyCardView: View {
     let key: GPGKey
     var onDelete: (() -> Void)?
-    @Environment(\.controlActiveState) private var controlActiveState
     
     @State private var isProcessing = false
     @State private var operationResults: [OperationResult] = []
@@ -27,7 +24,7 @@ struct KeyCardView: View {
         VStack(alignment: .leading, spacing: 12) {
             keyInfoSection
             
-            DropZoneView(onDrop: { urls in
+            KeyDropZoneView(onDrop: { urls in
                 handleDroppedFiles(urls: urls)
             })
             .frame(height: 50)
@@ -49,17 +46,13 @@ struct KeyCardView: View {
             )
         }
         .sheet(isPresented: $showingPasswordSheet) {
-            if let url = pendingDecryptURL, let outputURL = pendingDecryptOutputURL {
+            if let url = pendingDecryptURL {
                 PasswordInputSheet(
                     fileName: url.lastPathComponent,
                     onConfirm: { password in
                         showingPasswordSheet = false
                         Task {
-                            await performDecryption(
-                                sourceURL: url,
-                                outputURL: outputURL,
-                                password: password
-                            )
+                            await performDecryption(password: password)
                         }
                     },
                     onCancel: {
@@ -166,14 +159,7 @@ struct KeyCardView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                 
-                Menu {
-                    Button("action_export_public_key") { }
-                    Button("action_copy_fingerprint") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(key.fingerprint, forType: .string)
-                    }
-                    Button("action_delete_key", role: .destructive) { }
-                }
+                KeyActionMenu(key: key, onDelete: onDelete)
             }
         }
     }
@@ -182,6 +168,10 @@ struct KeyCardView: View {
     
     private var keyIconColor: Color {
         key.isSecret ? Color.moaiyAccent : .secondary
+    }
+    
+    private var keyTypeBadgeColor: Color {
+        key.isSecret ? Color.moaiyAccent : .blue
     }
     
     private var trustLevelColor: Color {
@@ -201,18 +191,21 @@ struct KeyCardView: View {
     
     // MARK: - File Handling
     
-    @MainActor
     private func handleDroppedFiles(urls: [URL]) {
-        isProcessing = true
-        operationResults = []
-        
-        for url in urls {
-            let fileType = await detector.detectFileType(at: url)
-            await processFile(url: url, type: fileType)
+        Task { @MainActor in
+            isProcessing = true
+            operationResults = []
+            
+            for url in urls {
+                let fileType = await detector.detectFileType(at: url)
+                await processFile(url: url, type: fileType)
+            }
+            
+            isProcessing = false
+            if pendingDecryptURL == nil, !operationResults.isEmpty {
+                showingResultOverlay = true
+            }
         }
-        
-        isProcessing = false
-        showingResultOverlay = true
     }
     
     @MainActor

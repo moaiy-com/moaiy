@@ -95,7 +95,7 @@ struct UploadToKeyserverSheet: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             
-            Picker(selection: $selectedKeyserver) {
+            Picker("keyserver_label", selection: $selectedKeyserver) {
                 ForEach(keyservers, id: \.self) { keyserver in
                     Text(keyserver)
                         .tag(keyserver)
