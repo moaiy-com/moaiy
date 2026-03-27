@@ -8,6 +8,31 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct KeyActionFilePlanner {
+    static func encryptedOutputURL(for inputURL: URL) -> URL {
+        inputURL.appendingPathExtension("gpg")
+    }
+
+    static func decryptedOutputURL(for inputURL: URL) -> URL {
+        if inputURL.pathExtension.isEmpty {
+            return inputURL.appendingPathExtension("decrypted")
+        }
+        return inputURL.deletingPathExtension()
+    }
+
+    static func defaultPublicFileName(for keyName: String) -> String {
+        "\(sanitizedKeyName(for: keyName))_public.asc"
+    }
+
+    static func defaultPrivateFileName(for keyName: String) -> String {
+        "\(sanitizedKeyName(for: keyName))_private.asc"
+    }
+
+    static func sanitizedKeyName(for keyName: String) -> String {
+        keyName.replacingOccurrences(of: " ", with: "_")
+    }
+}
+
 struct KeyActionMenu: View {
     let key: GPGKey
     var onDelete: (() -> Void)?
@@ -212,7 +237,7 @@ struct KeyActionMenu: View {
     private func encryptFiles(_ urls: [URL]) async {
         do {
             for url in urls {
-                let outputURL = url.appendingPathExtension("gpg")
+                let outputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
                 try await GPGService.shared.encryptFile(
                     sourceURL: url,
                     destinationURL: outputURL,
@@ -229,12 +254,7 @@ struct KeyActionMenu: View {
     private func decryptFiles(_ urls: [URL], passphrase: String) async {
         do {
             for url in urls {
-                let outputURL: URL
-                if url.pathExtension.isEmpty {
-                    outputURL = url.appendingPathExtension("decrypted")
-                } else {
-                    outputURL = url.deletingPathExtension()
-                }
+                let outputURL = KeyActionFilePlanner.decryptedOutputURL(for: url)
 
                 try await GPGService.shared.decryptFile(
                     sourceURL: url,
@@ -289,15 +309,11 @@ struct KeyActionMenu: View {
     }
 
     private var defaultPublicFileName: String {
-        "\(sanitizedKeyName)_public.asc"
+        KeyActionFilePlanner.defaultPublicFileName(for: key.name)
     }
 
     private var defaultPrivateFileName: String {
-        "\(sanitizedKeyName)_private.asc"
-    }
-
-    private var sanitizedKeyName: String {
-        key.name.replacingOccurrences(of: " ", with: "_")
+        KeyActionFilePlanner.defaultPrivateFileName(for: key.name)
     }
 
     private func showSuccess(message: String) {
