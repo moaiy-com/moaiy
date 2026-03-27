@@ -262,9 +262,9 @@ struct KeyStatisticsView: View {
     }
 
     private var expiringSoonCount: Int {
-        viewModel.keys.filter { key in
+        let thirtyDaysFromNow = Calendar.current.date(byAdding: .day, value: 30, to: Date()) ?? Date.distantFuture
+        return viewModel.keys.filter { key in
             guard let expiresAt = key.expiresAt else { return false }
-            let thirtyDaysFromNow = Calendar.current.date(byAdding: .day, value: 30, to: Date())!
             return !key.isExpired && expiresAt < thirtyDaysFromNow
         }.count
     }

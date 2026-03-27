@@ -192,14 +192,13 @@ final class GPGService {
     
     /// Setup GPG home directory in app container
     private func setupGPGHome() throws {
-        // For development: use system's ~/.gnupg to access existing keys
-        // For production: use app's own gnupg directory with bundled GPG
-        
-        // Development mode: use system GPG home to access existing keys
+        // Keep GNUPGHOME in app-controlled storage by default.
+        // Developers can explicitly opt in to system ~/.gnupg during local debugging.
         let systemGPGHome = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gnupg")
-        if FileManager.default.fileExists(atPath: systemGPGHome.path) {
+        let useSystemHome = ProcessInfo.processInfo.environment["MOAIY_USE_SYSTEM_GNUPG"] == "1"
+        if useSystemHome, FileManager.default.fileExists(atPath: systemGPGHome.path) {
             gpgHome = systemGPGHome
-            logger.info("Using system GPG home (development mode): \(systemGPGHome.path)")
+            logger.warning("Using system GPG home due to MOAIY_USE_SYSTEM_GNUPG override")
             return
         }
         
@@ -268,17 +267,10 @@ final class GPGService {
             passphrase: passphrase
         )
 
-        logger.debug("Key generation params:\n\(keyParams)")
-
         let result = try await executeGPG(
             arguments: ["--batch", "--gen-key", "--status-fd", "1"],
             input: keyParams
         )
-
-        // Log output for debugging
-        logger.debug("GPG stdout: \(result.stdout ?? "nil")")
-        logger.debug("GPG stderr: \(result.stderr ?? "nil")")
-        logger.debug("GPG exit code: \(result.exitCode)")
 
         // Check for errors
         if result.exitCode != 0 {
@@ -316,7 +308,7 @@ final class GPGService {
             return newKey.fingerprint
         }
 
-        logger.error("Could not find KEY_CREATED pattern in output: \(output)")
+        logger.error("Could not find KEY_CREATED pattern in GPG output")
         throw GPGError.keyGenerationFailed("Failed to get key fingerprint")
     }
     
@@ -327,6 +319,7 @@ final class GPGService {
         let result = try await executeGPG(
             arguments: ["--import", "--status-fd", "1", fileURL.path]
         )
+        try ensureSuccess(result, as: GPGError.importFailed)
         
         guard let output = result.stdout else {
             throw GPGError.importFailed("No output from import")
@@ -347,6 +340,7 @@ final class GPGService {
         }
 
         let result = try await executeGPG(arguments: arguments)
+        try ensureSuccess(result, as: GPGError.exportFailed)
 
         guard let data = result.data else {
             throw GPGError.exportFailed("No key data exported")
@@ -362,15 +356,23 @@ final class GPGService {
     ///   - armor: If true, export in ASCII armor format
     /// - Returns: Exported key data
     func exportSecretKey(keyID: String, passphrase: String, armor: Bool = true) async throws -> Data {
-        var arguments = ["--export-secret-key", "--batch", "--yes", keyID]
+        var arguments = [
+            "--batch",
+            "--yes",
+            "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0",
+            "--export-secret-key",
+            keyID
+        ]
         if armor {
             arguments.insert("--armor", at: 0)
         }
 
         let result = try await executeGPG(
             arguments: arguments,
-            environment: ["GPG_PASSPHRASE": passphrase]
+            input: passphrase + "\n"
         )
+        try ensureSuccess(result, as: GPGError.exportFailed)
 
         guard let data = result.data else {
             throw GPGError.exportFailed("No key data exported")
@@ -389,7 +391,92 @@ final class GPGService {
             arguments = ["--batch", "--yes", "--delete-secret-keys", keyID]
         }
         
-        _ = try await executeGPG(arguments: arguments)
+        let result = try await executeGPG(arguments: arguments)
+        try ensureSuccess(result, as: GPGError.executionFailed)
+    }
+
+    /// Update key expiration
+    /// - Parameters:
+    ///   - keyID: Key ID or fingerprint
+    ///   - expiresAt: New expiration date. Pass nil for no expiration.
+    ///   - passphrase: Optional key passphrase for loopback mode
+    func updateKeyExpiration(keyID: String, expiresAt: Date?, passphrase: String? = nil) async throws {
+        let expiration = formatExpirationDate(expiresAt)
+        var arguments = ["--batch", "--yes", "--quick-set-expire", keyID, expiration]
+        var input: String?
+
+        if let passphrase, !passphrase.isEmpty {
+            arguments.insert(contentsOf: ["--pinentry-mode", "loopback", "--passphrase-fd", "0"], at: 0)
+            input = passphrase + "\n"
+        }
+
+        let result = try await executeGPG(arguments: arguments, input: input)
+        if result.exitCode != 0 {
+            if isBadPassphrase(result) {
+                throw GPGError.invalidPassphrase
+            }
+            throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
+        }
+    }
+
+    /// Add a new user ID to an existing key
+    /// - Parameters:
+    ///   - keyID: Key ID or fingerprint
+    ///   - name: New user name
+    ///   - email: New user email
+    ///   - passphrase: Optional key passphrase for loopback mode
+    func addUserID(keyID: String, name: String, email: String, passphrase: String? = nil) async throws {
+        let sanitizedName = name
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitizedEmail = email
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let userID = "\(sanitizedName) <\(sanitizedEmail)>"
+
+        var arguments = ["--batch", "--yes", "--quick-add-uid", keyID, userID]
+        var input: String?
+
+        if let passphrase, !passphrase.isEmpty {
+            arguments.insert(contentsOf: ["--pinentry-mode", "loopback", "--passphrase-fd", "0"], at: 0)
+            input = passphrase + "\n"
+        }
+
+        let result = try await executeGPG(arguments: arguments, input: input)
+        if result.exitCode != 0 {
+            if isBadPassphrase(result) {
+                throw GPGError.invalidPassphrase
+            }
+            throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
+        }
+    }
+
+    /// Change key passphrase
+    /// - Parameters:
+    ///   - keyID: Key ID or fingerprint
+    ///   - oldPassphrase: Current passphrase
+    ///   - newPassphrase: New passphrase
+    func changePassphrase(keyID: String, oldPassphrase: String, newPassphrase: String) async throws {
+        let input = "\(oldPassphrase)\n\(newPassphrase)\n\(newPassphrase)\n"
+        let result = try await executeGPG(
+            arguments: [
+                "--batch",
+                "--yes",
+                "--pinentry-mode", "loopback",
+                "--command-fd", "0",
+                "--status-fd", "1",
+                "--change-passphrase",
+                keyID
+            ],
+            input: input
+        )
+
+        if result.exitCode != 0 {
+            if isBadPassphrase(result) {
+                throw GPGError.invalidPassphrase
+            }
+            throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
+        }
     }
     
     // MARK: - Keyserver Operations
@@ -528,7 +615,8 @@ final class GPGService {
         // Add input/output
         arguments.append(contentsOf: ["--output", destinationURL.path, sourceURL.path])
         
-        _ = try await executeGPG(arguments: arguments)
+        let result = try await executeGPG(arguments: arguments)
+        try ensureSuccess(result, as: GPGError.encryptionFailed)
     }
     
     /// Decrypt a file
@@ -743,7 +831,7 @@ final class GPGService {
         arguments: [String],
         input: String? = nil,
         environment: [String: String] = [:],
-        timeout: TimeInterval = GPGService.defaultTimeout
+        timeout: TimeInterval = Constants.GPG.defaultTimeout
     ) async throws -> GPGExecutionResult {
         guard let gpgURL = gpgURL else {
             throw GPGError.gpgNotFound
@@ -757,6 +845,32 @@ final class GPGService {
             input: input,
             timeout: timeout
         )
+    }
+
+    private func ensureSuccess(
+        _ result: GPGExecutionResult,
+        as errorBuilder: (String) -> GPGError
+    ) throws {
+        guard result.exitCode == 0 else {
+            throw errorBuilder(result.stderr ?? "Exit code \(result.exitCode)")
+        }
+    }
+
+    private func formatExpirationDate(_ date: Date?) -> String {
+        guard let date else { return "0" }
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    private func isBadPassphrase(_ result: GPGExecutionResult) -> Bool {
+        let stderr = result.stderr ?? ""
+        let stdout = result.stdout ?? ""
+        let combined = "\(stderr)\n\(stdout)".lowercased()
+        return combined.contains("bad passphrase") || combined.contains("bad_passphrase")
     }
     
     /// Parse key list output

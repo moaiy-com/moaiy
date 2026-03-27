@@ -8,13 +8,17 @@
 import SwiftUI
 
 struct KeyManagementView: View {
-    @State private var viewModel = KeyManagementViewModel()
+    @State private var viewModel: KeyManagementViewModel
     @State private var showingCreateKey = false
     @State private var showingImportKey = false
     @State private var selectedKey: GPGKey?
     @State private var showingFilters = false
     @State private var keyToDelete: GPGKey?
     @FocusState private var isListFocused: Bool
+
+    init(viewModel: KeyManagementViewModel? = nil) {
+        _viewModel = State(initialValue: viewModel ?? AppState.shared.keyManagement)
+    }
 
     var body: some View {
         Group {

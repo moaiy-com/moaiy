@@ -20,12 +20,37 @@ struct EncryptionHistoryItem: Identifiable, Codable {
     let contentPreview: String
     let success: Bool
     
-    init(type: EncryptionViewModel.OperationType, content: String, success: Bool) {
+    init(type: EncryptionViewModel.OperationType, context: String? = nil, success: Bool) {
         self.id = UUID()
         self.type = type
         self.timestamp = Date()
-        self.contentPreview = String(content.prefix(100))
+        self.contentPreview = EncryptionHistoryItem.makeSafePreview(type: type, context: context)
         self.success = success
+    }
+
+    init(
+        id: UUID,
+        type: EncryptionViewModel.OperationType,
+        timestamp: Date,
+        contentPreview: String,
+        success: Bool
+    ) {
+        self.id = id
+        self.type = type
+        self.timestamp = timestamp
+        self.contentPreview = contentPreview
+        self.success = success
+    }
+
+    private static func makeSafePreview(type: EncryptionViewModel.OperationType, context: String?) -> String {
+        if let context, !context.isEmpty {
+            let cleaned = context
+                .replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "\r", with: " ")
+            return String(cleaned.prefix(80))
+        }
+
+        return type.rawValue
     }
 }
 
@@ -106,8 +131,8 @@ final class EncryptionViewModel {
     // MARK: - Initialization
     
     /// Initialize with optional key management view model (uses shared instance by default)
-    init(keyManagement: KeyManagementViewModel = AppState.shared.keyManagement) {
-        self.keyManagementVM = keyManagement
+    init(keyManagement: KeyManagementViewModel? = nil) {
+        self.keyManagementVM = keyManagement ?? AppState.shared.keyManagement
         loadHistory()
     }
     
@@ -125,12 +150,12 @@ final class EncryptionViewModel {
             let recipients = Array(selectedRecipientKeys)
             outputText = try await gpgService.encrypt(text: inputText, recipients: recipients)
             lastOperationTime = Date()
-            addToHistory(type: .encryption, content: outputText, success: true)
+            addToHistory(type: .encryption, context: nil, success: true)
             copyOutputToClipboard()
         } catch {
             errorMessage = error.localizedDescription
             outputText = ""
-            addToHistory(type: .encryption, content: inputText, success: false)
+            addToHistory(type: .encryption, context: nil, success: false)
         }
         
         isEncrypting = false
@@ -148,11 +173,11 @@ final class EncryptionViewModel {
         do {
             outputText = try await gpgService.decrypt(text: inputText, passphrase: passphrase)
             lastOperationTime = Date()
-            addToHistory(type: .decryption, content: outputText, success: true)
+            addToHistory(type: .decryption, context: nil, success: true)
         } catch {
             errorMessage = error.localizedDescription
             outputText = ""
-            addToHistory(type: .decryption, content: inputText, success: false)
+            addToHistory(type: .decryption, context: nil, success: false)
         }
         
         isDecrypting = false
@@ -179,12 +204,12 @@ final class EncryptionViewModel {
             let recipients = Array(selectedRecipientKeys)
             try await gpgService.encryptFile(sourceURL: sourceURL, destinationURL: destinationURL, recipients: recipients)
             lastOperationTime = Date()
-            addToHistory(type: .fileEncryption, content: sourceURL.lastPathComponent, success: true)
+            addToHistory(type: .fileEncryption, context: sourceURL.lastPathComponent, success: true)
             isEncrypting = false
             return destinationURL
         } catch {
             errorMessage = error.localizedDescription
-            addToHistory(type: .fileEncryption, content: sourceURL.lastPathComponent, success: false)
+            addToHistory(type: .fileEncryption, context: sourceURL.lastPathComponent, success: false)
             isEncrypting = false
             throw error
         }
@@ -205,12 +230,12 @@ final class EncryptionViewModel {
         do {
             try await gpgService.decryptFile(sourceURL: sourceURL, destinationURL: destinationURL, passphrase: passphrase)
             lastOperationTime = Date()
-            addToHistory(type: .fileDecryption, content: sourceURL.lastPathComponent, success: true)
+            addToHistory(type: .fileDecryption, context: sourceURL.lastPathComponent, success: true)
             isDecrypting = false
             return destinationURL
         } catch {
             errorMessage = error.localizedDescription
-            addToHistory(type: .fileDecryption, content: sourceURL.lastPathComponent, success: false)
+            addToHistory(type: .fileDecryption, context: sourceURL.lastPathComponent, success: false)
             isDecrypting = false
             throw error
         }
@@ -265,9 +290,9 @@ final class EncryptionViewModel {
                     passphrase: passphrase
                 )
                 completedFiles += 1
-                addToHistory(type: .fileDecryption, content: sourceURL.lastPathComponent, success: true)
+                addToHistory(type: .fileDecryption, context: sourceURL.lastPathComponent, success: true)
             } catch {
-                addToHistory(type: .fileDecryption, content: sourceURL.lastPathComponent, success: false)
+                addToHistory(type: .fileDecryption, context: sourceURL.lastPathComponent, success: false)
                 // Continue with remaining files even if one fails
             }
             
@@ -367,8 +392,8 @@ final class EncryptionViewModel {
     
     // MARK: - History Management
     
-    private func addToHistory(type: OperationType, content: String, success: Bool) {
-        let item = EncryptionHistoryItem(type: type, content: content, success: success)
+    private func addToHistory(type: OperationType, context: String?, success: Bool) {
+        let item = EncryptionHistoryItem(type: type, context: context, success: success)
         operationHistory.insert(item, at: 0)
         
         // Limit history size
@@ -392,7 +417,19 @@ final class EncryptionViewModel {
         guard let data = UserDefaults.standard.data(forKey: historyKey) else { return }
         
         do {
-            operationHistory = try JSONDecoder().decode([EncryptionHistoryItem].self, from: data)
+            let decoded = try JSONDecoder().decode([EncryptionHistoryItem].self, from: data)
+            // Migrate legacy history to safe previews so plaintext/ciphertext is no longer retained.
+            operationHistory = decoded.map { item in
+                let safePreview = item.type.isFileOperation ? item.contentPreview : item.type.rawValue
+                return EncryptionHistoryItem(
+                    id: item.id,
+                    type: item.type,
+                    timestamp: item.timestamp,
+                    contentPreview: String(safePreview.prefix(80)),
+                    success: item.success
+                )
+            }
+            saveHistory()
         } catch {
             print("Failed to load encryption history: \(error)")
             operationHistory = []

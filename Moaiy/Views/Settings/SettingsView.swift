@@ -122,7 +122,7 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingBackupManager) {
             BackupManagerView()
-                .environment(KeyManagementViewModel())
+                .environment(AppState.shared.keyManagement)
         }
     }
     

@@ -277,7 +277,131 @@ struct KeyManagementViewModelTests {
         viewModel.showExpiredKeys = false
         #expect(viewModel.hasActiveFilters == true)
     }
-    
+
+    // MARK: - Key Edit Validation Tests
+
+    @Test("addUserID rejects empty name before service call")
+    func addUserID_rejectsEmptyName() async {
+        let viewModel = KeyManagementViewModel()
+        let key = TestKeyFactory.makeSecretKey()
+
+        do {
+            try await viewModel.addUserID(
+                to: key,
+                name: "   ",
+                email: "user@example.com",
+                passphrase: nil
+            )
+            Issue.record("Expected invalid output error for empty name")
+        } catch let error as GPGError {
+            switch error {
+            case .invalidOutput:
+                #expect(true)
+            default:
+                Issue.record("Expected GPGError.invalidOutput, got \(error)")
+            }
+        } catch {
+            Issue.record("Expected GPGError.invalidOutput, got \(error)")
+        }
+    }
+
+    @Test("addUserID rejects invalid email before service call")
+    func addUserID_rejectsInvalidEmail() async {
+        let viewModel = KeyManagementViewModel()
+        let key = TestKeyFactory.makeSecretKey()
+
+        do {
+            try await viewModel.addUserID(
+                to: key,
+                name: "Valid Name",
+                email: "invalid-email",
+                passphrase: nil
+            )
+            Issue.record("Expected invalid output error for invalid email")
+        } catch let error as GPGError {
+            switch error {
+            case .invalidOutput:
+                #expect(true)
+            default:
+                Issue.record("Expected GPGError.invalidOutput, got \(error)")
+            }
+        } catch {
+            Issue.record("Expected GPGError.invalidOutput, got \(error)")
+        }
+    }
+
+    @Test("changePassphrase rejects non-secret key")
+    func changePassphrase_rejectsNonSecretKey() async {
+        let viewModel = KeyManagementViewModel()
+        let key = TestKeyFactory.makeKey(isSecret: false)
+
+        do {
+            try await viewModel.changePassphrase(
+                for: key,
+                oldPassphrase: "old-passphrase",
+                newPassphrase: "new-passphrase"
+            )
+            Issue.record("Expected key-not-found error for public key")
+        } catch let error as GPGError {
+            switch error {
+            case .keyNotFound:
+                #expect(true)
+            default:
+                Issue.record("Expected GPGError.keyNotFound, got \(error)")
+            }
+        } catch {
+            Issue.record("Expected GPGError.keyNotFound, got \(error)")
+        }
+    }
+
+    @Test("changePassphrase rejects empty old passphrase")
+    func changePassphrase_rejectsEmptyOldPassphrase() async {
+        let viewModel = KeyManagementViewModel()
+        let key = TestKeyFactory.makeSecretKey()
+
+        do {
+            try await viewModel.changePassphrase(
+                for: key,
+                oldPassphrase: "\n",
+                newPassphrase: "new-passphrase"
+            )
+            Issue.record("Expected invalid passphrase error for empty old passphrase")
+        } catch let error as GPGError {
+            switch error {
+            case .invalidPassphrase:
+                #expect(true)
+            default:
+                Issue.record("Expected GPGError.invalidPassphrase, got \(error)")
+            }
+        } catch {
+            Issue.record("Expected GPGError.invalidPassphrase, got \(error)")
+        }
+    }
+
+    @Test("changePassphrase rejects empty new passphrase")
+    func changePassphrase_rejectsEmptyNewPassphrase() async {
+        let viewModel = KeyManagementViewModel()
+        let key = TestKeyFactory.makeSecretKey()
+
+        do {
+            try await viewModel.changePassphrase(
+                for: key,
+                oldPassphrase: "old-passphrase",
+                newPassphrase: "\n"
+            )
+            Issue.record("Expected invalid passphrase error for empty new passphrase")
+        } catch let error as GPGError {
+            switch error {
+            case .invalidPassphrase:
+                #expect(true)
+            default:
+                Issue.record("Expected GPGError.invalidPassphrase, got \(error)")
+            }
+        } catch {
+            Issue.record("Expected GPGError.invalidPassphrase, got \(error)")
+        }
+    }
+
     // MARK: - Search History Tests
     
     @Test("addToSearchHistory adds to beginning")
