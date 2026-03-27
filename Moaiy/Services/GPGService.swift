@@ -392,6 +392,56 @@ final class GPGService {
         _ = try await executeGPG(arguments: arguments)
     }
     
+    // MARK: - Keyserver Operations
+    
+    /// Upload a public key to a keyserver
+    /// - Parameters:
+    ///   - keyID: Key ID or fingerprint to ///   - keyserver: Keyserver URL (default: keys.openpgp.org)
+    /// - Throws: GPGError if upload fails
+    func uploadToKeyserver(keyID: String, keyserver: String = "keys.openpgp.org") async throws {
+        let arguments = [
+            "--send-keys",
+            "--keyserver", keyserver,
+            "--batch",
+            "--yes",
+            keyID
+        ]
+        
+        let result = try await executeGPG(
+            arguments: arguments,
+            timeout: 60.0  // 60 second timeout for network operations
+        )
+        
+        guard result.exitCode == 0 else {
+            let errorMsg = result.stderr ?? "Upload failed with exit code \(result.exitCode)"
+            throw GPGError.keyserverUploadFailed(errorMsg)
+        }
+    }
+    
+    /// Search for a key on a keyserver
+    /// - Parameters:
+    ///   - keyID: Key ID or email to search for
+    ///   - keyserver: Keyserver URL (default: keys.openpgp.org)
+    /// - Returns: True if key was found
+    func searchKeyserver(keyID: String, keyserver: String = "keys.openpgp.org") async throws -> Bool {
+        let arguments = [
+            "--search-keys",
+            "--keyserver", keyserver,
+            keyID
+        ]
+        
+        let result = try await executeGPG(
+            arguments: arguments,
+            timeout: 30.0
+        )
+        
+        // GPG returns exit code 0 if found, 1 if not found
+        // But we we2 can also mean "not found" which which is fine for our use case
+        return result.exitCode == 0
+    }
+    
+    // MARK: - Encryption & Decryption
+    
     // MARK: - Encryption & Decryption
     
     /// Encrypt text

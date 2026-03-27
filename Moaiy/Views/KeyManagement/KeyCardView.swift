@@ -15,8 +15,11 @@ struct KeyCardView: View {
     @Environment(\.controlActiveState) private var controlActiveState
     
     @State private var isProcessing = false
-    @State private var processedFiles: [(url: URL, success: Bool, message: String)] = []
+    @State private var operationResults: [OperationResult] = []
     @State private var showingResultOverlay = false
+    @State private var showingPasswordSheet = false
+    @State private var pendingDecryptURL: URL?
+    @State private var pendingDecryptOutputURL: URL?
     
     private let detector = GPGFileTypeDetector()
     
@@ -28,15 +31,45 @@ struct KeyCardView: View {
                 handleDroppedFiles(urls: urls)
             })
             .frame(height: 50)
-            
-            if showingResultOverlay && !processedFiles.isEmpty {
-                resultOverlayView
-            }
         }
         .padding(12)
         .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
+        .sheet(isPresented: $showingResultOverlay) {
+            OperationResultOverlay(
+                results: operationResults,
+                onDismiss: {
+                    showingResultOverlay = false
+                    operationResults = []
+                },
+                onOpenInFinder: { url in
+                    NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: url.deletingLastPathComponent().path)
+                }
+            )
+        }
+        .sheet(isPresented: $showingPasswordSheet) {
+            if let url = pendingDecryptURL, let outputURL = pendingDecryptOutputURL {
+                PasswordInputSheet(
+                    fileName: url.lastPathComponent,
+                    onConfirm: { password in
+                        showingPasswordSheet = false
+                        Task {
+                            await performDecryption(
+                                sourceURL: url,
+                                outputURL: outputURL,
+                                password: password
+                            )
+                        }
+                    },
+                    onCancel: {
+                        showingPasswordSheet = false
+                        pendingDecryptURL = nil
+                        pendingDecryptOutputURL = nil
+                    }
+                )
+            }
+        }
         .contextMenu {
             Button(action: { }) {
                 Label("action_encrypt", systemImage: "lock.fill")
@@ -171,16 +204,14 @@ struct KeyCardView: View {
     @MainActor
     private func handleDroppedFiles(urls: [URL]) {
         isProcessing = true
-        processedFiles = []
-        
-        let detector = GPGFileTypeDetector()
+        operationResults = []
         
         for url in urls {
             let fileType = await detector.detectFileType(at: url)
-            
             await processFile(url: url, type: fileType)
         }
         
+        isProcessing = false
         showingResultOverlay = true
     }
     
@@ -190,16 +221,19 @@ struct KeyCardView: View {
             switch type {
             case .encrypted:
                 guard key.isSecret else {
-                    processedFiles.append((url: url, success: false, message: "Decryption requires private key"))
+                    operationResults.append(
+                        OperationResult.failure(
+                            fileURL: url,
+                            operation: .decrypt,
+                            errorMessage: String(localized: "error_decryption_requires_private_key")
+                        )
+                    )
                     return
                 }
-                let outputURL = url.deletingPathExtension()
-                try await GPGService.shared.decryptFile(
-                    sourceURL: url,
-                    destinationURL: outputURL,
-                    passphrase: ""
-                )
-                processedFiles.append((url: url, success: true, message: "Decrypted successfully"))
+                pendingDecryptURL = url
+                pendingDecryptOutputURL = url.deletingPathExtension()
+                showingPasswordSheet = true
+                return
                 
             case .notGPG:
                 let outputURL = url.appendingPathExtension("gpg")
@@ -208,19 +242,79 @@ struct KeyCardView: View {
                     destinationURL: outputURL,
                     recipients: [key.fingerprint]
                 )
-                processedFiles.append((url: url, success: true, message: "Encrypted successfully"))
+                operationResults.append(
+                    OperationResult.successEncrypt(fileURL: url, outputURL: outputURL)
+                )
                 
             case .publicKey, .privateKey:
-                processedFiles.append((url: url, success: true, message: "Key import - use Import menu"))
+                operationResults.append(
+                    OperationResult.failure(
+                        fileURL: url,
+                        operation: .import,
+                        errorMessage: String(localized: "info_use_import_menu")
+                    )
+                )
                 
             case .signature:
-                processedFiles.append((url: url, success: false, message: "Signature verification not yet implemented"))
+                operationResults.append(
+                    OperationResult.failure(
+                        fileURL: url,
+                        operation: .verify,
+                        errorMessage: String(localized: "error_signature_not_implemented")
+                    )
+                )
                 
             case .unknown:
-                processedFiles.append((url: url, success: false, message: "Unknown file type"))
+                operationResults.append(
+                    OperationResult.failure(
+                        fileURL: url,
+                        operation: .encrypt,
+                        errorMessage: String(localized: "error_unknown_file_type")
+                    )
+                )
             }
         } catch {
-            processedFiles.append((url: url, success: false, message: error.localizedDescription))
+            operationResults.append(
+                OperationResult.failure(
+                    fileURL: url,
+                    operation: .encrypt,
+                    errorMessage: error.localizedDescription
+                )
+            )
         }
+    }
+    
+    @MainActor
+    private func performDecryption(password: String) async {
+        guard let url = pendingDecryptURL,
+              let outputURL = pendingDecryptOutputURL else {
+            return
+        }
+        
+        isProcessing = true
+        
+        do {
+            try await GPGService.shared.decryptFile(
+                sourceURL: url,
+                destinationURL: outputURL,
+                passphrase: password
+            )
+            operationResults.append(
+                OperationResult.successDecrypt(fileURL: url, outputURL: outputURL)
+            )
+        } catch {
+            operationResults.append(
+                OperationResult.failure(
+                    fileURL: url,
+                    operation: .decrypt,
+                    errorMessage: error.localizedDescription
+                )
+            )
+        }
+        
+        pendingDecryptURL = nil
+        pendingDecryptOutputURL = nil
+        isProcessing = false
+        showingResultOverlay = true
     }
 }

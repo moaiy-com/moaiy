@@ -2,83 +2,86 @@
 //  HowToView.swift
 //  Moaiy
 //
-//  How to tutorials view with usage instructions
+//  User guide and tutorial view
 //
 
 import SwiftUI
-import AppKit
-
-import os.log
 
 struct HowToView: View {
-    @State private var selectedSection: Section? = .keyManagement
-    @State private var selectedTutorial: Tutorial?
-    @State private var showingTrustManagementSheet = false
-    @State private var showingSigningSheet = false
-    @State private var showingBackupSheet = false
-    @State private var showingUploadSheet = false
-    @State private var showingDeleteConfirm = false
+    @State private var selectedItem: TutorialItem?
+    @State private var searchText = ""
     
-    @State private var showingEditSheet = false
-    @State private var showingResultOverlay = false
-    @State private var operationFiles: [URL] = []
-    @State private var isProcessing = false
-    @State private var processedFiles: [URL] = []
-    
-    // Progress overlay
-    if isProcessingFiles {
-        showingProgressText = "Processing..."
-            showingProgressOverlay = false
-            }
-        }
-    }
+    private let sections = TutorialData.sections
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("how_to_title")
-                .font(.headline)
-            Text("howToDescription")
-                .font(.body)
-                        .foregroundStyle(.secondary)
-            Spacer()
-        }
-    }
-    
-    var body: some View {
-        Text("howToEmpty")
-            .foregroundStyle(.tertiary)
-    }
-    
-    ScrollView {
-        VStack(spacing: 4) {
-            ForEach section in TutorialSection.allCases) {
-                                Text(section.title)
-                                .tag(section)
+        NavigationSplitView {
+            List(selection: $selectedItem) {
+                ForEach(sections) { section in
+                    Section(section.title) {
+                        ForEach(section.items) { item in
+                            HStack {
+                                Image(systemName: item.iconName)
+                                    .foregroundStyle(.blue)
+                                Text(item.title)
                             }
+                            .tag(item)
                         }
                     }
                 }
             }
+            .navigationTitle("how_to_title")
+            .searchable(text: $searchText)
+        } detail: {
+            if let item = selectedItem {
+                DetailView(item: item)
+            } else {
+                EmptyView()
+            }
         }
-        .frame(height: 600)
     }
+}
+
+struct DetailView: View {
+    let item: TutorialItem
     
     var body: some View {
-        Text("tutorialEmptyTitle")
-            .font(.headline)
-            .foregroundStyle(.tertiary)
-        
-            Text("tutorialEmptyDescription")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                Image(systemName: item.iconName)
+                    .font(.system(size: 48))
+                    .foregroundStyle(.blue)
+                
+                Text(item.title)
+                    .font(.title)
+                    .fontWeight(.bold)
+                
+                Divider()
+                
+                Text(item.content)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                
+                Spacer()
             }
-        }
-        .searchable(text: $viewModel.searchText)
-                    }
-                }
-            }
+            .padding(40)
         }
     }
+}
+
+struct EmptyView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "book.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(.secondary)
+            
+            Text("how_to_select_topic")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+#Preview {
+    HowToView()
 }
