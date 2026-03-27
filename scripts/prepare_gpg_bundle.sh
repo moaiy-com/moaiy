@@ -372,14 +372,14 @@ generate_manifest() {
     # Calculate checksums
     info "Calculating checksums..."
     
-    local checksums=""
+    local -a checksum_entries=()
     
     # Add executables
     for exe in "$TEMP_BUNDLE/bin"/*; do
         if [ -f "$exe" ]; then
             local name=$(basename "$exe")
             local sha256=$(shasum -a 256 "$exe" | awk '{print $1}')
-            checksums+="    \"$name\": \"$sha256\",\n"
+            checksum_entries+=("    \"$name\": \"$sha256\"")
         fi
     done
     
@@ -388,12 +388,14 @@ generate_manifest() {
         if [ -f "$lib" ]; then
             local name=$(basename "$lib")
             local sha256=$(shasum -a 256 "$lib" | awk '{print $1}')
-            checksums+="    \"$name\": \"$sha256\",\n"
+            checksum_entries+=("    \"$name\": \"$sha256\"")
         fi
     done
     
-    # Remove trailing comma
-    checksums=$(echo "$checksums" | sed '$ s/,$//')
+    local checksums=""
+    if [ ${#checksum_entries[@]} -gt 0 ]; then
+        checksums=$(printf '%s,\n' "${checksum_entries[@]}" | sed '$ s/,$//')
+    fi
     
     # Create manifest
     cat > "$manifest_file" << EOF
