@@ -161,6 +161,7 @@ struct KeyListView: View {
     var body: some View {
         List(viewModel.filteredKeys) { key in
             KeyCardView(key: key, onDelete: { keyToDelete = key })
+            .environment(viewModel)
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             .listRowSeparator(.hidden)
         }
