@@ -15,10 +15,14 @@ struct KeyCardView: View {
     @State private var operationResults: [OperationResult] = []
     @State private var showingResultOverlay = false
     @State private var showingPasswordSheet = false
-    @State private var pendingDecryptURL: URL?
-    @State private var pendingDecryptOutputURL: URL?
+    @State private var pendingDecryptRequests: [DecryptRequest] = []
     
     private let detector = GPGFileTypeDetector()
+
+    private struct DecryptRequest {
+        let sourceURL: URL
+        let outputURL: URL
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -46,44 +50,31 @@ struct KeyCardView: View {
             )
         }
         .sheet(isPresented: $showingPasswordSheet) {
-            if let url = pendingDecryptURL {
+            if let request = pendingDecryptRequests.first {
                 PasswordInputSheet(
-                    fileName: url.lastPathComponent,
+                    fileName: request.sourceURL.lastPathComponent,
                     onConfirm: { password in
                         showingPasswordSheet = false
                         Task {
-                            await performDecryption(password: password)
+                            await performQueuedDecryptions(password: password)
                         }
                     },
                     onCancel: {
                         showingPasswordSheet = false
-                        pendingDecryptURL = nil
-                        pendingDecryptOutputURL = nil
+                        pendingDecryptRequests = []
+                        if !operationResults.isEmpty {
+                            showingResultOverlay = true
+                        }
                     }
                 )
             }
         }
         .contextMenu {
-            Button(action: { }) {
-                Label("action_encrypt", systemImage: "lock.fill")
-            }
-            Button(action: { }) {
-                Label("action_decrypt", systemImage: "lock.open.fill")
-            }
-            Divider()
             Button(action: {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(key.fingerprint, forType: .string)
             }) {
                 Label("action_copy_fingerprint", systemImage: "doc.on.doc")
-            }
-            Button(action: { }) {
-                Label("action_export_public_key", systemImage: "square.and.arrow.up")
-            }
-            if key.isSecret {
-                Button(action: { }) {
-                    Label("action_export_private_key", systemImage: "key.fill")
-                }
             }
             Divider()
             Button(role: .destructive, action: {
@@ -155,7 +146,7 @@ struct KeyCardView: View {
             Spacer()
             
             HStack(spacing: 8) {
-                Button("action_encrypt") { }
+                Button("action_encrypt", action: encryptFromPicker)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                 
@@ -190,11 +181,61 @@ struct KeyCardView: View {
     }
     
     // MARK: - File Handling
+
+    private func encryptFromPicker() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.message = String(localized: "drop_zone_hint")
+
+        guard panel.runModal() == .OK else { return }
+        let selectedURLs = panel.urls
+        guard !selectedURLs.isEmpty else { return }
+
+        Task {
+            await encryptFiles(selectedURLs)
+        }
+    }
+
+    @MainActor
+    private func encryptFiles(_ urls: [URL]) async {
+        isProcessing = true
+        operationResults = []
+
+        for url in urls {
+            do {
+                let outputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
+                try await GPGService.shared.encryptFile(
+                    sourceURL: url,
+                    destinationURL: outputURL,
+                    recipients: [key.fingerprint]
+                )
+                operationResults.append(
+                    OperationResult.successEncrypt(fileURL: url, outputURL: outputURL)
+                )
+            } catch {
+                operationResults.append(
+                    OperationResult.failure(
+                        fileURL: url,
+                        operation: .encrypt,
+                        errorMessage: error.localizedDescription
+                    )
+                )
+            }
+        }
+
+        isProcessing = false
+        if !operationResults.isEmpty {
+            showingResultOverlay = true
+        }
+    }
     
     private func handleDroppedFiles(urls: [URL]) {
         Task { @MainActor in
             isProcessing = true
             operationResults = []
+            pendingDecryptRequests = []
             
             for url in urls {
                 let fileType = await detector.detectFileType(at: url)
@@ -202,7 +243,11 @@ struct KeyCardView: View {
             }
             
             isProcessing = false
-            if pendingDecryptURL == nil, !operationResults.isEmpty {
+            if !pendingDecryptRequests.isEmpty {
+                showingPasswordSheet = true
+                return
+            }
+            if !operationResults.isEmpty {
                 showingResultOverlay = true
             }
         }
@@ -223,13 +268,16 @@ struct KeyCardView: View {
                     )
                     return
                 }
-                pendingDecryptURL = url
-                pendingDecryptOutputURL = url.deletingPathExtension()
-                showingPasswordSheet = true
+                pendingDecryptRequests.append(
+                    DecryptRequest(
+                        sourceURL: url,
+                        outputURL: KeyActionFilePlanner.decryptedOutputURL(for: url)
+                    )
+                )
                 return
                 
             case .notGPG:
-                let outputURL = url.appendingPathExtension("gpg")
+                let outputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
                 try await GPGService.shared.encryptFile(
                     sourceURL: url,
                     destinationURL: outputURL,
@@ -278,36 +326,38 @@ struct KeyCardView: View {
     }
     
     @MainActor
-    private func performDecryption(password: String) async {
-        guard let url = pendingDecryptURL,
-              let outputURL = pendingDecryptOutputURL else {
+    private func performQueuedDecryptions(password: String) async {
+        guard !pendingDecryptRequests.isEmpty else {
             return
         }
         
         isProcessing = true
-        
-        do {
-            try await GPGService.shared.decryptFile(
-                sourceURL: url,
-                destinationURL: outputURL,
-                passphrase: password
-            )
-            operationResults.append(
-                OperationResult.successDecrypt(fileURL: url, outputURL: outputURL)
-            )
-        } catch {
-            operationResults.append(
-                OperationResult.failure(
-                    fileURL: url,
-                    operation: .decrypt,
-                    errorMessage: error.localizedDescription
+
+        for request in pendingDecryptRequests {
+            do {
+                try await GPGService.shared.decryptFile(
+                    sourceURL: request.sourceURL,
+                    destinationURL: request.outputURL,
+                    passphrase: password
                 )
-            )
+                operationResults.append(
+                    OperationResult.successDecrypt(fileURL: request.sourceURL, outputURL: request.outputURL)
+                )
+            } catch {
+                operationResults.append(
+                    OperationResult.failure(
+                        fileURL: request.sourceURL,
+                        operation: .decrypt,
+                        errorMessage: error.localizedDescription
+                    )
+                )
+            }
         }
         
-        pendingDecryptURL = nil
-        pendingDecryptOutputURL = nil
+        pendingDecryptRequests = []
         isProcessing = false
-        showingResultOverlay = true
+        if !operationResults.isEmpty {
+            showingResultOverlay = true
+        }
     }
 }

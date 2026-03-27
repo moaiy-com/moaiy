@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct KeyActionFilePlanner {
     static func encryptedOutputURL(for inputURL: URL) -> URL {

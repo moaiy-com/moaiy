@@ -60,6 +60,7 @@ struct OperationResult: Identifiable, Hashable {
     let success: Bool
     let operation: OperationType
     let message: String
+    let isLocalizedMessageKey: Bool
     let outputURL: URL?
     let timestamp: Date
     
@@ -68,12 +69,14 @@ struct OperationResult: Identifiable, Hashable {
         success: Bool,
         operation: OperationType,
         message: String,
+        isLocalizedMessageKey: Bool = false,
         outputURL: URL? = nil
     ) {
         self.fileURL = fileURL
         self.success = success
         self.operation = operation
         self.message = message
+        self.isLocalizedMessageKey = isLocalizedMessageKey
         self.outputURL = outputURL
         self.timestamp = Date()
     }
@@ -85,13 +88,32 @@ struct OperationResult: Identifiable, Hashable {
     var outputFileName: String? {
         outputURL?.lastPathComponent
     }
+
+    var displayMessage: String {
+        guard isLocalizedMessageKey else { return message }
+        return NSLocalizedString(message, comment: "")
+    }
     
     static func successEncrypt(fileURL: URL, outputURL: URL? = nil) -> OperationResult {
-        OperationResult(fileURL: fileURL, success: true, operation: .encrypt, message: "operation_success_encrypt", outputURL: outputURL)
+        OperationResult(
+            fileURL: fileURL,
+            success: true,
+            operation: .encrypt,
+            message: "operation_success_encrypt",
+            isLocalizedMessageKey: true,
+            outputURL: outputURL
+        )
     }
     
     static func successDecrypt(fileURL: URL, outputURL: URL? = nil) -> OperationResult {
-        OperationResult(fileURL: fileURL, success: true, operation: .decrypt, message: "operation_success_decrypt", outputURL: outputURL)
+        OperationResult(
+            fileURL: fileURL,
+            success: true,
+            operation: .decrypt,
+            message: "operation_success_decrypt",
+            isLocalizedMessageKey: true,
+            outputURL: outputURL
+        )
     }
     
     static func failure(fileURL: URL, operation: OperationType, errorMessage: String) -> OperationResult {
