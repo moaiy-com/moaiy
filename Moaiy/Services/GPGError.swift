@@ -24,6 +24,7 @@ enum GPGError: Error, LocalizedError {
     case unsupportedKeyType(String)
     case trustUpdateFailed(String)
     case keySigningFailed(String)
+    case keyserverUploadFailed(String)
     
     var errorDescription: String? {
         switch self {
@@ -57,6 +58,8 @@ enum GPGError: Error, LocalizedError {
             return "\(String(localized: "error_trust_update_failed")): \(message)"
         case .keySigningFailed(let message):
             return "\(String(localized: "error_key_signing_failed")): \(message)"
+        case .keyserverUploadFailed(let message):
+            return "\(String(localized: "error_keyserver_upload_failed")): \(message)"
         }
     }
     
@@ -92,6 +95,8 @@ enum GPGError: Error, LocalizedError {
             return String(localized: "error_trust_update_failed_recovery")
         case .keySigningFailed:
             return String(localized: "error_key_signing_failed_recovery")
+        case .keyserverUploadFailed:
+            return String(localized: "error_keyserver_upload_failed_recovery")
         }
     }
 }

@@ -12,7 +12,7 @@ struct MainView: View {
     
     enum Section: String, CaseIterable, Identifiable {
         case keyManagement
-        case encryption
+        case howTo
         case settings
         
         var id: String { rawValue }
@@ -20,7 +20,7 @@ struct MainView: View {
         var icon: String {
             switch self {
             case .keyManagement: return "key.fill"
-            case .encryption: return "lock.shield.fill"
+            case .howTo: return "book.fill"
             case .settings: return "gearshape.fill"
             }
         }
@@ -28,7 +28,7 @@ struct MainView: View {
         var title: LocalizedStringKey {
             switch self {
             case .keyManagement: return "section_key_management"
-            case .encryption: return "section_encryption"
+            case .howTo: return "section_how_to"
             case .settings: return "section_settings"
             }
         }
@@ -44,25 +44,21 @@ struct MainView: View {
             }
             .listStyle(.sidebar)
             .navigationTitle("Moaiy")
-            .navigationSplitViewColumnWidth(
-                min: Constants.UI.minSidebarWidth,
-                ideal: Constants.UI.idealSidebarWidth,
-                max: Constants.UI.maxSidebarWidth
-            )
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 250)
         } detail: {
-            if let section = selectedSection {
-                switch section {
-                case .keyManagement:
-                    KeyManagementView()
-                case .encryption:
-                    EncryptionView()
-                case .settings:
-                    SettingsView()
+                if let section = selectedSection {
+                    switch section {
+                    case .keyManagement:
+                        KeyManagementView()
+                    case .howTo:
+                        HowToView()
+                    case .settings:
+                        SettingsView()
+                    }
+                } else {
+                    Text("placeholder_select_section")
+                        .foregroundStyle(.secondary)
                 }
-            } else {
-                Text("placeholder_select_section")
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 }
@@ -71,3 +67,4 @@ struct MainView: View {
     MainView()
         .frame(width: 1000, height: 700)
 }
+
