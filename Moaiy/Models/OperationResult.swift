@@ -87,11 +87,11 @@ struct OperationResult: Identifiable, Hashable {
     }
     
     static func successEncrypt(fileURL: URL, outputURL: URL? = nil) -> OperationResult {
-        OperationResult(fileURL: fileURL, success: true, operation: .encrypt, message: "operation_encrypt_success", outputURL: outputURL)
+        OperationResult(fileURL: fileURL, success: true, operation: .encrypt, message: "operation_success_encrypt", outputURL: outputURL)
     }
     
     static func successDecrypt(fileURL: URL, outputURL: URL? = nil) -> OperationResult {
-        OperationResult(fileURL: fileURL, success: true, operation: .decrypt, message: "operation_decrypt_success", outputURL: outputURL)
+        OperationResult(fileURL: fileURL, success: true, operation: .decrypt, message: "operation_success_decrypt", outputURL: outputURL)
     }
     
     static func failure(fileURL: URL, operation: OperationType, errorMessage: String) -> OperationResult {
