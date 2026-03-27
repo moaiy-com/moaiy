@@ -15,6 +15,7 @@ struct BackupManagerView: View {
     @State private var isRestoring = false
     @State private var showBackupSuccess = false
     @State private var showRestoreSuccess = false
+    @State private var restoreSuccessMessage = String(localized: "restore_success_message")
     @State private var showError = false
     @State private var errorMessage: String?
     @State private var backupURL: URL?
@@ -191,7 +192,7 @@ struct BackupManagerView: View {
         .alert("restore_success_title", isPresented: $showRestoreSuccess) {
             Button("action_ok") { }
         } message: {
-            Text("restore_success_message")
+            Text(restoreSuccessMessage)
         }
         .alert("error_occurred", isPresented: $showError) {
             Button("action_ok") { }
@@ -211,7 +212,7 @@ struct BackupManagerView: View {
             do {
                 // Create save panel
                 let savePanel = NSSavePanel()
-                savePanel.title = "Save Backup"
+                savePanel.title = String(localized: "backup_create_section")
                 savePanel.nameFieldStringValue = "Moaiy_Backup_\(Date().formatted(date: .abbreviated, time: .omitted)).zip"
                 savePanel.allowedContentTypes = [.zip]
                 savePanel.canCreateDirectories = true
@@ -307,7 +308,7 @@ struct BackupManagerView: View {
             do {
                 // Create open panel
                 let openPanel = NSOpenPanel()
-                openPanel.title = "Select Backup"
+                openPanel.title = String(localized: "backup_restore_section")
                 openPanel.allowedContentTypes = [.folder, .zip]
                 openPanel.canChooseDirectories = true
                 openPanel.canChooseFiles = true
@@ -318,12 +319,18 @@ struct BackupManagerView: View {
                 }
 
                 // Restore from backup
-                try await restoreFromBackupArchive(at: url)
+                let summary = try await restoreFromBackupArchive(at: url)
 
                 // Reload keys
                 await viewModel.loadKeys()
 
-                showRestoreSuccess = true
+                if summary.failedFiles.isEmpty {
+                    restoreSuccessMessage = String(localized: "restore_success_message")
+                    showRestoreSuccess = true
+                } else {
+                    let failed = summary.failedFiles.joined(separator: ", ")
+                    throw GPGError.importFailed("\(summary.successfulFiles)/\(summary.totalFiles) - \(failed)")
+                }
             } catch {
                 errorMessage = error.localizedDescription
                 showError = true
@@ -332,7 +339,7 @@ struct BackupManagerView: View {
         }
     }
 
-    private func restoreFromBackupArchive(at url: URL) async throws {
+    private func restoreFromBackupArchive(at url: URL) async throws -> RestoreSummary {
         // Create temporary directory for extraction
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("MoaiyRestore_\(UUID().uuidString)")
@@ -392,15 +399,23 @@ struct BackupManagerView: View {
             options: [.skipsHiddenFiles]
         )
         let keyFiles = files.filter { $0.pathExtension == "asc" }
+        var successfulFiles = 0
+        var failedFiles: [String] = []
 
         for keyFile in keyFiles {
             do {
                 _ = try await viewModel.importKey(from: keyFile)
+                successfulFiles += 1
             } catch {
-                // Log but continue with other keys
-                print("Failed to import key from \(keyFile.lastPathComponent): \(error)")
+                failedFiles.append(keyFile.lastPathComponent)
             }
         }
+
+        return RestoreSummary(
+            totalFiles: keyFiles.count,
+            successfulFiles: successfulFiles,
+            failedFiles: failedFiles
+        )
     }
 
     // MARK: - Persistence
@@ -424,6 +439,12 @@ struct BackupManagerView: View {
 
         UserDefaults.standard.set(lastBackupDate, forKey: "lastBackupDate")
     }
+}
+
+private struct RestoreSummary {
+    let totalFiles: Int
+    let successfulFiles: Int
+    let failedFiles: [String]
 }
 
 // MARK: - Supporting Types
@@ -545,7 +566,7 @@ struct BackupHistoryRow: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
 
-                Text("\(record.keyCount) keys • \(record.includeSecretKeys ? "With secrets" : "Public only")")
+                Text("\(record.keyCount) \(String(localized: "backup_keys_total")) • \(record.includeSecretKeys ? String(localized: "backup_include_secret") : String(localized: "key_type_public"))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
