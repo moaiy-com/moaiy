@@ -886,6 +886,19 @@ final class GPGService {
     ///   - recipients: Array of key IDs to encrypt for
     ///   - armor: If true, output ASCII armor format
     func encryptFile(sourceURL: URL, destinationURL: URL, recipients: [String], armor: Bool = false) async throws {
+        let fileManager = FileManager.default
+        let stagingDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("moaiy-gpg-file-op-\(UUID().uuidString)", isDirectory: true)
+        let stagedSourceURL = stagingDirectory.appendingPathComponent("input")
+        let stagedOutputURL = stagingDirectory.appendingPathComponent("output")
+
+        try fileManager.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
+        defer {
+            try? fileManager.removeItem(at: stagingDirectory)
+        }
+
+        try fileManager.copyItem(at: sourceURL, to: stagedSourceURL)
+
         var arguments = ["--encrypt", "--batch", "--yes"]
         
         // Add recipients
@@ -899,10 +912,19 @@ final class GPGService {
         }
         
         // Add input/output
-        arguments.append(contentsOf: ["--output", destinationURL.path, sourceURL.path])
+        arguments.append(contentsOf: ["--output", stagedOutputURL.path, stagedSourceURL.path])
         
         let result = try await executeGPG(arguments: arguments)
         try ensureSuccess(result, as: GPGError.encryptionFailed)
+
+        guard fileManager.fileExists(atPath: stagedOutputURL.path) else {
+            throw GPGError.encryptionFailed("No output generated")
+        }
+
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            try fileManager.removeItem(at: destinationURL)
+        }
+        try fileManager.copyItem(at: stagedOutputURL, to: destinationURL)
     }
     
     /// Decrypt a file
@@ -913,14 +935,27 @@ final class GPGService {
     func decryptFile(sourceURL: URL, destinationURL: URL, passphrase: String) async throws {
         try await ensureGPGAgentRunningIfNeeded()
 
+        let fileManager = FileManager.default
+        let stagingDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("moaiy-gpg-file-op-\(UUID().uuidString)", isDirectory: true)
+        let stagedSourceURL = stagingDirectory.appendingPathComponent("input")
+        let stagedOutputURL = stagingDirectory.appendingPathComponent("output")
+
+        try fileManager.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
+        defer {
+            try? fileManager.removeItem(at: stagingDirectory)
+        }
+
+        try fileManager.copyItem(at: sourceURL, to: stagedSourceURL)
+
         let result = try await executeGPG(
             arguments: [
                 "--decrypt",
                 "--batch",
                 "--yes",
                 "--passphrase-fd", "0",
-                "--output", destinationURL.path,
-                sourceURL.path
+                "--output", stagedOutputURL.path,
+                stagedSourceURL.path
             ],
             input: passphrase
         )
@@ -928,6 +963,15 @@ final class GPGService {
         if result.exitCode != 0 {
             throw GPGError.decryptionFailed(result.stderr ?? "Unknown error")
         }
+
+        guard fileManager.fileExists(atPath: stagedOutputURL.path) else {
+            throw GPGError.decryptionFailed("No output generated")
+        }
+
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            try fileManager.removeItem(at: destinationURL)
+        }
+        try fileManager.copyItem(at: stagedOutputURL, to: destinationURL)
     }
 
     /// Verify if a file is a valid GPG file

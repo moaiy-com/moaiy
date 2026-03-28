@@ -235,15 +235,37 @@ struct KeyActionMenu: View {
     @MainActor
     private func encryptFiles(_ urls: [URL]) async {
         do {
+            var encryptedFileCount = 0
             for url in urls {
-                let outputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
+                let defaultOutputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
+                guard let outputURL = presentFileOperationSavePanel(
+                    defaultFileName: defaultOutputURL.lastPathComponent,
+                    preferredDirectory: url.deletingLastPathComponent()
+                ) else {
+                    continue
+                }
+
+                let hasSourceAccess = url.startAccessingSecurityScopedResource()
+                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
+                defer {
+                    if hasSourceAccess {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                    if hasOutputAccess {
+                        outputURL.stopAccessingSecurityScopedResource()
+                    }
+                }
+
                 try await GPGService.shared.encryptFile(
                     sourceURL: url,
                     destinationURL: outputURL,
                     recipients: [key.fingerprint]
                 )
+                encryptedFileCount += 1
             }
-            showSuccess(message: String(localized: "operation_success_encrypt"))
+            if encryptedFileCount > 0 {
+                showSuccess(message: String(localized: "operation_success_encrypt"))
+            }
         } catch {
             showError(message: error.localizedDescription)
         }
@@ -252,16 +274,37 @@ struct KeyActionMenu: View {
     @MainActor
     private func decryptFiles(_ urls: [URL], passphrase: String) async {
         do {
+            var decryptedFileCount = 0
             for url in urls {
-                let outputURL = KeyActionFilePlanner.decryptedOutputURL(for: url)
+                let defaultOutputURL = KeyActionFilePlanner.decryptedOutputURL(for: url)
+                guard let outputURL = presentFileOperationSavePanel(
+                    defaultFileName: defaultOutputURL.lastPathComponent,
+                    preferredDirectory: url.deletingLastPathComponent()
+                ) else {
+                    continue
+                }
+
+                let hasSourceAccess = url.startAccessingSecurityScopedResource()
+                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
+                defer {
+                    if hasSourceAccess {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                    if hasOutputAccess {
+                        outputURL.stopAccessingSecurityScopedResource()
+                    }
+                }
 
                 try await GPGService.shared.decryptFile(
                     sourceURL: url,
                     destinationURL: outputURL,
                     passphrase: passphrase
                 )
+                decryptedFileCount += 1
             }
-            showSuccess(message: String(localized: "operation_success_decrypt"))
+            if decryptedFileCount > 0 {
+                showSuccess(message: String(localized: "operation_success_decrypt"))
+            }
         } catch {
             showError(message: error.localizedDescription)
         }
@@ -304,6 +347,13 @@ struct KeyActionMenu: View {
         panel.allowedContentTypes = [.init(filenameExtension: "asc") ?? .data]
         panel.nameFieldStringValue = defaultFileName
         panel.message = String(localized: "export_file_picker_message")
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    private func presentFileOperationSavePanel(defaultFileName: String, preferredDirectory: URL) -> URL? {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = defaultFileName
+        panel.directoryURL = preferredDirectory
         return panel.runModal() == .OK ? panel.url : nil
     }
 
