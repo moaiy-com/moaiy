@@ -205,7 +205,25 @@ struct KeyCardView: View {
 
         for url in urls {
             do {
-                let outputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
+                let defaultOutputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
+                guard let outputURL = presentFileOperationSavePanel(
+                    defaultFileName: defaultOutputURL.lastPathComponent,
+                    preferredDirectory: url.deletingLastPathComponent()
+                ) else {
+                    continue
+                }
+
+                let hasSourceAccess = url.startAccessingSecurityScopedResource()
+                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
+                defer {
+                    if hasSourceAccess {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                    if hasOutputAccess {
+                        outputURL.stopAccessingSecurityScopedResource()
+                    }
+                }
+
                 try await GPGService.shared.encryptFile(
                     sourceURL: url,
                     destinationURL: outputURL,
@@ -268,16 +286,43 @@ struct KeyCardView: View {
                     )
                     return
                 }
+
+                let defaultOutputURL = KeyActionFilePlanner.decryptedOutputURL(for: url)
+                guard let outputURL = presentFileOperationSavePanel(
+                    defaultFileName: defaultOutputURL.lastPathComponent,
+                    preferredDirectory: url.deletingLastPathComponent()
+                ) else {
+                    return
+                }
+
                 pendingDecryptRequests.append(
                     DecryptRequest(
                         sourceURL: url,
-                        outputURL: KeyActionFilePlanner.decryptedOutputURL(for: url)
+                        outputURL: outputURL
                     )
                 )
                 return
                 
             case .notGPG:
-                let outputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
+                let defaultOutputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
+                guard let outputURL = presentFileOperationSavePanel(
+                    defaultFileName: defaultOutputURL.lastPathComponent,
+                    preferredDirectory: url.deletingLastPathComponent()
+                ) else {
+                    return
+                }
+
+                let hasSourceAccess = url.startAccessingSecurityScopedResource()
+                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
+                defer {
+                    if hasSourceAccess {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                    if hasOutputAccess {
+                        outputURL.stopAccessingSecurityScopedResource()
+                    }
+                }
+
                 try await GPGService.shared.encryptFile(
                     sourceURL: url,
                     destinationURL: outputURL,
@@ -335,6 +380,17 @@ struct KeyCardView: View {
 
         for request in pendingDecryptRequests {
             do {
+                let hasSourceAccess = request.sourceURL.startAccessingSecurityScopedResource()
+                let hasOutputAccess = request.outputURL.startAccessingSecurityScopedResource()
+                defer {
+                    if hasSourceAccess {
+                        request.sourceURL.stopAccessingSecurityScopedResource()
+                    }
+                    if hasOutputAccess {
+                        request.outputURL.stopAccessingSecurityScopedResource()
+                    }
+                }
+
                 try await GPGService.shared.decryptFile(
                     sourceURL: request.sourceURL,
                     destinationURL: request.outputURL,
@@ -359,5 +415,12 @@ struct KeyCardView: View {
         if !operationResults.isEmpty {
             showingResultOverlay = true
         }
+    }
+
+    private func presentFileOperationSavePanel(defaultFileName: String, preferredDirectory: URL) -> URL? {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = defaultFileName
+        panel.directoryURL = preferredDirectory
+        return panel.runModal() == .OK ? panel.url : nil
     }
 }
