@@ -232,10 +232,9 @@ struct BundledGPGTests {
         
         do {
             let keys = try await service.listKeys()
-            #expect(keys is [GPGKey], "Should return array of GPGKey")
+            _ = keys.count
         } catch {
-            // Empty keyring is acceptable
-            #expect(true, "List keys completed (may be empty)")
+            Issue.record("listKeys should not fail on empty keyring: \(error.localizedDescription)")
         }
     }
     

@@ -245,7 +245,12 @@ final class GPGService {
         let result = try await executeGPG(arguments: arguments)
         
         guard let output = result.stdout else {
-            throw GPGError.invalidOutput("No output from key list")
+            // Empty keyring is a valid state for first launch in release builds.
+            if result.exitCode == 0 {
+                return []
+            }
+            let message = result.stderr ?? "No output from key list (exit code: \(result.exitCode))"
+            throw GPGError.executionFailed(message)
         }
         
         return parseKeyList(output, secretOnly: secretOnly)
@@ -713,7 +718,12 @@ final class GPGService {
         )
         
         guard let output = result.stdout else {
-            throw GPGError.invalidOutput("No output from key list")
+            // Missing stdout with success means no matching key records.
+            if result.exitCode == 0 {
+                return .unknown
+            }
+            let message = result.stderr ?? "No output from key list (exit code: \(result.exitCode))"
+            throw GPGError.executionFailed(message)
         }
         
         // Parse trust from output
@@ -790,7 +800,17 @@ final class GPGService {
         )
         
         guard let output = result.stdout else {
-            throw GPGError.invalidOutput("No output from key list")
+            // Missing stdout with success means no matching key records.
+            if result.exitCode == 0 {
+                return KeyTrustDetails(
+                    keyID: keyID,
+                    ownerTrust: .unknown,
+                    calculatedTrust: .unknown,
+                    signatureCount: 0
+                )
+            }
+            let message = result.stderr ?? "No output from key list (exit code: \(result.exitCode))"
+            throw GPGError.executionFailed(message)
         }
         
         var ownerTrust: TrustLevel = .unknown
