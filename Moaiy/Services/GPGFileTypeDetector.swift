@@ -132,7 +132,7 @@ actor GPGFileTypeDetector {
         
         // Bit 7 must be 1 for OpenPGP packets
         guard (firstByte & 0x80) == 0x80 else {
-            logger.debug("Invalid OpenPGG packet: bit 7 not set")
+            logger.debug("Invalid OpenPGP packet: bit 7 not set")
             return nil
         }
         
@@ -163,8 +163,8 @@ actor GPGFileTypeDetector {
             return .signature
         }
         
-        // Valid OpenPGG packet but unknown type
-        logger.debug("Valid OpenPGG packet with unknown tag: \(tag)")
+        // Valid OpenPGP packet but unknown type
+        logger.debug("Valid OpenPGP packet with unknown tag: \(tag)")
         return nil
     }
     

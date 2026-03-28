@@ -126,9 +126,9 @@ struct ResultRowView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 
-                Text(result.message)
+                Text(result.displayMessage)
                     .font(.caption)
-                    .foregroundStyle(result.success ? .secondary : .red)
+                    .foregroundStyle(result.success ? Color.secondary : Color.red)
                     .lineLimit(2)
             }
             

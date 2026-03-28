@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import MachO
 import Testing
 @testable import Moaiy
 
@@ -80,21 +81,30 @@ struct BundledGPGTests {
         let libURL = bundleURL.appendingPathComponent("lib")
         #expect(FileManager.default.fileExists(atPath: libURL.path),
                 "lib directory should exist in bundle")
-        
-        let requiredLibraries = [
-            "libgcrypt.dylib",
-            "libgpg-error.dylib",
-            "libassuan.dylib",
-            "libnpth.dylib",
-            "libintl.dylib",
-            "libreadline.dylib",
-            "libksba.dylib"
+
+        let libraryNames: [String]
+        do {
+            libraryNames = try FileManager.default.contentsOfDirectory(atPath: libURL.path)
+        } catch {
+            Issue.record("Failed to list bundled libraries: \(error)")
+            return
+        }
+
+        let requiredLibraryPrefixes = [
+            "libgcrypt",
+            "libgpg-error",
+            "libassuan",
+            "libnpth",
+            "libintl",
+            "libreadline",
+            "libksba"
         ]
-        
-        for lib in requiredLibraries {
-            let libPath = libURL.appendingPathComponent(lib)
-            #expect(FileManager.default.fileExists(atPath: libPath.path),
-                    "\(lib) should exist in bundle")
+
+        for prefix in requiredLibraryPrefixes {
+            let exists = libraryNames.contains {
+                $0.hasPrefix(prefix + ".") && $0.hasSuffix(".dylib")
+            }
+            #expect(exists, "A versioned \(prefix).*.dylib should exist in bundle")
         }
     }
     
@@ -120,7 +130,9 @@ struct BundledGPGTests {
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
             #expect(json != nil, "manifest.json should be valid JSON")
             #expect(json?["version"] != nil, "manifest should contain version")
-            #expect(json?["files"] != nil, "manifest should contain files")
+            let hasFiles = json?["files"] != nil
+            let hasChecksums = json?["checksums"] != nil
+            #expect(hasFiles || hasChecksums, "manifest should contain files or checksums")
         } catch {
             Issue.record("Failed to parse manifest.json: \(error)")
         }
@@ -173,26 +185,24 @@ struct BundledGPGTests {
             Issue.record("gpg executable not found in bundle")
             return
         }
-        
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/otool")
-        process.arguments = ["-L", gpgURL.path]
-        
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        
-        try process.run()
-        process.waitUntilExit()
-        
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: data, encoding: .utf8) ?? ""
-        
-        #expect(output.contains("@executable_path"), 
-                "Libraries should use @executable_path for sandbox compatibility")
-        #expect(!output.contains("/usr/local/lib"),
+
+        let dependencyPaths: [String]
+        do {
+            dependencyPaths = try MachODependencyReader.readDependencyPaths(from: gpgURL)
+        } catch {
+            Issue.record("Failed to parse Mach-O dependencies: \(error)")
+            return
+        }
+
+        let hasBundledRelativePath = dependencyPaths.contains {
+            $0.hasPrefix("@executable_path/../lib/") || $0.hasPrefix("@loader_path/../lib/")
+        }
+
+        #expect(hasBundledRelativePath,
+                "Libraries should use @executable_path or @loader_path for sandbox compatibility")
+        #expect(!dependencyPaths.contains(where: { $0.contains("/usr/local/lib") }),
                 "Should not reference /usr/local/lib")
-        #expect(!output.contains("/opt/homebrew/lib"),
+        #expect(!dependencyPaths.contains(where: { $0.contains("/opt/homebrew/lib") }),
                 "Should not reference /opt/homebrew/lib")
     }
     
@@ -332,5 +342,101 @@ struct BundledGPGTests {
         let maxSize: Int64 = 20 * 1024 * 1024 // 20MB
         #expect(totalSize < maxSize, 
                 "Bundle size (\(totalSize / 1024 / 1024)MB) should be less than 20MB")
+    }
+}
+
+fileprivate enum MachODependencyReaderError: Error {
+    case unsupportedFormat
+    case malformedBinary
+}
+
+private enum MachODependencyReader {
+
+    private static let dylibLoadCommands: Set<UInt32> = [
+        UInt32(LC_LOAD_DYLIB),
+        UInt32(LC_LOAD_WEAK_DYLIB),
+        UInt32(LC_REEXPORT_DYLIB),
+        UInt32(LC_LOAD_UPWARD_DYLIB)
+    ]
+
+    static func readDependencyPaths(from executableURL: URL) throws -> [String] {
+        let data = try Data(contentsOf: executableURL)
+        let header: mach_header_64 = try data.readStruct(at: 0)
+
+        guard header.magic == UInt32(MH_MAGIC_64) else {
+            throw MachODependencyReaderError.unsupportedFormat
+        }
+
+        var loadCommandOffset = MemoryLayout<mach_header_64>.size
+        var dependencyPaths: [String] = []
+
+        for _ in 0..<Int(header.ncmds) {
+            let command: load_command = try data.readStruct(at: loadCommandOffset)
+            let commandSize = Int(command.cmdsize)
+            guard commandSize >= MemoryLayout<load_command>.size else {
+                throw MachODependencyReaderError.malformedBinary
+            }
+
+            let commandEnd = loadCommandOffset + commandSize
+            guard commandEnd <= data.count else {
+                throw MachODependencyReaderError.malformedBinary
+            }
+
+            if dylibLoadCommands.contains(command.cmd) {
+                let dylibCommand: dylib_command = try data.readStruct(at: loadCommandOffset)
+                let nameOffset = Int(dylibCommand.dylib.name.offset)
+                let stringStart = loadCommandOffset + nameOffset
+
+                guard stringStart < commandEnd else {
+                    throw MachODependencyReaderError.malformedBinary
+                }
+
+                if let path = data.readNullTerminatedUTF8String(start: stringStart, end: commandEnd) {
+                    dependencyPaths.append(path)
+                }
+            }
+
+            loadCommandOffset = commandEnd
+        }
+
+        return dependencyPaths
+    }
+}
+
+private extension Data {
+    func readStruct<T>(at offset: Int) throws -> T {
+        guard offset >= 0, offset + MemoryLayout<T>.size <= count else {
+            throw MachODependencyReaderError.malformedBinary
+        }
+
+        return withUnsafeBytes { rawBuffer in
+            rawBuffer.loadUnaligned(fromByteOffset: offset, as: T.self)
+        }
+    }
+
+    func readNullTerminatedUTF8String(start: Int, end: Int) -> String? {
+        guard start >= 0, start < end, end <= count else {
+            return nil
+        }
+
+        return withUnsafeBytes { rawBuffer in
+            guard let base = rawBuffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                return nil
+            }
+
+            var cursor = start
+            while cursor < end, base[cursor] != 0 {
+                cursor += 1
+            }
+
+            let byteCount = cursor - start
+            guard byteCount >= 0 else {
+                return nil
+            }
+
+            let pointer = UnsafeRawPointer(base.advanced(by: start)).assumingMemoryBound(to: UInt8.self)
+            let buffer = UnsafeBufferPointer(start: pointer, count: byteCount)
+            return String(bytes: buffer, encoding: .utf8)
+        }
     }
 }

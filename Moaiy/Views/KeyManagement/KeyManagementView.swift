@@ -11,10 +11,8 @@ struct KeyManagementView: View {
     @State private var viewModel: KeyManagementViewModel
     @State private var showingCreateKey = false
     @State private var showingImportKey = false
-    @State private var selectedKey: GPGKey?
     @State private var showingFilters = false
     @State private var keyToDelete: GPGKey?
-    @FocusState private var isListFocused: Bool
 
     init(viewModel: KeyManagementViewModel? = nil) {
         _viewModel = State(initialValue: viewModel ?? AppState.shared.keyManagement)
@@ -32,29 +30,9 @@ struct KeyManagementView: View {
                 }
             } else if viewModel.keys.isEmpty {
                 EmptyKeysView(onCreateKey: { showingCreateKey = true })
-            } else if let key = selectedKey {
-                // Show detail view
-                KeyDetailView(key: key)
-                    .environment(viewModel)
-                    .toolbar {
-                        ToolbarItem(placement: .navigation) {
-                            Button(action: { selectedKey = nil }) {
-                                Label("action_back", systemImage: "chevron.left")
-                            }
-                            .keyboardShortcut(.escape, modifiers: [])
-                        }
-                    }
             } else {
                 // Show list view
-                KeyListView(viewModel: viewModel, selectedKey: $selectedKey, keyToDelete: $keyToDelete)
-                    .focused($isListFocused)
-                    .onKeyPress(.delete) {
-                        if let key = selectedKey {
-                            keyToDelete = key
-                            return .handled
-                        }
-                        return .ignored
-                    }
+                KeyListView(viewModel: viewModel, keyToDelete: $keyToDelete)
             }
         }
         .navigationTitle("section_key_management")
@@ -113,7 +91,6 @@ struct KeyManagementView: View {
                     Task {
                         do {
                             try await viewModel.deleteKey(key)
-                            selectedKey = nil
                         } catch {
                             // Error will be handled by viewModel.errorMessage
                         }
@@ -179,177 +156,18 @@ struct EmptyKeysView: View {
 
 struct KeyListView: View {
     @Bindable var viewModel: KeyManagementViewModel
-    @Binding var selectedKey: GPGKey?
     @Binding var keyToDelete: GPGKey?
 
     var body: some View {
         List(viewModel.filteredKeys) { key in
-            Button(action: { selectedKey = key }) {
-                KeyCardView(key: key, onDelete: { keyToDelete = key })
-            }
-            .buttonStyle(.plain)
+            KeyCardView(key: key, onDelete: { keyToDelete = key })
+            .environment(viewModel)
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             .listRowSeparator(.hidden)
         }
         .listStyle(.inset)
         .refreshable {
             await viewModel.refresh()
-        }
-    }
-}
-
-// MARK: - Key Card View
-
-struct KeyCardView: View {
-    let key: GPGKey
-    var onDelete: (() -> Void)? = nil
-    @Environment(\.controlActiveState) private var controlActiveState
-
-    var body: some View {
-        HStack(spacing: 16) {
-            // Key icon with color based on key type
-            Image(systemName: key.isSecret ? "key.fill" : "key")
-                .font(.title2)
-                .foregroundStyle(keyIconColor)
-                .frame(width: 40, height: 40)
-                .background(keyIconColor.opacity(0.1))
-                .clipShape(Circle())
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(key.name)
-                        .font(.headline)
-
-                    // Key type badge: Private Key or Public Key
-                    Text(key.isSecret ? "key_type_private" : "key_type_public")
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(keyTypeBadgeColor.opacity(0.2))
-                        .foregroundStyle(keyTypeBadgeColor)
-                        .clipShape(Capsule())
-
-                    // Trust level badge
-                    Text(key.trustLevel.localizedName)
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(trustLevelColor.opacity(0.2))
-                        .foregroundStyle(trustLevelColor)
-                        .clipShape(Capsule())
-
-                    // Expired badge
-                    if key.isExpired {
-                        Text("status_expired")
-                            .font(.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.red.opacity(0.2))
-                            .foregroundStyle(.red)
-                            .clipShape(Capsule())
-                    }
-                }
-
-                Text(key.email)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 8) {
-                    Label(key.displayKeyType, systemImage: "number")
-                    if let createdAt = key.createdAt {
-                        Text("•")
-                        Text(createdAt.formatted(date: .abbreviated, time: .omitted))
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-            }
-
-            Spacer()
-
-            HStack(spacing: 8) {
-                Button("action_encrypt") { }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-
-                Menu {
-                    Button("action_export_public_key") { }
-                    Button("action_copy_fingerprint") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(key.fingerprint, forType: .string)
-                    }
-                    Divider()
-                    Button("action_delete_key", role: .destructive) { }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .buttonStyle(.borderless)
-            }
-        }
-        .padding(12)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
-        .contextMenu {
-            Button(action: { }) {
-                Label("action_encrypt", systemImage: "lock.fill")
-            }
-
-            Button(action: { }) {
-                Label("action_decrypt", systemImage: "lock.open.fill")
-            }
-
-            Divider()
-
-            Button(action: {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(key.fingerprint, forType: .string)
-            }) {
-                Label("action_copy_fingerprint", systemImage: "doc.on.doc")
-            }
-
-            Button(action: { }) {
-                Label("action_export_public_key", systemImage: "square.and.arrow.up")
-            }
-
-            if key.isSecret {
-                Button(action: { }) {
-                    Label("action_export_private_key", systemImage: "key.fill")
-                }
-            }
-
-            Divider()
-
-            Button(role: .destructive, action: {
-                onDelete?()
-            }) {
-                Label("action_delete_key", systemImage: "trash.fill")
-            }
-        }
-    }
-    
-    // MARK: - Color Computed Properties
-    
-    private var keyIconColor: Color {
-        key.isSecret ? Color.moaiyAccent : .secondary
-    }
-    
-    private var keyTypeBadgeColor: Color {
-        key.isSecret ? Color.moaiyAccent : .blue
-    }
-    
-    private var trustLevelColor: Color {
-        switch key.trustLevel {
-        case .ultimate:
-            return .green
-        case .full:
-            return .blue
-        case .marginal:
-            return .orange
-        case .none:
-            return .red
-        case .unknown:
-            return .secondary
         }
     }
 }
