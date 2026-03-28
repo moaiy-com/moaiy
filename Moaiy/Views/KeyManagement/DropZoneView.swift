@@ -51,7 +51,8 @@ struct KeyDropZoneView: View {
             
             for provider in providers {
                 do {
-                    if let url = try await provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) as? URL {
+                    let item = try await provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier)
+                    if let url = resolvedURL(from: item) {
                         urls.append(url)
                     }
                 } catch {
@@ -65,6 +66,22 @@ struct KeyDropZoneView: View {
                 onDrop(urls)
             }
         }
+    }
+
+    private func resolvedURL(from item: NSSecureCoding?) -> URL? {
+        if let data = item as? Data {
+            return URL(dataRepresentation: data, relativeTo: nil)
+        }
+        if let url = item as? URL {
+            return url
+        }
+        if let nsURL = item as? NSURL {
+            return nsURL as URL
+        }
+        if let string = item as? String {
+            return URL(string: string)
+        }
+        return nil
     }
 }
 
