@@ -104,14 +104,28 @@ final class GPGService {
     
     private(set) var isReady = false
     private(set) var gpgVersion: String?
+    private(set) var isUsingExternalGPGHome = false
     
     // MARK: - Private Properties
     
     private var gpgURL: URL?
     private var gpgHome: URL?
+    private var scopedExternalGPGHomeURL: URL?
+
+    private let defaults = UserDefaults.standard
+    private let useExternalGPGHomeKey = Constants.StorageKeys.useExternalGPGHome
+    private let externalGPGHomeBookmarkKey = Constants.StorageKeys.externalGPGHomeBookmark
     
     private var gpgPath: String {
         gpgURL?.path ?? ""
+    }
+
+    var activeGPGHomePath: String {
+        gpgHome?.path ?? ""
+    }
+
+    var systemGPGHomeURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gnupg")
     }
     
     /// Actor for executing GPG commands off the main thread
@@ -194,32 +208,61 @@ final class GPGService {
     private func setupGPGHome() throws {
         // Keep GNUPGHOME in app-controlled storage by default.
         // Developers can explicitly opt in to system ~/.gnupg during local debugging.
-        let systemGPGHome = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gnupg")
+        let systemGPGHome = systemGPGHomeURL
         let useSystemHome = ProcessInfo.processInfo.environment["MOAIY_USE_SYSTEM_GNUPG"] == "1"
         if useSystemHome, FileManager.default.fileExists(atPath: systemGPGHome.path) {
+            stopScopedExternalGPGHomeAccess()
             gpgHome = systemGPGHome
+            isUsingExternalGPGHome = true
             logger.warning("Using system GPG home due to MOAIY_USE_SYSTEM_GNUPG override")
             return
         }
-        
-        // Production: create app-specific GPG home
-        guard let containerURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            throw GPGError.fileAccessDenied("Application Support directory")
+
+        if defaults.bool(forKey: useExternalGPGHomeKey),
+           let externalHome = try resolveExternalGPGHomeFromBookmark() {
+            gpgHome = externalHome
+            isUsingExternalGPGHome = true
+            logger.info("Using external GPG home from bookmark: \(externalHome.path)")
+            return
         }
-        
-        let gnupgHome = containerURL.appendingPathComponent("gnupg")
-        
-        if !FileManager.default.fileExists(atPath: gnupgHome.path) {
-            try FileManager.default.createDirectory(at: gnupgHome, withIntermediateDirectories: true)
-            
-            // Set appropriate permissions for GPG home
-            try FileManager.default.setAttributes(
-                [.posixPermissions: 0o700],
-                ofItemAtPath: gnupgHome.path
-            )
+
+        stopScopedExternalGPGHomeAccess()
+        gpgHome = try appManagedGPGHomeURL()
+        isUsingExternalGPGHome = false
+    }
+
+    func systemGPGHomeLikelyExists() -> Bool {
+        FileManager.default.fileExists(atPath: systemGPGHomeURL.path)
+    }
+
+    func configureExternalGPGHome(_ url: URL) throws {
+        try ensureGPGHomeDirectoryExists(at: url)
+
+        let bookmarkData = try url.bookmarkData(
+            options: .withSecurityScope,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+
+        defaults.set(bookmarkData, forKey: externalGPGHomeBookmarkKey)
+        defaults.set(true, forKey: useExternalGPGHomeKey)
+
+        let accessGranted = url.startAccessingSecurityScopedResource()
+        if accessGranted {
+            stopScopedExternalGPGHomeAccess()
+            scopedExternalGPGHomeURL = url
         }
-        
-        gpgHome = gnupgHome
+
+        gpgHome = url
+        isUsingExternalGPGHome = true
+    }
+
+    func useAppManagedGPGHome() throws {
+        defaults.set(false, forKey: useExternalGPGHomeKey)
+        defaults.removeObject(forKey: externalGPGHomeBookmarkKey)
+        stopScopedExternalGPGHomeAccess()
+        gpgHome = try appManagedGPGHomeURL()
+        isUsingExternalGPGHome = false
     }
     
     /// Verify GPG is working
@@ -230,6 +273,67 @@ final class GPGService {
             let version = output.components(separatedBy: "\n").first ?? "Unknown"
             self.gpgVersion = version
         }
+    }
+
+    private func appManagedGPGHomeURL() throws -> URL {
+        guard let containerURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            throw GPGError.fileAccessDenied("Application Support directory")
+        }
+        let gnupgHome = containerURL.appendingPathComponent("gnupg")
+        try ensureGPGHomeDirectoryExists(at: gnupgHome)
+        return gnupgHome
+    }
+
+    private func ensureGPGHomeDirectoryExists(at url: URL) throws {
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: url.path
+        )
+    }
+
+    private func resolveExternalGPGHomeFromBookmark() throws -> URL? {
+        guard let bookmarkData = defaults.data(forKey: externalGPGHomeBookmarkKey) else {
+            return nil
+        }
+
+        var isStale = false
+        let url = try URL(
+            resolvingBookmarkData: bookmarkData,
+            options: .withSecurityScope,
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        )
+
+        if isStale {
+            let refreshedBookmark = try url.bookmarkData(
+                options: .withSecurityScope,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+            defaults.set(refreshedBookmark, forKey: externalGPGHomeBookmarkKey)
+        }
+
+        let accessGranted = url.startAccessingSecurityScopedResource()
+        if accessGranted {
+            stopScopedExternalGPGHomeAccess()
+            scopedExternalGPGHomeURL = url
+        } else if !FileManager.default.fileExists(atPath: url.path) {
+            logger.warning("External GPG home unavailable, falling back to app-managed keyring")
+            defaults.set(false, forKey: useExternalGPGHomeKey)
+            defaults.removeObject(forKey: externalGPGHomeBookmarkKey)
+            return nil
+        }
+
+        try ensureGPGHomeDirectoryExists(at: url)
+        return url
+    }
+
+    private func stopScopedExternalGPGHomeAccess() {
+        scopedExternalGPGHomeURL?.stopAccessingSecurityScopedResource()
+        scopedExternalGPGHomeURL = nil
     }
     
     // MARK: - Key Management
@@ -254,6 +358,71 @@ final class GPGService {
         }
         
         return parseKeyList(output, secretOnly: secretOnly)
+    }
+
+    func inspectKeyring(at homeURL: URL) async throws -> KeyringSnapshot {
+        let publicKeys = try await listKeys(at: homeURL, secretOnly: false)
+        let secretKeys = try await listKeys(at: homeURL, secretOnly: true)
+
+        return KeyringSnapshot(
+            homePath: homeURL.path,
+            publicKeyCount: publicKeys.count,
+            secretKeyCount: secretKeys.count
+        )
+    }
+
+    func migrateKeys(fromExternalGPGHome sourceHomeURL: URL) async throws -> KeyMigrationResult {
+        let snapshot = try await inspectKeyring(at: sourceHomeURL)
+
+        guard snapshot.totalKeyCount > 0 else {
+            return KeyMigrationResult(
+                imported: 0,
+                unchanged: 0,
+                sourcePublicKeyCount: 0,
+                sourceSecretKeyCount: 0,
+                secretKeysMigrated: false
+            )
+        }
+
+        var importedTotal = 0
+        var unchangedTotal = 0
+        var secretKeysMigrated = false
+
+        let publicExport = try await executeGPG(
+            arguments: ["--armor", "--export"],
+            environment: ["GNUPGHOME": sourceHomeURL.path]
+        )
+        guard publicExport.exitCode == 0 else {
+            throw GPGError.exportFailed(publicExport.stderr ?? "Failed to export public keys")
+        }
+        if let publicData = publicExport.data, !publicData.isEmpty {
+            let importResult = try await importArmorData(publicData, fileName: "migration-public.asc")
+            importedTotal += importResult.imported
+            unchangedTotal += importResult.unchanged
+        }
+
+        let secretExport = try await executeGPG(
+            arguments: ["--armor", "--export-secret-keys"],
+            environment: ["GNUPGHOME": sourceHomeURL.path]
+        )
+        if secretExport.exitCode == 0,
+           let secretData = secretExport.data,
+           !secretData.isEmpty {
+            let importResult = try await importArmorData(secretData, fileName: "migration-secret.asc")
+            importedTotal += importResult.imported
+            unchangedTotal += importResult.unchanged
+            secretKeysMigrated = true
+        } else if snapshot.secretKeyCount > 0 {
+            logger.warning("Secret key migration skipped: \(secretExport.stderr ?? "no export output")")
+        }
+
+        return KeyMigrationResult(
+            imported: importedTotal,
+            unchanged: unchangedTotal,
+            sourcePublicKeyCount: snapshot.publicKeyCount,
+            sourceSecretKeyCount: snapshot.secretKeyCount,
+            secretKeysMigrated: secretKeysMigrated
+        )
     }
     
     /// Generate a new key pair
@@ -876,6 +1045,50 @@ final class GPGService {
         }
     }
 
+    private func listKeys(at homeURL: URL, secretOnly: Bool) async throws -> [GPGKey] {
+        let arguments = secretOnly
+            ? ["--list-secret-keys", "--with-colons", "--fixed-list-mode"]
+            : ["--list-keys", "--with-colons", "--fixed-list-mode"]
+
+        let result = try await executeGPG(
+            arguments: arguments,
+            environment: ["GNUPGHOME": homeURL.path]
+        )
+
+        guard result.exitCode == 0 else {
+            let message = result.stderr ?? "Failed to list keys from \(homeURL.path)"
+            throw GPGError.executionFailed(message)
+        }
+
+        guard let output = result.stdout else {
+            return []
+        }
+
+        return parseKeyList(output, secretOnly: secretOnly)
+    }
+
+    private func importArmorData(_ data: Data, fileName: String) async throws -> KeyImportResult {
+        let tempRoot = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("moaiy-migration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let armorFileURL = tempRoot.appendingPathComponent(fileName)
+        try data.write(to: armorFileURL, options: .atomic)
+
+        let result = try await executeGPG(
+            arguments: ["--import", "--status-fd", "1", armorFileURL.path]
+        )
+        try ensureSuccess(result, as: GPGError.importFailed)
+
+        guard let output = result.stdout else {
+            return KeyImportResult(imported: 0, unchanged: 0, newKeyIDs: [])
+        }
+        return parseImportResult(output)
+    }
+
     private func formatExpirationDate(_ date: Date?) -> String {
         guard let date else { return "0" }
         let formatter = DateFormatter()
@@ -1191,6 +1404,24 @@ struct GPGKey: Identifiable, Hashable {
     var isTrusted: Bool {
         trustLevel == .full || trustLevel == .ultimate
     }
+}
+
+struct KeyringSnapshot {
+    let homePath: String
+    let publicKeyCount: Int
+    let secretKeyCount: Int
+
+    var totalKeyCount: Int {
+        publicKeyCount + secretKeyCount
+    }
+}
+
+struct KeyMigrationResult {
+    let imported: Int
+    let unchanged: Int
+    let sourcePublicKeyCount: Int
+    let sourceSecretKeyCount: Int
+    let secretKeysMigrated: Bool
 }
 
 /// Key import result

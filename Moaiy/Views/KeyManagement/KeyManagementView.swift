@@ -106,6 +106,18 @@ struct KeyManagementView: View {
                 Text("confirm_delete_key_message \(key.name)")
             }
         }
+        .alert("migration_system_keyring_title", isPresented: $viewModel.showSystemKeyringMigrationPrompt) {
+            Button("action_import_key") {
+                Task {
+                    await viewModel.migrateFromSystemKeyring()
+                }
+            }
+            Button("action_not_now", role: .cancel) {
+                viewModel.dismissSystemKeyringMigrationPrompt()
+            }
+        } message: {
+            Text("migration_system_keyring_message")
+        }
         .alert("error_occurred", isPresented: .constant(viewModel.errorMessage != nil)) {
             Button("action_retry") {
                 Task { await viewModel.refresh() }
@@ -116,6 +128,24 @@ struct KeyManagementView: View {
         } message: {
             if let error = viewModel.errorMessage {
                 Text(error)
+            }
+        }
+        .overlay {
+            if viewModel.isSystemKeyringMigrationRunning {
+                ZStack {
+                    Color.black.opacity(0.15)
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .controlSize(.large)
+                        Text("migration_keyring_in_progress")
+                            .font(.headline)
+                    }
+                    .padding(24)
+                    .background(.regularMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
             }
         }
     }

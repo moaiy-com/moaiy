@@ -93,6 +93,15 @@ enum Constants {
         
         /// Key for expiration reminder days
         static let expirationReminderDays = "expirationReminderDays"
+
+        /// Whether the user enabled an external GPG home directory
+        static let useExternalGPGHome = "com.moaiy.useExternalGPGHome"
+
+        /// Security-scoped bookmark for external GPG home directory
+        static let externalGPGHomeBookmark = "com.moaiy.externalGPGHomeBookmark"
+
+        /// Whether first-run system keyring migration prompt was dismissed/completed
+        static let systemKeyringMigrationHandled = "com.moaiy.systemKeyringMigrationHandled"
     }
     
     // MARK: - Backup

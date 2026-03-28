@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     @AppStorage("appearance") private var appearance = 0
@@ -17,6 +18,10 @@ struct SettingsView: View {
 
     @State private var showingBackupManager = false
     @State private var gpgVersion: String = ""
+    @State private var activeGPGHomePath: String = ""
+    @State private var isUsingExternalGPGHome = false
+    @State private var keyringError: String?
+    @State private var isSwitchingKeyring = false
     
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -87,6 +92,61 @@ struct SettingsView: View {
                 Text("section_encryption")
                     .font(.headline)
             }
+
+            Section {
+                HStack(alignment: .top) {
+                    Text("setting_keyring_mode")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if isUsingExternalGPGHome {
+                        Text("setting_keyring_mode_external")
+                            .foregroundStyle(.primary)
+                    } else {
+                        Text("setting_keyring_mode_app")
+                            .foregroundStyle(.primary)
+                    }
+                }
+
+                HStack(alignment: .top) {
+                    Text("setting_keyring_path")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if activeGPGHomePath.isEmpty {
+                        Text("setting_keyring_path_unavailable")
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.trailing)
+                    } else {
+                        Text(activeGPGHomePath)
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.trailing)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                    }
+                }
+
+                Button("action_select_external_keyring") {
+                    chooseExternalKeyringFolder()
+                }
+                .disabled(isSwitchingKeyring)
+
+                if isUsingExternalGPGHome {
+                    Button("action_use_app_managed_keyring") {
+                        Task {
+                            await switchToAppManagedKeyring()
+                        }
+                    }
+                    .disabled(isSwitchingKeyring)
+                }
+
+                if let keyringError {
+                    Text(keyringError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            } header: {
+                Text("section_keyring")
+                    .font(.headline)
+            }
             
             Section {
                 HStack {
@@ -119,6 +179,7 @@ struct SettingsView: View {
         .frame(minWidth: 400, minHeight: 400)
         .task {
             await loadGPGVersion()
+            refreshKeyringState()
         }
         .sheet(isPresented: $showingBackupManager) {
             BackupManagerView()
@@ -134,6 +195,63 @@ struct SettingsView: View {
         } else {
             gpgVersion = "about_gpg_not_available"
         }
+    }
+
+    @MainActor
+    private func refreshKeyringState() {
+        let service = GPGService.shared
+        activeGPGHomePath = service.activeGPGHomePath
+        isUsingExternalGPGHome = service.isUsingExternalGPGHome
+    }
+
+    private func chooseExternalKeyringFolder() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.directoryURL = GPGService.shared.systemGPGHomeURL.deletingLastPathComponent()
+        panel.message = String(localized: "setting_keyring_picker_message")
+        panel.prompt = String(localized: "action_select_external_keyring")
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return
+        }
+
+        Task {
+            await useExternalKeyring(at: url)
+        }
+    }
+
+    @MainActor
+    private func useExternalKeyring(at url: URL) async {
+        isSwitchingKeyring = true
+        keyringError = nil
+
+        do {
+            try GPGService.shared.configureExternalGPGHome(url)
+            await AppState.shared.keyManagement.refresh()
+            refreshKeyringState()
+        } catch {
+            keyringError = error.localizedDescription
+        }
+
+        isSwitchingKeyring = false
+    }
+
+    @MainActor
+    private func switchToAppManagedKeyring() async {
+        isSwitchingKeyring = true
+        keyringError = nil
+
+        do {
+            try GPGService.shared.useAppManagedGPGHome()
+            await AppState.shared.keyManagement.refresh()
+            refreshKeyringState()
+        } catch {
+            keyringError = error.localizedDescription
+        }
+
+        isSwitchingKeyring = false
     }
 }
 
