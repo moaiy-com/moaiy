@@ -15,6 +15,7 @@ struct KeyCardView: View {
     @State private var operationResults: [OperationResult] = []
     @State private var showingResultOverlay = false
     @State private var showingPasswordSheet = false
+    @State private var passwordSheetFileName = ""
     @State private var pendingDecryptRequests: [DecryptRequest] = []
     
     private let detector = GPGFileTypeDetector()
@@ -50,24 +51,24 @@ struct KeyCardView: View {
             )
         }
         .sheet(isPresented: $showingPasswordSheet) {
-            if let request = pendingDecryptRequests.first {
-                PasswordInputSheet(
-                    fileName: request.sourceURL.lastPathComponent,
-                    onConfirm: { password in
-                        showingPasswordSheet = false
-                        Task {
-                            await performQueuedDecryptions(password: password)
-                        }
-                    },
-                    onCancel: {
-                        showingPasswordSheet = false
-                        pendingDecryptRequests = []
-                        if !operationResults.isEmpty {
-                            showingResultOverlay = true
-                        }
+            PasswordInputSheet(
+                fileName: passwordSheetFileName,
+                onConfirm: { password in
+                    showingPasswordSheet = false
+                    passwordSheetFileName = ""
+                    Task {
+                        await performQueuedDecryptions(password: password)
                     }
-                )
-            }
+                },
+                onCancel: {
+                    showingPasswordSheet = false
+                    passwordSheetFileName = ""
+                    pendingDecryptRequests = []
+                    if !operationResults.isEmpty {
+                        showingResultOverlay = true
+                    }
+                }
+            )
         }
         .contextMenu {
             Button(action: {
@@ -254,14 +255,20 @@ struct KeyCardView: View {
             isProcessing = true
             operationResults = []
             pendingDecryptRequests = []
+            passwordSheetFileName = ""
             
             for url in urls {
+                let hasScopedAccess = url.startAccessingSecurityScopedResource()
                 let fileType = await detector.detectFileType(at: url)
+                if hasScopedAccess {
+                    url.stopAccessingSecurityScopedResource()
+                }
                 await processFile(url: url, type: fileType)
             }
             
             isProcessing = false
             if !pendingDecryptRequests.isEmpty {
+                passwordSheetFileName = pendingDecryptRequests.first?.sourceURL.lastPathComponent ?? ""
                 showingPasswordSheet = true
                 return
             }
