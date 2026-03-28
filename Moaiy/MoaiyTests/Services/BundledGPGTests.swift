@@ -237,6 +237,26 @@ struct BundledGPGTests {
             Issue.record("listKeys should not fail on empty keyring: \(error.localizedDescription)")
         }
     }
+
+    @Test("App-managed GNUPGHOME keeps gpg-agent socket path short")
+    @MainActor
+    func appManagedGPGHomeSocketPathIsShortEnough() async throws {
+        let service = GPGService.shared
+
+        try await Task.sleep(for: .seconds(1))
+
+        guard service.isReady else {
+            Issue.record("GPGService is not ready")
+            return
+        }
+
+        guard !service.isUsingExternalGPGHome else {
+            return
+        }
+
+        let socketPath = (service.activeGPGHomePath as NSString).appendingPathComponent("S.gpg-agent.extra")
+        #expect(socketPath.count < 104, "gpg-agent socket path must stay under UNIX socket length limits")
+    }
     
     // MARK: - Binary Signature Tests
     

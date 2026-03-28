@@ -345,12 +345,43 @@ final class GPGService {
     }
 
     private func appManagedGPGHomeURL() throws -> URL {
-        guard let containerURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+        let preferredHome = try preferredAppManagedGPGHomeURL()
+        let legacyHome = try legacyAppManagedGPGHomeURL()
+        let fileManager = FileManager.default
+
+        if preferredHome.path != legacyHome.path,
+           !fileManager.fileExists(atPath: preferredHome.path),
+           fileManager.fileExists(atPath: legacyHome.path) {
+            do {
+                try fileManager.moveItem(at: legacyHome, to: preferredHome)
+                logger.notice("Migrated app-managed GPG home to shorter path")
+            } catch {
+                logger.error("Failed to migrate GPG home: \(error.localizedDescription)")
+                do {
+                    try fileManager.copyItem(at: legacyHome, to: preferredHome)
+                    logger.notice("Copied app-managed GPG home to shorter path after move failure")
+                } catch {
+                    logger.error("Failed to copy GPG home: \(error.localizedDescription)")
+                }
+            }
+        }
+
+        try ensureGPGHomeDirectoryExists(at: preferredHome)
+        return preferredHome
+    }
+
+    private func preferredAppManagedGPGHomeURL() throws -> URL {
+        guard let libraryURL = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first else {
+            throw GPGError.fileAccessDenied("Library directory")
+        }
+        return libraryURL.appendingPathComponent("gnupg", isDirectory: true)
+    }
+
+    private func legacyAppManagedGPGHomeURL() throws -> URL {
+        guard let applicationSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             throw GPGError.fileAccessDenied("Application Support directory")
         }
-        let gnupgHome = containerURL.appendingPathComponent("gnupg")
-        try ensureGPGHomeDirectoryExists(at: gnupgHome)
-        return gnupgHome
+        return applicationSupportURL.appendingPathComponent("gnupg", isDirectory: true)
     }
 
     private func ensureGPGHomeDirectoryExists(at url: URL) throws {
