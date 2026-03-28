@@ -48,21 +48,23 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 ### Building the Project
 
-1. Open `MoaiySandboxTest/MoaiySandboxTest.xcodeproj` in Xcode
-2. Build the project (Cmd+B)
-3. Run tests (Cmd+U)
+1. Open `Moaiy/Moaiy.xcodeproj` in Xcode
+2. Select the `Moaiy` scheme
+3. Build the project (Cmd+B) and run tests (Cmd+U)
 
 ### Bundling GPG
 
 If you need to bundle GPG with the application:
 
 ```bash
-# Run the GPG bundling script
-./fix_gpg_deps.sh
+# Build/update the bundled GPG runtime under Moaiy/Resources/gpg.bundle
+./scripts/prepare_gpg_bundle.sh
 
-# Or for a specific configuration
-./fix_gpg_deps.sh Debug   # Debug build
-./fix_gpg_deps.sh Release # Release build
+# Verify bundle integrity and runtime dependencies
+./scripts/verify_gpg_bundle.sh
+
+# If Xcode doesn't include the bundle yet, run helper instructions
+./scripts/add_gpg_bundle_to_xcode.sh
 ```
 
 ## Coding Standards
@@ -271,8 +273,8 @@ git commit -m "test: add unit tests for encryption service"
    ```bash
    # Build and test in Xcode (Cmd+U)
    # Or use command line:
-   xcodebuild test -project MoaiySandboxTest.xcodeproj \
-                   -scheme MoaiySandboxTest \
+   xcodebuild test -project Moaiy/Moaiy.xcodeproj \
+                   -scheme Moaiy \
                    -destination 'platform=macOS'
    ```
 
@@ -342,23 +344,23 @@ func generateKeyPair() async throws {
 
 ```bash
 # Run all tests
-xcodebuild test -project MoaiySandboxTest.xcodeproj \
-                -scheme MoaiySandboxTest \
+xcodebuild test -project Moaiy/Moaiy.xcodeproj \
+                -scheme Moaiy \
                 -destination 'platform=macOS'
 
 # Run specific test
-xcodebuild test -project MoaiySandboxTest.xcodeproj \
-                -scheme MoaiySandboxTest \
+xcodebuild test -project Moaiy/Moaiy.xcodeproj \
+                -scheme Moaiy \
                 -destination 'platform=macOS' \
-                -only-testing:MoaiySandboxTestTests/SpecificTestClass
+                -only-testing:MoaiyTests/SpecificTestClass
 ```
 
 ## Project Structure
 
 ```
 moaiy/
-├── MoaiySandboxTest/       # Sandbox test project
-├── MoaiyUI/                # UI component library
+├── Moaiy/                  # Main macOS app project
+├── MoaiySandboxTest/       # Sandbox validation project
 ├── doc/                    # Technical documentation
 ├── scripts/                # Build and utility scripts
 ├── .gitignore
