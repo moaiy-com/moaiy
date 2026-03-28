@@ -111,6 +111,8 @@ final class GPGService {
     private var gpgURL: URL?
     private var gpgHome: URL?
     private var scopedExternalGPGHomeURL: URL?
+    private var gpgAgentURL: URL?
+    private var gpgConnectAgentURL: URL?
 
     private let defaults = UserDefaults.standard
     private let useExternalGPGHomeKey = Constants.StorageKeys.useExternalGPGHome
@@ -176,6 +178,7 @@ final class GPGService {
             let executableURL = bundleURL.appendingPathComponent("bin/\(gpgExecutableName)")
             if FileManager.default.fileExists(atPath: executableURL.path) {
                 gpgURL = executableURL
+                configureAgentTools(for: executableURL.deletingLastPathComponent())
                 logger.info("Using bundled GPG: \(executableURL.path)")
                 return
             }
@@ -188,6 +191,7 @@ final class GPGService {
         logger.debug("Checking system path: \(systemPath), exists: \(FileManager.default.fileExists(atPath: systemPath))")
         if FileManager.default.fileExists(atPath: systemPath) {
             gpgURL = URL(fileURLWithPath: systemPath)
+            configureAgentTools(for: URL(fileURLWithPath: systemPath).deletingLastPathComponent())
             logger.info("Using system GPG: \(systemPath)")
             return
         }
@@ -197,11 +201,28 @@ final class GPGService {
         logger.debug("Checking homebrew path: \(homebrewPath), exists: \(FileManager.default.fileExists(atPath: homebrewPath))")
         if FileManager.default.fileExists(atPath: homebrewPath) {
             gpgURL = URL(fileURLWithPath: homebrewPath)
+            configureAgentTools(for: URL(fileURLWithPath: homebrewPath).deletingLastPathComponent())
             logger.info("Using Homebrew GPG: \(homebrewPath)")
             return
         }
         
         throw GPGError.gpgNotFound
+    }
+
+    private func configureAgentTools(for binDirectory: URL) {
+        let agent = binDirectory.appendingPathComponent("gpg-agent")
+        if FileManager.default.fileExists(atPath: agent.path) {
+            gpgAgentURL = agent
+        } else {
+            gpgAgentURL = nil
+        }
+
+        let connectAgent = binDirectory.appendingPathComponent("gpg-connect-agent")
+        if FileManager.default.fileExists(atPath: connectAgent.path) {
+            gpgConnectAgentURL = connectAgent
+        } else {
+            gpgConnectAgentURL = nil
+        }
     }
     
     /// Setup GPG home directory in app container
@@ -272,6 +293,54 @@ final class GPGService {
         if let output = result.stdout {
             let version = output.components(separatedBy: "\n").first ?? "Unknown"
             self.gpgVersion = version
+        }
+    }
+
+    private func ensureGPGAgentRunningIfNeeded() async throws {
+        guard gpgHome != nil else { return }
+        guard gpgAgentURL != nil, gpgConnectAgentURL != nil else { return }
+
+        if await canConnectToGPGAgent() {
+            return
+        }
+
+        guard let gpgAgentURL else { return }
+        let launchResult = try await processExecutor.execute(
+            executableURL: gpgAgentURL,
+            arguments: ["--daemon"],
+            environment: [:],
+            gpgHome: gpgHome,
+            input: nil,
+            timeout: 10
+        )
+
+        if launchResult.exitCode != 0 {
+            let message = launchResult.stderr ?? "Failed to launch gpg-agent (exit code: \(launchResult.exitCode))"
+            throw GPGError.executionFailed(message)
+        }
+
+        try await Task.sleep(nanoseconds: 250_000_000)
+
+        guard await canConnectToGPGAgent() else {
+            throw GPGError.executionFailed("gpg-agent is not reachable after launch")
+        }
+    }
+
+    private func canConnectToGPGAgent() async -> Bool {
+        guard let gpgConnectAgentURL else { return false }
+
+        do {
+            let result = try await processExecutor.execute(
+                executableURL: gpgConnectAgentURL,
+                arguments: ["/bye"],
+                environment: [:],
+                gpgHome: gpgHome,
+                input: nil,
+                timeout: 5
+            )
+            return result.exitCode == 0
+        } catch {
+            return false
         }
     }
 
@@ -433,6 +502,8 @@ final class GPGService {
     ///   - passphrase: Optional passphrase for the key
     /// - Returns: Fingerprint of the generated key
     func generateKey(name: String, email: String, keyType: KeyType, passphrase: String? = nil) async throws -> String {
+        try await ensureGPGAgentRunningIfNeeded()
+
         // Build key generation parameters
         let keyParams = buildKeyGenerationParams(
             name: name,
@@ -530,6 +601,8 @@ final class GPGService {
     ///   - armor: If true, export in ASCII armor format
     /// - Returns: Exported key data
     func exportSecretKey(keyID: String, passphrase: String, armor: Bool = true) async throws -> Data {
+        try await ensureGPGAgentRunningIfNeeded()
+
         var arguments = [
             "--batch",
             "--yes",
@@ -575,6 +648,8 @@ final class GPGService {
     ///   - expiresAt: New expiration date. Pass nil for no expiration.
     ///   - passphrase: Optional key passphrase for loopback mode
     func updateKeyExpiration(keyID: String, expiresAt: Date?, passphrase: String? = nil) async throws {
+        try await ensureGPGAgentRunningIfNeeded()
+
         let expiration = formatExpirationDate(expiresAt)
         var arguments = ["--batch", "--yes", "--quick-set-expire", keyID, expiration]
         var input: String?
@@ -600,6 +675,8 @@ final class GPGService {
     ///   - email: New user email
     ///   - passphrase: Optional key passphrase for loopback mode
     func addUserID(keyID: String, name: String, email: String, passphrase: String? = nil) async throws {
+        try await ensureGPGAgentRunningIfNeeded()
+
         let sanitizedName = name
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -631,6 +708,8 @@ final class GPGService {
     ///   - oldPassphrase: Current passphrase
     ///   - newPassphrase: New passphrase
     func changePassphrase(keyID: String, oldPassphrase: String, newPassphrase: String) async throws {
+        try await ensureGPGAgentRunningIfNeeded()
+
         let input = "\(oldPassphrase)\n\(newPassphrase)\n\(newPassphrase)\n"
         let result = try await executeGPG(
             arguments: [
@@ -748,6 +827,8 @@ final class GPGService {
     ///   - passphrase: Passphrase for the private key
     /// - Returns: Decrypted text
     func decrypt(text: String, passphrase: String) async throws -> String {
+        try await ensureGPGAgentRunningIfNeeded()
+
         let result = try await executeGPG(
             arguments: ["--decrypt", "--batch", "--passphrase-fd", "0"],
             input: passphrase + "\n" + text
@@ -799,6 +880,8 @@ final class GPGService {
     ///   - destinationURL: Destination file URL
     ///   - passphrase: Passphrase for the private key
     func decryptFile(sourceURL: URL, destinationURL: URL, passphrase: String) async throws {
+        try await ensureGPGAgentRunningIfNeeded()
+
         let result = try await executeGPG(
             arguments: [
                 "--decrypt",
@@ -841,6 +924,8 @@ final class GPGService {
     ///   - clearSign: If true, use clear-sign format
     /// - Returns: Signed text
     func sign(text: String, keyID: String, passphrase: String, clearSign: Bool = true) async throws -> String {
+        try await ensureGPGAgentRunningIfNeeded()
+
         var arguments = ["--batch", "--passphrase-fd", "0", "--local-user", keyID]
         
         if clearSign {
@@ -940,6 +1025,8 @@ final class GPGService {
     ///   - passphrase: Passphrase for signing key
     ///   - trustLevel: Local trust level to set after signing
     func signKey(keyID: String, signerKeyID: String?, passphrase: String, trustLevel: TrustLevel? = nil) async throws {
+        try await ensureGPGAgentRunningIfNeeded()
+
         var arguments = ["--command-fd", "0", "--batch", "--yes"]
         
         if let signerKeyID = signerKeyID {
