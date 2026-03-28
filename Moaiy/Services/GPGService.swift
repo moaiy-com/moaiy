@@ -861,7 +861,7 @@ final class GPGService {
         try await ensureGPGAgentRunningIfNeeded()
 
         let result = try await executeGPG(
-            arguments: ["--decrypt", "--batch", "--passphrase-fd", "0"],
+            arguments: ["--decrypt", "--batch", "--pinentry-mode", "loopback", "--passphrase-fd", "0"],
             input: passphrase + "\n" + text
         )
         
@@ -953,11 +953,12 @@ final class GPGService {
                 "--decrypt",
                 "--batch",
                 "--yes",
+                "--pinentry-mode", "loopback",
                 "--passphrase-fd", "0",
                 "--output", stagedOutputURL.path,
                 stagedSourceURL.path
             ],
-            input: passphrase
+            input: passphrase + "\n"
         )
 
         if result.exitCode != 0 {
@@ -1001,7 +1002,7 @@ final class GPGService {
     func sign(text: String, keyID: String, passphrase: String, clearSign: Bool = true) async throws -> String {
         try await ensureGPGAgentRunningIfNeeded()
 
-        var arguments = ["--batch", "--passphrase-fd", "0", "--local-user", keyID]
+        var arguments = ["--batch", "--pinentry-mode", "loopback", "--passphrase-fd", "0", "--local-user", keyID]
         
         if clearSign {
             arguments.append("--clearsign")
