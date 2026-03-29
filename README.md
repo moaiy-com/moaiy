@@ -75,6 +75,7 @@ moaiy/
 ├── scripts/                # Build and packaging utilities
 ├── doc/                    # Technical documentation
 ├── CONTRIBUTING.md
+├── DISCLAIMER.md
 ├── README_CN.md
 └── LICENSE
 ```
@@ -99,3 +100,7 @@ If you discover a security issue, prefer private disclosure via GitHub Security 
 ## License
 
 MIT. See [LICENSE](./LICENSE).
+
+## Disclaimer
+
+For key-management, key-leakage, information-exposure, and financial-loss risk boundaries, see [DISCLAIMER.md](./DISCLAIMER.md).

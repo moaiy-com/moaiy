@@ -75,6 +75,7 @@ moaiy/
 ├── scripts/                # 构建与打包脚本
 ├── doc/                    # 技术文档
 ├── CONTRIBUTING.md
+├── DISCLAIMER.md
 ├── README.md
 └── LICENSE
 ```
@@ -99,3 +100,7 @@ moaiy/
 ## 许可证
 
 MIT，详见 [LICENSE](./LICENSE)。
+
+## 免责声明
+
+关于密钥管理、密钥泄漏、信息暴露与财产损失等责任边界，请查看英文版 [DISCLAIMER.md](./DISCLAIMER.md)。
