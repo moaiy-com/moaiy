@@ -98,7 +98,7 @@ struct BackupSheet: View {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
-        panel.message = "backup_choose_location_message"
+        panel.message = String(localized: "backup_choose_location_message")
         
         if panel.runModal() == .OK, let url = panel.url {
             backupLocation = url

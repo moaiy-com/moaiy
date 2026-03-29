@@ -512,7 +512,13 @@ struct BackupStatusCard: View {
                     .font(.headline)
 
                 if let date = lastBackupDate {
-                    Text("backup_status_last \(date.formatted(date: .long, time: .shortened))")
+                    Text(
+                        String(
+                            format: String(localized: "backup_status_last"),
+                            locale: Locale.current,
+                            date.formatted(date: .long, time: .shortened)
+                        )
+                    )
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {

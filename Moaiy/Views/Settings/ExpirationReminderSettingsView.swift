@@ -87,14 +87,26 @@ struct ExpirationReminderSettingsView: View {
                             HStack {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .foregroundStyle(.red)
-                                Text("expiration_expired_count \(reminderService.expiredKeys.count)")
+                                Text(
+                                    String(
+                                        format: String(localized: "expiration_expired_count"),
+                                        locale: Locale.current,
+                                        Int64(reminderService.expiredKeys.count)
+                                    )
+                                )
                                     .font(.subheadline)
                             }
 
                             HStack {
                                 Image(systemName: "clock.fill")
                                     .foregroundStyle(.orange)
-                                Text("expiration_expiring_count \(reminderService.expiringSoonKeys.count)")
+                                Text(
+                                    String(
+                                        format: String(localized: "expiration_expiring_count"),
+                                        locale: Locale.current,
+                                        Int64(reminderService.expiringSoonKeys.count)
+                                    )
+                                )
                                     .font(.subheadline)
                             }
 

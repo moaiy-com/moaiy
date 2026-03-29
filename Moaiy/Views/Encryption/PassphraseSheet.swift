@@ -30,7 +30,13 @@ struct PassphraseSheet: View {
                     .fontWeight(.semibold)
                 
                 if let keyName = keyName {
-                    Text("passphrase_subtitle \(keyName)")
+                    Text(
+                        String(
+                            format: String(localized: "passphrase_subtitle"),
+                            locale: Locale.current,
+                            keyName
+                        )
+                    )
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

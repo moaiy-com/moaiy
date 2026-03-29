@@ -1,124 +1,106 @@
 # Moaiy
 
-> **像摩艾一样守护您的秘密**
+> 像摩艾一样守护您的秘密
+
+Moaiy 是一个开源的 macOS 原生应用，专注于 OpenPGP（GPG）密钥管理与加解密工作流，使用 SwiftUI 构建。
 
 **[English Version](./README.md)**
 
-## 项目概述
+## 功能特性
 
-**Moaiy** 是一个傻瓜化、图形化的GPG密钥管理工具，源自摩艾石像 (Moai)，象征神秘感、安全性、长久性。
+- 生成、导入、导出和删除密钥
+- 文本加密与解密
+- 文件加密与解密
+- 信任管理、密钥签名与密钥编辑流程
+- 备份与恢复流程
+- 支持在沙盒环境中使用内置 GPG 运行时
 
-让信息加密走近普通用户，不再是极客们的专属工具。
+## 环境要求
 
-## 核心特色
+- macOS 14.0+（应用运行环境）
+- 支持 macOS 14 SDK 的 Xcode（建议使用最新稳定版）
 
-🗿 **神秘感** - 守护您的数字秘密，让敏感信息永远只属于您自己
+## 快速开始
 
-🔐 **安全性** - 提供军事级别的加密保护，让您的数据固若金汤
+### 方式 1：下载发布版本
 
-⏳ **长久性** - 设计理念是长期可靠，一次加密，永久保护
+- 从 [GitHub Releases](https://github.com/moaiy-com/moaiy/releases) 下载最新 `.dmg`
 
-## 目标用户
+### 方式 2：源码构建
 
-- **加密货币用户**: 需要安全存储助记词、私钥
-- **隐私保护者**: 希望加密个人文件和通信
-- **普通办公用户**: 需要加密敏感文档
-
-## 技术栈
-
-- **开发语言**: Swift 6.2
-- **UI框架**: SwiftUI
-- **最低支持**: macOS 12.0+
-- **加密工具**: 内置 GPG (完全自包含)
-
-## 项目结构
-
+```bash
+git clone https://github.com/moaiy-com/moaiy.git
+cd moaiy
+open Moaiy/Moaiy.xcodeproj
 ```
+
+或使用命令行构建：
+
+```bash
+xcodebuild -project Moaiy/Moaiy.xcodeproj \
+           -scheme Moaiy \
+           -destination 'platform=macOS' \
+           build
+```
+
+## 运行测试
+
+```bash
+xcodebuild test -project Moaiy/Moaiy.xcodeproj \
+                -scheme Moaiy \
+                -destination 'platform=macOS'
+```
+
+## 内置 GPG 工作流
+
+如果需要刷新内置 GPG bundle，可执行：
+
+```bash
+./scripts/prepare_gpg_bundle.sh
+./scripts/verify_gpg_bundle.sh
+```
+
+如果尚未将 bundle 添加到 Xcode，可执行：
+
+```bash
+./scripts/add_gpg_bundle_to_xcode.sh
+```
+
+## 仓库结构
+
+```text
 moaiy/
-├── README.md              # 项目说明（本文件）
-├── doc/                   # 开发工程文档
-│   ├── brand-story.md    # 品牌故事
-│   ├── product-design.md # 产品设计方案
-│   ├── technical-architecture.md # 技术架构
-│   ├── app-store-compliance.md   # 审核合规
-│   └── extreme-usability-design.md # 易用性设计
-├── Moaiy/                 # 主应用代码
-│   ├── Models/           # 数据模型
-│   ├── ViewModels/       # 业务逻辑
-│   ├── Views/            # UI界面
-│   ├── Services/         # 核心服务
-│   └── Utils/            # 工具类
-├── MoaiyTests/           # 单元测试
-└── Moaiy.xcodeproj       # Xcode项目
+├── Moaiy/                  # 主 macOS 应用
+├── MoaiySandboxTest/       # 沙盒验证项目
+├── scripts/                # 构建与打包脚本
+├── doc/                    # 技术文档
+├── CONTRIBUTING.md
+├── DISCLAIMER.md
+├── README.md
+└── LICENSE
 ```
 
-## 开发文档
+## 文档
 
-详细的开发文档位于 `doc/` 目录：
+- [贡献指南](./CONTRIBUTING.md)
+- [文档索引](./doc/README.md)
+- [技术架构](./doc/technical-architecture.md)
+- [Xcode 集成指南](./doc/xcode-integration-guide.md)
+- [内置 GPG 概览](./doc/bundled-gpg-summary.md)
 
-### 📋 [品牌故事](./doc/brand-story.md)
-品牌名称含义、价值观、发展路线
+## 本地化
 
-### 🎨 [产品设计方案](./doc/product-design.md)
-产品需求分析、功能规划、商业模式
+- UI 语言：English + 简体中文
+- 字符串资源：`Moaiy/Resources/Localizable.xcstrings`
 
-### 🏗️ [技术架构设计](./doc/technical-architecture.md)
-技术栈选择、系统架构、模块设计
+## 安全
 
-### ✅ [App Store 审核合规](./doc/app-store-compliance.md)
-审核风险分析、沙盒限制处理、合规要求
+如果发现安全问题，建议优先通过 GitHub Security Advisories 进行私下披露，而不是先公开提交 Issue。
 
-### 🚀 [极致易用性设计](./doc/extreme-usability-design.md)
-零配置体验、智能默认值、用户流程优化
+## 许可证
 
-## 开发状态
+MIT，详见 [LICENSE](./LICENSE)。
 
-**当前阶段**: 产品设计和可行性分析  
-**下一步**: 技术验证和原型开发
+## 免责声明
 
-## 功能亮点
-
-### 零门槛使用
-- 双击即用，无需任何技术背景
-- 完全自包含，无外部依赖
-- 5分钟完成首次加密
-
-### 智能化设计
-- 自动配置和智能推荐
-- 智能错误诊断和自动修复
-- 情境化帮助系统
-
-### 专业级安全
-- 使用最强加密算法（RSA-4096, AES-256）
-- 完全符合 App Store 审核要求
-- 硬件密钥支持（Pro版）
-
-## 版本规划
-
-### 免费开源版（GitHub）
-- ✅ 基础密钥管理
-- ✅ 文本/文件加密解密
-- ✅ 自动备份
-- ❌ 硬件密钥管理
-
-### Pro 付费版（App Store）
-- ✅ 免费版所有功能
-- ⭐ 硬件密钥管理（YubiKey/CanoKey）
-- ⭐ iCloud 同步
-- ⭐ 自动化脚本
-- ⭐ 优先技术支持
-
-## 联系方式
-
-- **项目名称**: Moaiy
-- **官方网站**: https://moaiy.com
-- **项目仓库**: GitHub (待创建)
-- **许可证**: 待定 (考虑 GPLv3 或 MIT)
-
-> 💡 **注**: moaiy.com 域名已注册，网站开发计划中
-
----
-
-*"像摩艾一样守护您的秘密"*
-
-*最后更新: 2026-03-08*
+关于密钥管理、密钥泄漏、信息暴露与财产损失等责任边界，请查看英文版 [DISCLAIMER.md](./DISCLAIMER.md)。

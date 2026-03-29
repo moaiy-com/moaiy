@@ -100,14 +100,18 @@ struct EncryptionView: View {
                         if !viewModel.pendingDecryptionFiles.isEmpty {
                             let completed = await viewModel.processPendingFileDecryptions(passphrase: passphrase)
                             if viewModel.errorMessage == nil && completed > 0 {
-                                successMessage = "file_decryption_complete \(completed)"
+                                successMessage = String(
+                                    format: String(localized: "file_decryption_complete"),
+                                    locale: Locale.current,
+                                    Int64(completed)
+                                )
                                 showSuccessMessage = true
                             }
                         } else {
                             // Regular text decryption
                             await viewModel.decryptText(passphrase: passphrase)
                             if viewModel.errorMessage == nil {
-                                successMessage = "decryption_success"
+                                successMessage = String(localized: "decryption_success")
                                 showSuccessMessage = true
                             }
                         }
@@ -232,7 +236,14 @@ struct TextEncryptionView: View {
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
-                            Text("last_operation \(opType.rawValue) \(time.formatted(date: .omitted, time: .shortened))")
+                            Text(
+                                String(
+                                    format: String(localized: "last_operation"),
+                                    locale: Locale.current,
+                                    opType.rawValue,
+                                    time.formatted(date: .omitted, time: .shortened)
+                                )
+                            )
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -250,7 +261,7 @@ struct TextEncryptionView: View {
         Task {
             await viewModel.encryptText()
             if viewModel.errorMessage == nil {
-                successMessage = "encryption_success"
+                successMessage = String(localized: "encryption_success")
                 showSuccessMessage = true
             }
         }
@@ -364,7 +375,13 @@ struct FileEncryptionView: View {
                             .frame(maxWidth: 400)
                         
                         if let currentFile = currentProcessingFile {
-                            Text("processing_file \(currentFile)")
+                            Text(
+                                String(
+                                    format: String(localized: "processing_file"),
+                                    locale: Locale.current,
+                                    currentFile
+                                )
+                            )
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -381,7 +398,13 @@ struct FileEncryptionView: View {
                             
                             Spacer()
                             
-                            Text("\(selectedFiles.count) files")
+                            Text(
+                                String(
+                                    format: String(localized: "selected_files_count"),
+                                    locale: Locale.current,
+                                    Int64(selectedFiles.count)
+                                )
+                            )
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                         }
@@ -531,7 +554,11 @@ struct FileEncryptionView: View {
         currentProcessingFile = nil
         
         if viewModel.errorMessage == nil {
-            successMessage = "file_encryption_complete \(Int(completedFiles))"
+            successMessage = String(
+                format: String(localized: "file_encryption_complete"),
+                locale: Locale.current,
+                Int64(completedFiles)
+            )
             showSuccessMessage = true
             selectedFiles.removeAll()
         }
