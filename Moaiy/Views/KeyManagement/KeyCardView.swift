@@ -28,16 +28,15 @@ struct KeyCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             keyInfoSection
-            
-            KeyDropZoneView(onDrop: { urls in
-                handleDroppedFiles(urls: urls)
-            })
-            .frame(height: 50)
         }
         .padding(12)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.92))
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.04), radius: 2, y: 0.5)
         .sheet(isPresented: $showingResultOverlay) {
             OperationResultOverlay(
                 results: operationResults,
@@ -89,70 +88,81 @@ struct KeyCardView: View {
     // MARK: - Subviews
     
     private var keyInfoSection: some View {
-        HStack(spacing: 16) {
-            Image(systemName: key.isSecret ? "key.fill" : "key")
-                .font(.title2)
-                .foregroundStyle(keyIconColor)
-                .frame(width: 40, height: 40)
-                .background(keyIconColor.opacity(0.1))
-                .clipShape(Circle())
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(key.name)
-                    .font(.headline)
-                
-                HStack(spacing: 8) {
-                    Text(key.isSecret ? "key_type_private" : "key_type_public")
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(keyTypeBadgeColor.opacity(0.2))
-                        .foregroundStyle(keyTypeBadgeColor)
-                        .clipShape(Capsule())
-                    
-                    Text(key.trustLevel.localizedName)
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(trustLevelColor.opacity(0.2))
-                        .foregroundStyle(trustLevelColor)
-                        .clipShape(Capsule())
-                    
-                    if key.isExpired {
-                        Text("status_expired")
+        HStack(alignment: .center, spacing: 12) {
+            HStack(spacing: 16) {
+                Image(systemName: key.isSecret ? "key.fill" : "key")
+                    .font(.title2)
+                    .foregroundStyle(keyIconColor)
+                    .frame(width: 40, height: 40)
+                    .background(keyIconColor.opacity(0.1))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(key.name)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    HStack(spacing: 8) {
+                        Text(key.isSecret ? "key_type_private" : "key_type_public")
                             .font(.caption)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Color.red.opacity(0.2))
-                            .foregroundStyle(.red)
+                            .background(keyTypeBadgeColor.opacity(0.2))
+                            .foregroundStyle(keyTypeBadgeColor)
                             .clipShape(Capsule())
+
+                        Text(key.trustLevel.localizedName)
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(trustLevelColor.opacity(0.2))
+                            .foregroundStyle(trustLevelColor)
+                            .clipShape(Capsule())
+
+                        if key.isExpired {
+                            Text("status_expired")
+                                .font(.caption)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.red.opacity(0.2))
+                                .foregroundStyle(.red)
+                                .clipShape(Capsule())
+                        }
+                    }
+
+                    Text(key.email)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    HStack(spacing: 12) {
+                        Label(key.displayKeyType, systemImage: "number")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Label(keyDateRangeDisplayText, systemImage: "calendar")
+                            .font(.caption)
+                            .foregroundStyle(key.isExpired ? Color.red : .secondary)
+                            .lineLimit(1)
                     }
                 }
-                
-                Text(key.email)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                
-                HStack(spacing: 8) {
-                    Label(key.displayKeyType, systemImage: "number")
-                    if let createdAt = key.createdAt {
-                        Text("•")
-                        Text(createdAt.formatted(date: .abbreviated, time: .omitted))
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.tertiary)
             }
-            
-            Spacer()
-            
-            HStack(spacing: 8) {
-                Button("action_encrypt", action: encryptFromPicker)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                
-                KeyActionMenu(key: key, onDelete: onDelete)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
+
+            KeyDropZoneView(onDrop: { urls in
+                handleDroppedFiles(urls: urls)
+            })
+            .frame(minWidth: 220, idealWidth: 280, maxWidth: 360)
+            .frame(height: 52)
+            .layoutPriority(0)
+
+            KeyActionMenu(key: key, onDelete: onDelete)
+                .frame(width: 36, alignment: .trailing)
+                .fixedSize()
+                .layoutPriority(3)
         }
     }
     
@@ -180,76 +190,21 @@ struct KeyCardView: View {
             return .secondary
         }
     }
+
+    private var keyDateRangeDisplayText: String {
+        let createdText = key.createdAt?.formatted(date: .abbreviated, time: .omitted) ?? "-"
+        let expirationText: String
+        if let expiresAt = key.expiresAt {
+            expirationText = expiresAt.formatted(date: .abbreviated, time: .omitted)
+        } else {
+            expirationText = String(localized: "statistics_no_expiration")
+        }
+
+        return "\(createdText) - \(expirationText)"
+    }
     
     // MARK: - File Handling
 
-    private func encryptFromPicker() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = true
-        panel.message = String(localized: "drop_zone_hint")
-
-        guard panel.runModal() == .OK else { return }
-        let selectedURLs = panel.urls
-        guard !selectedURLs.isEmpty else { return }
-
-        Task {
-            await encryptFiles(selectedURLs)
-        }
-    }
-
-    @MainActor
-    private func encryptFiles(_ urls: [URL]) async {
-        isProcessing = true
-        operationResults = []
-
-        for url in urls {
-            do {
-                let defaultOutputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
-                guard let outputURL = presentFileOperationSavePanel(
-                    defaultFileName: defaultOutputURL.lastPathComponent,
-                    preferredDirectory: url.deletingLastPathComponent()
-                ) else {
-                    continue
-                }
-
-                let hasSourceAccess = url.startAccessingSecurityScopedResource()
-                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
-                defer {
-                    if hasSourceAccess {
-                        url.stopAccessingSecurityScopedResource()
-                    }
-                    if hasOutputAccess {
-                        outputURL.stopAccessingSecurityScopedResource()
-                    }
-                }
-
-                try await GPGService.shared.encryptFile(
-                    sourceURL: url,
-                    destinationURL: outputURL,
-                    recipients: [key.fingerprint]
-                )
-                operationResults.append(
-                    OperationResult.successEncrypt(fileURL: url, outputURL: outputURL)
-                )
-            } catch {
-                operationResults.append(
-                    OperationResult.failure(
-                        fileURL: url,
-                        operation: .encrypt,
-                        errorMessage: error.localizedDescription
-                    )
-                )
-            }
-        }
-
-        isProcessing = false
-        if !operationResults.isEmpty {
-            showingResultOverlay = true
-        }
-    }
-    
     private func handleDroppedFiles(urls: [URL]) {
         Task { @MainActor in
             isProcessing = true

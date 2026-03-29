@@ -260,6 +260,26 @@ final class KeyManagementViewModel {
             throw error
         }
     }
+
+    /// Import a key from keyserver using URL/fingerprint/key ID/email query.
+    @discardableResult
+    func importKeyFromKeyserver(query: String, keyserver: String) async throws -> KeyImportResult {
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            let result = try await gpgService.importFromKeyserver(
+                query: query,
+                keyserver: keyserver
+            )
+            await loadKeys()
+            return result
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+            throw error
+        }
+    }
     
     /// Export a public key
     func exportPublicKey(_ key: GPGKey) async throws -> Data {

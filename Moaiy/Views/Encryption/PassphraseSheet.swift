@@ -18,6 +18,16 @@ struct PassphraseSheet: View {
     
     var body: some View {
         VStack(spacing: 24) {
+            HStack {
+                Spacer()
+                Button(action: onCancel) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+
             // Icon
             Image(systemName: "lock.shield")
                 .font(.system(size: 48))

@@ -5142,6 +5142,23 @@
         }
       }
     },
+    "main_window_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moaiy - An easy-to-use encrypt/decrypt tools"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moaiy - 易用的加密/解密工具"
+          }
+        }
+      }
+    },
     "section_keyring": {
       "extractionState": "manual",
       "localizations": {
@@ -7263,6 +7280,227 @@
           "stringUnit": {
             "state": "translated",
             "value": "取消全选"
+          }
+        }
+      }
+    },
+    "create_key_default_type_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default key type is configured in Settings."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认密钥类型可在设置中调整。"
+          }
+        }
+      }
+    },
+    "create_key_empty_passphrase_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create Without Password"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仍然不设密码并创建"
+          }
+        }
+      }
+    },
+    "create_key_empty_passphrase_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your private key will be stored without passphrase protection. Anyone with file access may use it."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "您的私钥将不受密码保护。任何能访问该文件的人都可能使用它。"
+          }
+        }
+      }
+    },
+    "create_key_empty_passphrase_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create Key Without Password?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确定不设密码创建密钥？"
+          }
+        }
+      }
+    },
+    "create_key_passphrase_tip_manager": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Store passphrases in a trusted password manager."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建议将密码保存在可信的密码管理器中。"
+          }
+        }
+      }
+    },
+    "create_key_passphrase_tip_recovery": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If you forget the passphrase, this private key cannot be recovered."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "若遗忘密码，该私钥将无法恢复使用。"
+          }
+        }
+      }
+    },
+    "create_key_passphrase_tip_strong": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use a strong passphrase (length + mixed characters)."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建议使用强密码（足够长度并包含多种字符）。"
+          }
+        }
+      }
+    },
+    "create_key_passphrase_tips_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passphrase Safety Tips"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "密码安全建议"
+          }
+        }
+      }
+    },
+    "import_from_keyserver": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import from Keyserver"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从 Keyserver 导入"
+          }
+        }
+      }
+    },
+    "import_keyserver_empty_query": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Please enter a key URL, fingerprint, key ID, or email."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请输入密钥 URL、指纹、Key ID 或邮箱。"
+          }
+        }
+      }
+    },
+    "import_keyserver_invalid_query": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to parse input. Use a key URL, fingerprint, key ID, or email."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法解析输入，请使用密钥 URL、指纹、Key ID 或邮箱。"
+          }
+        }
+      }
+    },
+    "import_keyserver_query_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supports key URL, fingerprint, key ID, or email."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支持输入密钥 URL、指纹、Key ID 或邮箱。"
+          }
+        }
+      }
+    },
+    "import_keyserver_query_placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste key URL, fingerprint, key ID, or email"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "粘贴密钥 URL、指纹、Key ID 或邮箱"
           }
         }
       }

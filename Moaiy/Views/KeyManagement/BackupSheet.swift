@@ -22,9 +22,13 @@ struct BackupSheet: View {
                     .font(.title2)
                     .fontWeight(.semibold)
                 Spacer()
-                Button("action_cancel") {
-                    dismiss()
+
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
                 }
+                .buttonStyle(.plain)
             }
             
             Text("backup_description")

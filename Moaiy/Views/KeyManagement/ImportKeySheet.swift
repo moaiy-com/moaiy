@@ -11,53 +11,100 @@ import UniformTypeIdentifiers
 struct ImportKeySheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(KeyManagementViewModel.self) private var viewModel
-    
+
+    private enum ImportMode: String, CaseIterable, Identifiable {
+        case file
+        case keyserver
+
+        var id: String { rawValue }
+    }
+
+    @State private var importMode: ImportMode = .file
     @State private var importedFileURL: URL?
+    @State private var keyserverQuery = ""
+    @State private var selectedKeyserver = "keys.openpgp.org"
     @State private var isImporting = false
     @State private var importError: String?
     @State private var importResult: KeyImportResult?
-    @State private var showingSuccess = false
-    
+
+    private let keyservers = [
+        "keys.openpgp.org",
+        "keyserver.ubuntu.com",
+        "pgp.mit.edu"
+    ]
+
     var body: some View {
         VStack(spacing: 24) {
             // Header
-            VStack(spacing: 8) {
-                Image(systemName: "square.and.arrow.down")
-                    .font(.system(size: 48))
-                    .foregroundStyle(Color.moaiyAccent)
-                
-                Text("action_import_key")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                
-                Text("import_key_description")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+            HStack(alignment: .top) {
+                VStack(spacing: 8) {
+                    Image(systemName: importMode == .file ? "square.and.arrow.down" : "globe")
+                        .font(.system(size: 48))
+                        .foregroundStyle(Color.moaiyAccent)
+
+                    Text("action_import_key")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+
+                    Text("import_key_description")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
             }
-            
-            // File selection
+
+            Picker("", selection: $importMode) {
+                Text("action_select_files").tag(ImportMode.file)
+                Text("import_from_keyserver").tag(ImportMode.keyserver)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: importMode) { _, _ in
+                importError = nil
+                importResult = nil
+            }
+
+            // Import source
             VStack(spacing: 16) {
-                if let fileURL = importedFileURL {
-                    FilePreviewCard(url: fileURL) {
-                        importedFileURL = nil
-                        importError = nil
-                        importResult = nil
+                if importMode == .file {
+                    if let fileURL = importedFileURL {
+                        FilePreviewCard(url: fileURL) {
+                            importedFileURL = nil
+                            importError = nil
+                            importResult = nil
+                        }
+                    } else {
+                        DropZoneView { url in
+                            importedFileURL = url
+                            importError = nil
+                            importResult = nil
+                        }
                     }
                 } else {
-                    DropZoneView { url in
-                        importedFileURL = url
+                    KeyserverImportCard(
+                        query: $keyserverQuery,
+                        selectedKeyserver: $selectedKeyserver,
+                        keyservers: keyservers
+                    )
+                    .onChange(of: keyserverQuery) { _, _ in
                         importError = nil
                         importResult = nil
                     }
                 }
             }
-            
+
             // Error message
             if let error = importError {
                 ErrorBanner(message: error)
             }
-            
+
             // Success message
             if let result = importResult {
                 SuccessBanner(
@@ -70,7 +117,7 @@ struct ImportKeySheet: View {
                     )
                 )
             }
-            
+
             // Actions
             HStack(spacing: 12) {
                 Button("action_cancel") {
@@ -78,20 +125,42 @@ struct ImportKeySheet: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
-                
-                Button("action_import_key") {
-                    importKey()
+
+                Button(action: {
+                    runImport()
+                }) {
+                    if isImporting {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text("action_import_key")
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(importedFileURL == nil || isImporting)
+                .disabled(!canImport || isImporting)
             }
         }
         .padding(32)
         .frame(width: 500)
     }
-    
-    private func importKey() {
+
+    private var canImport: Bool {
+        if importMode == .file {
+            return importedFileURL != nil
+        }
+        return !keyserverQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func runImport() {
+        if importMode == .file {
+            importFromFile()
+        } else {
+            importFromKeyserver()
+        }
+    }
+
+    private func importFromFile() {
         guard let fileURL = importedFileURL else { return }
 
         isImporting = true
@@ -112,6 +181,63 @@ struct ImportKeySheet: View {
                 isImporting = false
             }
         }
+    }
+
+    private func importFromKeyserver() {
+        let query = keyserverQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return }
+
+        isImporting = true
+        importError = nil
+        importResult = nil
+
+        Task { @MainActor in
+            do {
+                let result = try await viewModel.importKeyFromKeyserver(
+                    query: query,
+                    keyserver: selectedKeyserver
+                )
+                importResult = result
+                isImporting = false
+
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                dismiss()
+            } catch {
+                importError = error.localizedDescription
+                isImporting = false
+            }
+        }
+    }
+}
+
+struct KeyserverImportCard: View {
+    @Binding var query: String
+    @Binding var selectedKeyserver: String
+    let keyservers: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("keyserver_label")
+                .font(.headline)
+
+            TextField("import_keyserver_query_placeholder", text: $query)
+                .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+
+            Text("import_keyserver_query_hint")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker("keyserver_label", selection: $selectedKeyserver) {
+                ForEach(keyservers, id: \.self) { keyserver in
+                    Text(keyserver).tag(keyserver)
+                }
+            }
+            .pickerStyle(.menu)
+        }
+        .padding()
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 

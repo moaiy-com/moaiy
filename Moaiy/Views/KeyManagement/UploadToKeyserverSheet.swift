@@ -41,15 +41,25 @@ struct UploadToKeyserverSheet: View {
     }
     
     private var headerView: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 12) {
+            HStack {
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+
             Image(systemName: "globe")
                 .font(.system(size: 48))
                 .foregroundStyle(.blue)
-            
+
             Text("upload_to_keyserver_title")
                 .font(.title2)
                 .fontWeight(.semibold)
-            
+
             Text("upload_to_keyserver_description")
                 .font(.body)
                 .foregroundStyle(.secondary)

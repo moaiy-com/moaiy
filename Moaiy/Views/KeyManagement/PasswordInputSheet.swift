@@ -18,6 +18,15 @@ struct PasswordInputSheet: View {
     
     var body: some View {
         VStack(spacing: 24) {
+            HStack {
+                Spacer()
+                Button(action: onCancel) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
             headerView
             fileInfoView
             passwordField

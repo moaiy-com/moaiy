@@ -8,57 +8,9 @@
 import SwiftUI
 
 struct MainView: View {
-    @State private var selectedSection: Section? = .keyManagement
-    
-    enum Section: String, CaseIterable, Identifiable {
-        case keyManagement
-        case howTo
-        case settings
-        
-        var id: String { rawValue }
-        
-        var icon: String {
-            switch self {
-            case .keyManagement: return "key.fill"
-            case .howTo: return "book.fill"
-            case .settings: return "gearshape.fill"
-            }
-        }
-        
-        var title: LocalizedStringKey {
-            switch self {
-            case .keyManagement: return "section_key_management"
-            case .howTo: return "section_how_to"
-            case .settings: return "section_settings"
-            }
-        }
-    }
-    
     var body: some View {
-        NavigationSplitView {
-            List(selection: $selectedSection) {
-                ForEach(Section.allCases) { section in
-                    Label(section.title, systemImage: section.icon)
-                        .tag(section)
-                }
-            }
-            .listStyle(.sidebar)
-            .navigationTitle("Moaiy")
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 250)
-        } detail: {
-                if let section = selectedSection {
-                    switch section {
-                    case .keyManagement:
-                        KeyManagementView()
-                    case .howTo:
-                        HowToView()
-                    case .settings:
-                        SettingsView()
-                    }
-                } else {
-                    Text("placeholder_select_section")
-                        .foregroundStyle(.secondary)
-                }
+        NavigationStack {
+            KeyManagementView()
         }
     }
 }
@@ -67,4 +19,3 @@ struct MainView: View {
     MainView()
         .frame(width: 1000, height: 700)
 }
-

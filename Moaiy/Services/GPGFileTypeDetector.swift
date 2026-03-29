@@ -35,6 +35,11 @@ actor GPGFileTypeDetector {
         ("-----BEGIN PGP ARMORED FILE-----", .encrypted),
         ("-----BEGIN PGP SIGNED MESSAGE-----", .signature)
     ]
+
+    /// Filename extensions that are conventionally used for encrypted OpenPGP payloads.
+    private static let encryptedExtensions: Set<String> = [
+        "gpg", "pgp", "gpg2", "pgp2"
+    ]
     
     // MARK: - OpenPGP Packet Tags
     
@@ -73,18 +78,31 @@ actor GPGFileTypeDetector {
         if let quickResult = await quickDetect(at: url) {
             logger.debug("Quick detection result: \(String(describing: quickResult))")
             
-            // For encrypted/key files, verify with GPG for accuracy
+            // Encrypted packet/header detection is strong enough for routing to decrypt flow.
+            if quickResult == .encrypted {
+                return .encrypted
+            }
+
+            // For key files, verify with GPG for accuracy.
             switch quickResult {
-            case .encrypted, .publicKey, .privateKey:
+            case .publicKey, .privateKey:
                 let verified = await verifyWithGPG(url: url)
                 logger.debug("GPG verification result: \(verified)")
                 return verified ? quickResult : .notGPG
-            case .signature, .notGPG, .unknown:
+            case .signature, .notGPG, .unknown, .encrypted:
                 return quickResult
             }
         }
+
+        // Step 2: Extension fallback for common encrypted file names.
+        // This prevents false-negative "not GPG" classification when packet parsing or
+        // list-packets verification is blocked/noisy in sandboxed file-access paths.
+        if hasEncryptedExtension(url) {
+            logger.debug("Using encrypted extension fallback for: \(url.lastPathComponent)")
+            return .encrypted
+        }
         
-        // Step 2: If quick detection failed, try GPG verification
+        // Step 3: If quick detection failed, try GPG verification
         logger.debug("Quick detection inconclusive, trying GPG verification")
         let verified = await verifyWithGPG(url: url)
         return verified ? .encrypted : .notGPG
@@ -175,6 +193,11 @@ actor GPGFileTypeDetector {
         let isValid = await GPGService.shared.verifyGPGFile(at: url)
         logger.debug("GPG verification for \(url.path): \(isValid ? "valid" : "invalid")")
         return isValid
+    }
+
+    private func hasEncryptedExtension(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        return Self.encryptedExtensions.contains(ext)
     }
     
     // MARK: - Batch Detection
