@@ -137,7 +137,14 @@ struct ExpirationReminderSettingsView: View {
                                 Button(action: {
                                     Task { await reminderService.notifyExpiredKeys() }
                                 }) {
-                                    Label("expiration_notify_expired \(reminderService.expiredKeys.count)", systemImage: "exclamationmark.triangle.fill")
+                                    Label(
+                                        String(
+                                            format: String(localized: "expiration_notify_expired"),
+                                            locale: Locale.current,
+                                            Int64(reminderService.expiredKeys.count)
+                                        ),
+                                        systemImage: "exclamationmark.triangle.fill"
+                                    )
                                         .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.bordered)
@@ -148,7 +155,14 @@ struct ExpirationReminderSettingsView: View {
                                 Button(action: {
                                     Task { await reminderService.notifyExpiringSoonKeys() }
                                 }) {
-                                    Label("expiration_notify_expiring \(reminderService.expiringSoonKeys.count)", systemImage: "clock.fill")
+                                    Label(
+                                        String(
+                                            format: String(localized: "expiration_notify_expiring"),
+                                            locale: Locale.current,
+                                            Int64(reminderService.expiringSoonKeys.count)
+                                        ),
+                                        systemImage: "clock.fill"
+                                    )
                                         .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.bordered)

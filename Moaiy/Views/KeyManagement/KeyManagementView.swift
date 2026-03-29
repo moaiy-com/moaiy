@@ -103,7 +103,13 @@ struct KeyManagementView: View {
             }
         } message: {
             if let key = keyToDelete {
-                Text("confirm_delete_key_message \(key.name)")
+                Text(
+                    String(
+                        format: String(localized: "confirm_delete_key_message"),
+                        locale: Locale.current,
+                        key.name
+                    )
+                )
             }
         }
         .alert("migration_system_keyring_title", isPresented: $viewModel.showSystemKeyringMigrationPrompt) {

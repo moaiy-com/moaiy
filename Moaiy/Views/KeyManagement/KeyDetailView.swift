@@ -80,7 +80,7 @@ struct KeyDetailView: View {
                 .environment(viewModel)
         }
         .alert("error_delete_failed", isPresented: .constant(deleteError != nil)) {
-            Button("OK") {
+            Button("action_ok") {
                 deleteError = nil
             }
         } message: {

@@ -62,7 +62,12 @@ struct ImportKeySheet: View {
             if let result = importResult {
                 SuccessBanner(
                     message: String(localized: "import_success_message"),
-                    details: String(localized: "import_success_details \(result.imported) \(result.unchanged)")
+                    details: String(
+                        format: String(localized: "import_success_details"),
+                        locale: Locale.current,
+                        Int64(result.imported),
+                        Int64(result.unchanged)
+                    )
                 )
             }
             

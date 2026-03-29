@@ -128,7 +128,7 @@ struct UploadToKeyserverSheet: View {
     
     private var buttonsView: some View {
         HStack(spacing: 12) {
-            Button("cancel") {
+            Button("action_cancel") {
                 onDismiss()
             }
             .buttonStyle(.bordered)
