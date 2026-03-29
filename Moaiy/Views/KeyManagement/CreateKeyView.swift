@@ -41,7 +41,7 @@ struct CreateKeyView: View {
                 }
             }
             .padding(24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
 
             if !isCreating && !showSuccess {
                 Divider()
@@ -49,7 +49,7 @@ struct CreateKeyView: View {
                     .padding(16)
             }
         }
-        .frame(width: 560, height: 620)
+        .frame(width: 560)
         .alert("create_key_empty_passphrase_title", isPresented: $showNoPasswordConfirmation) {
             Button("create_key_empty_passphrase_confirm", role: .destructive) {
                 createKey()
@@ -85,79 +85,77 @@ struct CreateKeyView: View {
     }
 
     private var contentView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("wizard_basic_info_description")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 20) {
+            Text("wizard_basic_info_description")
+                .font(.body)
+                .foregroundStyle(.secondary)
 
-                Form {
-                    Section {
-                        TextField(String(localized: "field_key_name"), text: $name)
-                            .textContentType(.name)
+            Form {
+                Section {
+                    TextField(String(localized: "field_key_name"), text: $name)
+                        .textContentType(.name)
 
-                        TextField(String(localized: "field_email"), text: $email)
-                            .textContentType(.emailAddress)
-                            .autocorrectionDisabled()
+                    TextField(String(localized: "field_email"), text: $email)
+                        .textContentType(.emailAddress)
+                        .autocorrectionDisabled()
 
-                        HStack {
-                            Text("setting_default_key_type")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text(selectedKeyType.rawValue)
-                                .fontWeight(.medium)
-                        }
-                    } footer: {
-                        Text("create_key_default_type_hint")
+                    HStack {
+                        Text("setting_default_key_type")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(selectedKeyType.rawValue)
+                            .fontWeight(.medium)
                     }
+                } footer: {
+                    Text("create_key_default_type_hint")
+                }
 
-                    Section {
-                        SecureField("field_password", text: $password)
-                        SecureField("field_confirm_password", text: $confirmPassword)
-                    } footer: {
-                        if !password.isEmpty && password != confirmPassword {
-                            Text("error_password_mismatch")
-                                .foregroundStyle(.red)
-                        } else if password.isEmpty {
-                            Text("wizard_password_optional")
-                                .foregroundStyle(.secondary)
-                        }
+                Section {
+                    SecureField("field_password", text: $password)
+                    SecureField("field_confirm_password", text: $confirmPassword)
+                } footer: {
+                    if !password.isEmpty && password != confirmPassword {
+                        Text("error_password_mismatch")
+                            .foregroundStyle(.red)
+                    } else if password.isEmpty {
+                        Text("wizard_password_optional")
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .formStyle(.grouped)
+            }
+            .formStyle(.grouped)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Label("create_key_passphrase_tips_title", systemImage: "shield.lefthalf.filled")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                    Label("create_key_passphrase_tip_strong", systemImage: "checkmark.circle")
+            VStack(alignment: .leading, spacing: 10) {
+                Label("create_key_passphrase_tips_title", systemImage: "shield.lefthalf.filled")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                Label("create_key_passphrase_tip_strong", systemImage: "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Label("create_key_passphrase_tip_manager", systemImage: "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Label("create_key_passphrase_tip_recovery", systemImage: "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.blue.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+
+            if let error = errorMessage {
+                HStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                    Text(error)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Label("create_key_passphrase_tip_manager", systemImage: "checkmark.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Label("create_key_passphrase_tip_recovery", systemImage: "checkmark.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.red)
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.blue.opacity(0.08))
+                .background(Color.red.opacity(0.1))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                if let error = errorMessage {
-                    HStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.red.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
             }
         }
     }

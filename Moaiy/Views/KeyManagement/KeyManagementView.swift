@@ -35,7 +35,7 @@ struct KeyManagementView: View {
                 KeyListView(viewModel: viewModel, keyToDelete: $keyToDelete)
             }
         }
-        .navigationTitle("section_key_management")
+        .navigationTitle("main_window_title")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { showingCreateKey = true }) {

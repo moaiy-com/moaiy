@@ -226,6 +226,42 @@ struct GPGServiceTests {
         
         #expect(result == nil)
     }
+
+    @Test("GPG file detector treats .gpg extension as encrypted fallback")
+    func detectFileType_gpgExtensionFallsBackToEncrypted() async throws {
+        let detector = GPGFileTypeDetector()
+        let fileManager = FileManager.default
+        let tempDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("moaiy-detector-test-\(UUID().uuidString)", isDirectory: true)
+
+        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: tempDirectory) }
+
+        let encryptedLikeURL = tempDirectory.appendingPathComponent("sample.gpg")
+        try Data("not-a-valid-openpgp-packet".utf8).write(to: encryptedLikeURL)
+
+        let detected = await detector.detectFileType(at: encryptedLikeURL)
+
+        #expect(detected == .encrypted)
+    }
+
+    @Test("GPG file detector keeps non-gpg extension as notGPG")
+    func detectFileType_plainExtensionStaysNotGPG() async throws {
+        let detector = GPGFileTypeDetector()
+        let fileManager = FileManager.default
+        let tempDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("moaiy-detector-test-\(UUID().uuidString)", isDirectory: true)
+
+        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: tempDirectory) }
+
+        let plainURL = tempDirectory.appendingPathComponent("sample.txt")
+        try Data("plain text file".utf8).write(to: plainURL)
+
+        let detected = await detector.detectFileType(at: plainURL)
+
+        #expect(detected == .notGPG)
+    }
 }
 
 // MARK: - Helper Functions for Testing

@@ -24,8 +24,7 @@ struct TrustManagementSheet: View {
     }
     
     var body: some View {
-        VStack(spacing: 24) {
-            // Header
+        VStack(spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("trust_management_title")
@@ -45,51 +44,55 @@ struct TrustManagementSheet: View {
                 }
                 .buttonStyle(.plain)
             }
-            
-            // Current trust display
-            CurrentTrustCard(key: key, trustDetails: trustDetails)
-            
-            // Trust level selection
-            VStack(alignment: .leading, spacing: 12) {
-                Text("trust_select_level")
-                    .font(.headline)
-                
-                VStack(spacing: 8) {
-                    ForEach(TrustLevel.allCases, id: \.self) { level in
-                        TrustLevelRow(
-                            level: level,
-                            isSelected: selectedTrustLevel == level,
-                            action: { selectedTrustLevel = level }
-                        )
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    CurrentTrustCard(key: key, trustDetails: trustDetails)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("trust_select_level")
+                            .font(.headline)
+
+                        VStack(spacing: 8) {
+                            ForEach(TrustLevel.allCases, id: \.self) { level in
+                                TrustLevelRow(
+                                    level: level,
+                                    isSelected: selectedTrustLevel == level,
+                                    action: { selectedTrustLevel = level }
+                                )
+                            }
+                        }
+                    }
+
+                    if selectedTrustLevel == .ultimate && key.trustLevel != .ultimate {
+                        HStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+
+                            Text("trust_ultimate_warning")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding()
+                        .background(Color.orange.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            
-            // Warning for ultimate trust
-            if selectedTrustLevel == .ultimate && key.trustLevel != .ultimate {
-                HStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    
-                    Text("trust_ultimate_warning")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding()
-                .background(Color.orange.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-            
-            Spacer()
-            
-            // Action buttons
+
+            Divider()
+
             HStack(spacing: 12) {
                 Button("action_cancel") {
                     dismiss()
                 }
                 .buttonStyle(.bordered)
                 .keyboardShortcut(.escape, modifiers: [])
-                
+
+                Spacer()
+
                 Button(action: updateTrust) {
                     if isUpdating {
                         ProgressView()
@@ -104,7 +107,7 @@ struct TrustManagementSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 500, height: 600)
+        .frame(minWidth: 560, idealWidth: 600, maxWidth: 640, minHeight: 660, idealHeight: 720)
         .task {
             await loadTrustDetails()
         }
@@ -254,7 +257,7 @@ struct TrustLevelRow: View {
                     Text(level.localizedDescription)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 
                 Spacer()

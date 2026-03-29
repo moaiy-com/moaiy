@@ -5142,6 +5142,23 @@
         }
       }
     },
+    "main_window_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moaiy - An easy-to-use encrypt/decrypt tools"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moaiy - 易用的加密/解密工具"
+          }
+        }
+      }
+    },
     "section_keyring": {
       "extractionState": "manual",
       "localizations": {

@@ -964,7 +964,7 @@ final class GPGService {
 
         try fileManager.copyItem(at: sourceURL, to: stagedSourceURL)
 
-        var arguments = ["--encrypt", "--batch", "--yes"]
+        var arguments = ["--encrypt", "--batch", "--yes", "--trust-model", "always"]
         
         // Add recipients
         for recipient in recipients {
@@ -1045,12 +1045,29 @@ final class GPGService {
     /// - Parameter fileURL: File URL to verify
     /// - Returns: True if file is a valid GPG file
     func verifyGPGFile(at fileURL: URL) async -> Bool {
+        let fileManager = FileManager.default
+        let stagingDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("moaiy-gpg-verify-\(UUID().uuidString)", isDirectory: true)
+        let stagedInputURL = stagingDirectory.appendingPathComponent("input")
+
+        let accessGranted = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if accessGranted {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+            try? fileManager.removeItem(at: stagingDirectory)
+        }
+
         do {
+            try fileManager.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
+            try fileManager.copyItem(at: fileURL, to: stagedInputURL)
+
             let result = try await executeGPG(
-                arguments: ["--list-packets", "--dry-run", fileURL.path]
+                arguments: ["--list-packets", "--dry-run", stagedInputURL.path]
             )
             return result.exitCode == 0
         } catch {
+            logger.debug("verifyGPGFile failed for \(fileURL.path, privacy: .private): \(error.localizedDescription, privacy: .public)")
             return false
         }
     }
@@ -1137,16 +1154,28 @@ final class GPGService {
     ///   - keyID: Key ID or fingerprint
     ///   - trustLevel: Trust level to set
     func setTrust(keyID: String, trustLevel: TrustLevel) async throws {
-        // Use --edit-key with trust command
-        let trustCommand = "trust\n\(trustLevel.gpgCode)\ny\n"
-        
+        // Use non-interactive ownertrust update to avoid /dev/tty dependency.
         let result = try await executeGPG(
-            arguments: ["--command-fd", "0", "--edit-key", keyID],
-            input: trustCommand
+            arguments: [
+                "--batch",
+                "--yes",
+                "--no-tty",
+                "--quick-set-ownertrust",
+                keyID,
+                trustLevel.quickSetOwnerTrustValue
+            ]
         )
         
         if result.exitCode != 0 {
             throw GPGError.trustUpdateFailed(result.stderr ?? "Unknown error")
+        }
+
+        let trustDBResult = try await executeGPG(
+            arguments: ["--batch", "--yes", "--no-tty", "--update-trustdb"]
+        )
+
+        if trustDBResult.exitCode != 0 {
+            throw GPGError.trustUpdateFailed(trustDBResult.stderr ?? "Failed to update trust database")
         }
     }
     
@@ -1636,6 +1665,17 @@ enum TrustLevel: String, CaseIterable, Identifiable {
         case .marginal: return "m"
         case .full: return "f"
         case .ultimate: return "u"
+        }
+    }
+
+    /// Non-interactive ownertrust value for `gpg --quick-set-ownertrust`.
+    var quickSetOwnerTrustValue: String {
+        switch self {
+        case .unknown: return "unknown"
+        case .none: return "none"
+        case .marginal: return "marginal"
+        case .full: return "full"
+        case .ultimate: return "ultimate"
         }
     }
     
