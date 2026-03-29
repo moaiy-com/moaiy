@@ -1,136 +1,101 @@
 # Moaiy
 
-> **Guard Your Secrets Like Moai**
+> Guard Your Secrets Like Moai
 
-## Overview
-
-**Moaiy** is a user-friendly, graphical GPG key management tool for macOS, inspired by the Moai statues, symbolizing mystery, security, and longevity.
-
-Making encryption accessible to everyone, not just tech geeks.
+Moaiy is an open-source macOS app for OpenPGP (GPG) key management and encryption workflows, designed with a native SwiftUI experience.
 
 **[中文版 (Chinese Version)](./README_CN.md)**
 
-## Core Values
+## Features
 
-🗿 **Mystery** - Guarding your digital secrets, keeping sensitive information exclusively yours
+- Generate, import, export, and delete keys
+- Encrypt and decrypt text
+- Encrypt and decrypt files
+- Trust management, key signing, and key editing flows
+- Backup and restore workflows
+- Bundled GPG runtime support for sandboxed app environments
 
-🔐 **Security** - Military-grade encryption protection, making your data rock-solid
+## Requirements
 
-⏳ **Longevity** - Designed for long-term reliability, encrypt once, protect forever
+- macOS 14.0+ (app runtime)
+- Xcode with macOS 14 SDK support (recent stable release)
 
-## Target Users
+## Quick Start
 
-- **Cryptocurrency Users**: Safely store mnemonic phrases and private keys
-- **Privacy Advocates**: Encrypt personal files and communications
-- **Business Professionals**: Encrypt sensitive documents
+### Option 1: Download Release
 
-## Tech Stack
+- Download the latest `.dmg` from [GitHub Releases](https://github.com/moaiy-com/moaiy/releases)
 
-- **Language**: Swift 6.2
-- **UI Framework**: SwiftUI
-- **Minimum Support**: macOS 12.0+
-- **Encryption**: Built-in GPG (fully self-contained)
+### Option 2: Build from Source
 
-## Project Structure
-
+```bash
+git clone https://github.com/moaiy-com/moaiy.git
+cd moaiy
+open Moaiy/Moaiy.xcodeproj
 ```
+
+Or build via CLI:
+
+```bash
+xcodebuild -project Moaiy/Moaiy.xcodeproj \
+           -scheme Moaiy \
+           -destination 'platform=macOS' \
+           build
+```
+
+## Run Tests
+
+```bash
+xcodebuild test -project Moaiy/Moaiy.xcodeproj \
+                -scheme Moaiy \
+                -destination 'platform=macOS'
+```
+
+## Bundled GPG Workflow
+
+If you need to refresh the embedded GPG bundle:
+
+```bash
+./scripts/prepare_gpg_bundle.sh
+./scripts/verify_gpg_bundle.sh
+```
+
+If the bundle is not added in Xcode, use:
+
+```bash
+./scripts/add_gpg_bundle_to_xcode.sh
+```
+
+## Repository Layout
+
+```text
 moaiy/
-├── README.md              # Project documentation (this file)
-├── README_CN.md           # Chinese documentation
-├── AGENTS.md              # AI Agent development guide
-├── doc/                   # Development documentation
-│   ├── brand-story.md    # Brand story
-│   ├── product-design.md # Product design
-│   ├── technical-architecture.md # Technical architecture
-│   ├── app-store-compliance.md   # App Store compliance
-│   └── extreme-usability-design.md # Usability design
-├── Moaiy/                 # Main application code
-│   ├── Models/           # Data models
-│   ├── ViewModels/       # Business logic
-│   ├── Views/            # UI interfaces
-│   ├── Services/         # Core services
-│   └── Utils/            # Utilities
-├── MoaiyTests/           # Unit tests
-└── Moaiy.xcodeproj       # Xcode project
+├── Moaiy/                  # Main macOS app
+├── MoaiySandboxTest/       # Sandbox validation app/project
+├── scripts/                # Build and packaging utilities
+├── doc/                    # Technical documentation
+├── CONTRIBUTING.md
+├── README_CN.md
+└── LICENSE
 ```
 
-## Development Documentation
+## Documentation
 
-Detailed development documentation is available in the `doc/` directory:
+- [Contributing Guide](./CONTRIBUTING.md)
+- [Documentation Index](./doc/README.md)
+- [Technical Architecture](./doc/technical-architecture.md)
+- [Xcode Integration Guide](./doc/xcode-integration-guide.md)
+- [Bundled GPG Summary](./doc/bundled-gpg-summary.md)
 
-### 📋 [Brand Story](./doc/brand-story.md)
-Brand meaning, values, and development roadmap
+## Localization
 
-### 🎨 [Product Design](./doc/product-design.md)
-Product requirements, feature planning, business model
+- UI: English + Chinese (Simplified)
+- String catalog: `Moaiy/Resources/Localizable.xcstrings`
 
-### 🏗️ [Technical Architecture](./doc/technical-architecture.md)
-Tech stack selection, system architecture, module design
+## Security
 
-### ✅ [App Store Compliance](./doc/app-store-compliance.md)
-Review risk analysis, sandbox restrictions, compliance requirements
+If you discover a security issue, prefer private disclosure via GitHub Security Advisories instead of filing a public issue first.
 
-### 🚀 [Extreme Usability Design](./doc/extreme-usability-design.md)
-Zero-configuration experience, smart defaults, user flow optimization
+## License
 
-### 🤖 [AI Agent Guide](./AGENTS.md)
-Development guidelines for AI coding agents
-
-## Development Status
-
-**Current Stage**: Product design and feasibility analysis  
-**Next Steps**: Market validation, technical validation, prototype development
-
-## Key Features
-
-### Zero Barrier Entry
-- Double-click to run, no technical background required
-- Fully self-contained, no external dependencies
-- Complete first encryption in 5 minutes
-
-### Intelligent Design
-- Automatic configuration and smart recommendations
-- Intelligent error diagnosis and auto-repair
-- Contextual help system
-
-### Professional Security
-- Uses strongest encryption algorithms (RSA-4096, AES-256)
-- Fully compliant with App Store review requirements
-- Hardware key support (Pro version)
-
-## Version Planning
-
-### Free Open Source Version (GitHub)
-- ✅ Basic key management
-- ✅ Text/file encryption and decryption
-- ✅ Automatic backup
-- ❌ Hardware key management
-
-### Pro Paid Version (App Store)
-- ✅ All free version features
-- ⭐ Hardware key management (YubiKey/CanoKey)
-- ⭐ iCloud sync
-- ⭐ Automation scripts
-- ⭐ Priority technical support
-
-## Internationalization
-
-- **UI Language**: English + Chinese (Simplified)
-- **Documentation**: English + Chinese (Simplified)
-- **Code & Comments**: English only
-- **Localization**: Using SwiftUI's built-in localization system
-
-## Contact
-
-- **Project Name**: Moaiy
-- **Official Website**: https://moaiy.com
-- **GitHub Repository**: Coming soon
-- **License**: TBD (considering GPLv3 or MIT)
-
-> 💡 **Note**: moaiy.com domain is registered, website development is planned
-
----
-
-*"Guard Your Secrets Like Moai"*
-
-*Last Updated: 2026-03-10*
+MIT. See [LICENSE](./LICENSE).
