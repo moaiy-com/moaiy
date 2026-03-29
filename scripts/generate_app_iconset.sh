@@ -67,6 +67,36 @@ fi
 
 sips --setProperty format png -z 1024 1024 "$WORK_IMAGE" --out "$MASTER_IMAGE" >/dev/null
 
+MASTER_HAS_ALPHA="$(sips -g hasAlpha "$MASTER_IMAGE" | awk '/hasAlpha:/{print $2}')"
+if [[ "$MASTER_HAS_ALPHA" == "yes" ]]; then
+  # Flatten transparent pixels onto a sampled center background color so the icon remains full-bleed.
+  if python3 - "$MASTER_IMAGE" <<'PY' >/dev/null 2>&1
+import sys
+from pathlib import Path
+
+try:
+    from PIL import Image
+except Exception:
+    raise SystemExit(2)
+
+path = Path(sys.argv[1])
+img = Image.open(path).convert("RGBA")
+alpha = img.getchannel("A")
+if alpha.getextrema() == (255, 255):
+    raise SystemExit(0)
+center = img.getpixel((img.width // 2, img.height // 2))
+bg = Image.new("RGBA", img.size, (center[0], center[1], center[2], 255))
+flat = Image.alpha_composite(bg, img).convert("RGB")
+flat.save(path, format="PNG")
+PY
+  then
+    echo "Info: flattened transparent padding in source icon to avoid gray ring artifacts."
+  else
+    echo "Warning: source icon contains alpha transparency."
+    echo "         For macOS app icons, export a full-bleed square icon (no rounded-corner transparency)."
+  fi
+fi
+
 generate_icon() {
   local size="$1"
   local filename="$2"

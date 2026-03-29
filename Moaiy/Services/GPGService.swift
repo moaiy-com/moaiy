@@ -603,6 +603,71 @@ final class GPGService {
         
         return parseImportResult(output)
     }
+
+    /// Import key material from keyserver using a URL, key ID, fingerprint, or email query.
+    /// - Parameters:
+    ///   - query: Key URL, fingerprint, key ID, or email
+    ///   - keyserver: Keyserver URL
+    /// - Returns: Import summary
+    func importFromKeyserver(query: String, keyserver: String = "keys.openpgp.org") async throws -> KeyImportResult {
+        let queryKind = try parseKeyserverImportQuery(query)
+        let beforeFingerprints = Set(try await listKeys(secretOnly: false).map(\.fingerprint))
+
+        let arguments: [String]
+        switch queryKind {
+        case .keyReference(let value):
+            arguments = [
+                "--batch",
+                "--yes",
+                "--keyserver", keyserver,
+                "--status-fd", "1",
+                "--recv-keys",
+                value
+            ]
+        case .email(let value):
+            arguments = [
+                "--batch",
+                "--yes",
+                "--status-fd", "1",
+                "--keyserver", keyserver,
+                "--auto-key-locate", "keyserver",
+                "--locate-keys",
+                value
+            ]
+        }
+
+        let result = try await executeGPG(arguments: arguments, timeout: 60.0)
+
+        if result.exitCode != 0 {
+            let combinedError = "\(result.stderr ?? "")\n\(result.stdout ?? "")".lowercased()
+            if combinedError.contains("not found") || combinedError.contains("no data") || combinedError.contains("not changed") {
+                throw GPGError.keyNotFound(query)
+            }
+            throw GPGError.importFailed(result.stderr ?? "Failed to import key from keyserver")
+        }
+
+        let afterKeys = try await listKeys(secretOnly: false)
+        let newKeys = afterKeys
+            .filter { !beforeFingerprints.contains($0.fingerprint) }
+            .map(\.fingerprint)
+
+        if !newKeys.isEmpty {
+            return KeyImportResult(
+                imported: newKeys.count,
+                unchanged: 0,
+                newKeyIDs: newKeys
+            )
+        }
+
+        if let output = result.stdout {
+            let parsed = parseImportResult(output)
+            if parsed.imported > 0 || parsed.unchanged > 0 || !parsed.newKeyIDs.isEmpty {
+                return parsed
+            }
+        }
+
+        return KeyImportResult(imported: 0, unchanged: 1, newKeyIDs: [])
+    }
     
     /// Export a public key
     /// - Parameters:
@@ -1267,6 +1332,88 @@ final class GPGService {
         let stdout = result.stdout ?? ""
         let combined = "\(stderr)\n\(stdout)".lowercased()
         return combined.contains("bad passphrase") || combined.contains("bad_passphrase")
+    }
+
+    private enum KeyserverImportQueryKind {
+        case keyReference(String)
+        case email(String)
+    }
+
+    private func parseKeyserverImportQuery(_ query: String) throws -> KeyserverImportQueryKind {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw GPGError.importFailed(String(localized: "import_keyserver_empty_query"))
+        }
+
+        if let url = URL(string: trimmed), url.scheme != nil {
+            if let keyFromURL = extractKeyReference(from: url) {
+                return keyFromURL
+            }
+            throw GPGError.importFailed(String(localized: "import_keyserver_invalid_query"))
+        }
+
+        if trimmed.contains("@") {
+            return .email(trimmed)
+        }
+
+        if let normalized = normalizeKeyReference(trimmed) {
+            return .keyReference(normalized)
+        }
+
+        throw GPGError.importFailed(String(localized: "import_keyserver_invalid_query"))
+    }
+
+    private func extractKeyReference(from url: URL) -> KeyserverImportQueryKind? {
+        if let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            let candidates = (components.queryItems ?? []).compactMap { item -> String? in
+                let lowerName = item.name.lowercased()
+                guard ["search", "fpr", "fingerprint", "keyid", "id", "key"].contains(lowerName) else {
+                    return nil
+                }
+                return item.value
+            }
+
+            for candidate in candidates {
+                if let normalized = normalizeKeyReference(candidate) {
+                    return .keyReference(normalized)
+                }
+                if candidate.contains("@") {
+                    return .email(candidate.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+            }
+
+            if let fragment = components.fragment, let normalized = normalizeKeyReference(fragment) {
+                return .keyReference(normalized)
+            }
+        }
+
+        let lastPath = url.lastPathComponent
+        if let normalized = normalizeKeyReference(lastPath) {
+            return .keyReference(normalized)
+        }
+
+        if lastPath.contains("@") {
+            return .email(lastPath)
+        }
+
+        return nil
+    }
+
+    private func normalizeKeyReference(_ value: String) -> String? {
+        var normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+
+        if normalized.lowercased().hasPrefix("0x") {
+            normalized.removeFirst(2)
+        }
+        normalized = normalized.replacingOccurrences(of: " ", with: "")
+
+        let hexPattern = "^[A-Fa-f0-9]{8,40}$"
+        if normalized.range(of: hexPattern, options: .regularExpression) != nil {
+            return normalized.uppercased()
+        }
+
+        return nil
     }
     
     /// Parse key list output

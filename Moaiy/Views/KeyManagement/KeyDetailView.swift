@@ -373,14 +373,24 @@ struct ExportKeySheet: View {
         VStack(spacing: 24) {
             // Header
             VStack(spacing: 8) {
+                HStack {
+                    Spacer()
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 Image(systemName: "square.and.arrow.up")
                     .font(.system(size: 48))
                     .foregroundStyle(Color.moaiyAccent)
-                
+
                 Text("action_export_public_key")
                     .font(.title2)
                     .fontWeight(.semibold)
-                
+
                 Text("export_key_description")
                     .font(.body)
                     .foregroundStyle(.secondary)
@@ -548,6 +558,16 @@ struct DeleteKeySheet: View {
         VStack(spacing: 24) {
             // Header
             VStack(spacing: 8) {
+                HStack {
+                    Spacer()
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 Image(systemName: "trash.fill")
                     .font(.system(size: 48))
                     .foregroundStyle(.red)

@@ -7,6 +7,9 @@
 
 import SwiftUI
 import os.log
+#if os(macOS)
+import AppKit
+#endif
 
 private let logger = Logger(subsystem: "com.moaiy.app", category: "App")
 
@@ -30,6 +33,15 @@ struct MoaiyApp: App {
             width: Constants.UI.defaultWindowWidth,
             height: Constants.UI.defaultWindowHeight
         )
+        #if os(macOS)
+        .commands {
+            CommandGroup(after: .help) {
+                Button("section_how_to") {
+                    openHelpPage()
+                }
+            }
+        }
+        #endif
         
         #if os(macOS)
         Settings {
@@ -37,4 +49,20 @@ struct MoaiyApp: App {
         }
         #endif
     }
+
+    #if os(macOS)
+    private var helpURL: URL? {
+        URL(string: "https://moaiy.com/doc/help")
+    }
+    #endif
+
+    #if os(macOS)
+    private func openHelpPage() {
+        guard let helpURL else {
+            logger.error("Invalid help URL.")
+            return
+        }
+        NSWorkspace.shared.open(helpURL)
+    }
+    #endif
 }

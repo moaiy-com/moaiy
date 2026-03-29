@@ -35,9 +35,13 @@ struct KeyCardView: View {
             .frame(height: 50)
         }
         .padding(12)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.92))
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
         .sheet(isPresented: $showingResultOverlay) {
             OperationResultOverlay(
                 results: operationResults,
@@ -132,16 +136,22 @@ struct KeyCardView: View {
                 Text(key.email)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                
-                HStack(spacing: 8) {
+
+                HStack(spacing: 12) {
                     Label(key.displayKeyType, systemImage: "number")
-                    if let createdAt = key.createdAt {
-                        Text("•")
-                        Text(createdAt.formatted(date: .abbreviated, time: .omitted))
-                    }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Label(expirationDisplayText, systemImage: "calendar")
+                        .font(.caption)
+                        .foregroundStyle(key.isExpired ? Color.red : .secondary)
                 }
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+
+                if let createdAt = key.createdAt {
+                    Text(createdAt.formatted(date: .abbreviated, time: .omitted))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
             
             Spacer()
@@ -179,6 +189,13 @@ struct KeyCardView: View {
         case .unknown:
             return .secondary
         }
+    }
+
+    private var expirationDisplayText: String {
+        guard let expiresAt = key.expiresAt else {
+            return String(localized: "statistics_no_expiration")
+        }
+        return expiresAt.formatted(date: .abbreviated, time: .omitted)
     }
     
     // MARK: - File Handling

@@ -224,6 +224,13 @@ struct FilterSheet: View {
 
                 Spacer()
 
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+
                 if viewModel.hasActiveFilters {
                     Button("action_reset") {
                         viewModel.resetFilters()
@@ -267,13 +274,19 @@ struct FilterSheet: View {
             }
             .formStyle(.grouped)
 
-            // Apply button
-            Button("action_apply") {
-                dismiss()
+            HStack(spacing: 12) {
+                Button("action_cancel") {
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+
+                Spacer()
+
+                Button("action_apply") {
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .frame(maxWidth: .infinity)
         }
         .padding(32)
         .frame(width: 450)

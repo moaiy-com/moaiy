@@ -28,6 +28,13 @@ struct OperationHistoryView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
             }
             .padding()
             
