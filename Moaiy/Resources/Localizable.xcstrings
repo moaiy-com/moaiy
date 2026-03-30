@@ -58,6 +58,57 @@
         }
       }
     },
+    "about_icon_credit_link": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View Icon Source"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看图标来源"
+          }
+        }
+      }
+    },
+    "about_icon_credit_text": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moai Statue by ProSymbols from Noun Project (CC BY 3.0)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moai Statue 图标由 ProSymbols 创作，来源 Noun Project（CC BY 3.0）"
+          }
+        }
+      }
+    },
+    "about_icon_credit_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Icon Attribution"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图标署名"
+          }
+        }
+      }
+    },
     "action_add": {
       "extractionState": "manual",
       "localizations": {

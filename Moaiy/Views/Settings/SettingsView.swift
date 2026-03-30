@@ -30,6 +30,10 @@ struct SettingsView: View {
     private var appBuild: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
     }
+
+    private var nounProjectMoaiURL: URL? {
+        URL(string: "https://thenounproject.com/browse/icons/term/moai-statue/")
+    }
     
     var body: some View {
         Form {
@@ -168,6 +172,22 @@ struct SettingsView: View {
                     } else {
                         Text(gpgVersion)
                             .foregroundStyle(.primary)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("about_icon_credit_title")
+                        .foregroundStyle(.secondary)
+
+                    Text("about_icon_credit_text")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let nounProjectMoaiURL {
+                        Link(destination: nounProjectMoaiURL) {
+                            Text("about_icon_credit_link")
+                        }
+                        .font(.caption)
                     }
                 }
             } header: {
