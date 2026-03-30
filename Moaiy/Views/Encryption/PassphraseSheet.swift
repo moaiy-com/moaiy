@@ -108,7 +108,7 @@ struct PassphraseSheet: View {
             }
         }
         .padding(32)
-        .frame(width: 400)
+        .moaiyModalAdaptiveSize(minWidth: 360, idealWidth: 420, maxWidth: 520)
         .onAppear {
             isFieldFocused = true
         }

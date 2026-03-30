@@ -61,3 +61,32 @@ extension Color {
         blue: 246 / 255
     )
 }
+
+extension View {
+    /// Applies adaptive sizing for macOS modal sheets.
+    func moaiyModalAdaptiveSize(
+        minWidth: CGFloat = 380,
+        idealWidth: CGFloat = 520,
+        maxWidth: CGFloat = 760,
+        minHeight: CGFloat? = nil,
+        idealHeight: CGFloat? = nil,
+        maxHeight: CGFloat? = nil
+    ) -> some View {
+        frame(
+            minWidth: minWidth,
+            idealWidth: idealWidth,
+            maxWidth: maxWidth,
+            minHeight: minHeight,
+            idealHeight: idealHeight,
+            maxHeight: maxHeight,
+            alignment: .topLeading
+        )
+    }
+
+    /// Standard card surface for grouped sections inside modals.
+    func moaiyModalCard(cornerRadius: CGFloat = 12) -> some View {
+        padding(16)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+}

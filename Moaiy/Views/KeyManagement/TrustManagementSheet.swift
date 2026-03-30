@@ -24,7 +24,7 @@ struct TrustManagementSheet: View {
     }
     
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("trust_management_title")
@@ -82,8 +82,6 @@ struct TrustManagementSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            Divider()
-
             HStack(spacing: 12) {
                 Button("action_cancel") {
                     dismiss()
@@ -107,7 +105,7 @@ struct TrustManagementSheet: View {
             }
         }
         .padding(24)
-        .frame(minWidth: 560, idealWidth: 600, maxWidth: 640, minHeight: 660, idealHeight: 720)
+        .moaiyModalAdaptiveSize(minWidth: 500, idealWidth: 600, maxWidth: 720, minHeight: 560, idealHeight: 680, maxHeight: 860)
         .task {
             await loadTrustDetails()
         }
@@ -173,8 +171,6 @@ struct CurrentTrustCard: View {
             }
             
             if let details = trustDetails {
-                Divider()
-
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("trust_signatures")

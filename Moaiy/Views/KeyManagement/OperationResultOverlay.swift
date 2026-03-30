@@ -19,15 +19,12 @@ struct OperationResultOverlay: View {
     }
     
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 12) {
             headerView
-            Divider()
             resultsListView
-            Divider()
             footerView
         }
-        .frame(width: 400)
-        .frame(maxHeight: 500)
+        .moaiyModalAdaptiveSize(minWidth: 380, idealWidth: 460, maxWidth: 620, maxHeight: 640)
         .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.2), radius: 10, y: 5)

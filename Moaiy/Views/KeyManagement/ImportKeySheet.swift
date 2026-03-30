@@ -142,7 +142,7 @@ struct ImportKeySheet: View {
             }
         }
         .padding(32)
-        .frame(width: 500)
+        .moaiyModalAdaptiveSize(minWidth: 420, idealWidth: 540, maxWidth: 720)
     }
 
     private var canImport: Bool {
@@ -235,9 +235,7 @@ struct KeyserverImportCard: View {
             }
             .pickerStyle(.menu)
         }
-        .padding()
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .moaiyModalCard()
     }
 }
 

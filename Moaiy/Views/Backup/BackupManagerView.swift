@@ -25,7 +25,7 @@ struct BackupManagerView: View {
     @State private var backupHistory: [BackupRecord] = []
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 16) {
             // Header
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
@@ -47,8 +47,6 @@ struct BackupManagerView: View {
                 .buttonStyle(.plain)
             }
             .padding(24)
-
-            Divider()
 
             ScrollView {
                 VStack(spacing: 24) {
@@ -181,7 +179,7 @@ struct BackupManagerView: View {
                 .padding(24)
             }
         }
-        .frame(width: 600, height: 700)
+        .moaiyModalAdaptiveSize(minWidth: 540, idealWidth: 640, maxWidth: 780, minHeight: 560, idealHeight: 720, maxHeight: 920)
         .onAppear {
             loadBackupHistory()
         }

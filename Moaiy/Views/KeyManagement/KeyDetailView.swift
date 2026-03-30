@@ -466,7 +466,7 @@ struct ExportKeySheet: View {
             }
         }
         .padding(32)
-        .frame(width: 450)
+        .moaiyModalAdaptiveSize(minWidth: 400, idealWidth: 500, maxWidth: 660)
     }
     
     private func saveToFile() {
@@ -689,7 +689,7 @@ struct DeleteKeySheet: View {
             }
         }
         .padding(32)
-        .frame(width: 480)
+        .moaiyModalAdaptiveSize(minWidth: 420, idealWidth: 520, maxWidth: 700)
     }
 
     private func performDelete() {

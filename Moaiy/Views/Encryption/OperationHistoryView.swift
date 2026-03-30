@@ -12,7 +12,7 @@ struct OperationHistoryView: View {
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 16) {
             // Header
             HStack {
                 Text("history_title")
@@ -37,9 +37,7 @@ struct OperationHistoryView: View {
                 .buttonStyle(.plain)
             }
             .padding()
-            
-            Divider()
-            
+
             if viewModel.operationHistory.isEmpty {
                 // Empty state
                 VStack(spacing: 16) {
@@ -67,7 +65,7 @@ struct OperationHistoryView: View {
                 .listStyle(.inset)
             }
         }
-        .frame(width: 500, height: 400)
+        .moaiyModalAdaptiveSize(minWidth: 440, idealWidth: 560, maxWidth: 760, minHeight: 360, idealHeight: 460, maxHeight: 760)
     }
 }
 

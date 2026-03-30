@@ -95,7 +95,7 @@ struct BackupSheet: View {
             }
         }
         .padding()
-        .frame(width: 500, height: 400)
+        .moaiyModalAdaptiveSize(minWidth: 440, idealWidth: 540, maxWidth: 720, minHeight: 360, idealHeight: 460)
     }
     
     private func chooseBackupLocation() {

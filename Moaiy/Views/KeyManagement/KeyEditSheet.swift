@@ -38,7 +38,7 @@ struct KeyEditSheet: View {
     @State private var successMessage: String?
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 16) {
             // Header
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
@@ -61,8 +61,6 @@ struct KeyEditSheet: View {
             }
             .padding(24)
 
-            Divider()
-
             // Tab picker
             Picker("", selection: $selectedTab) {
                 ForEach(KeyEditTab.allCases, id: \.self) { tab in
@@ -71,10 +69,8 @@ struct KeyEditSheet: View {
                 }
             }
             .pickerStyle(.segmented)
+            .moaiyModalCard(cornerRadius: 10)
             .padding(.horizontal, 24)
-            .padding(.vertical, 16)
-
-            Divider()
 
             // Tab content
             Group {
@@ -96,9 +92,9 @@ struct KeyEditSheet: View {
                     })
                 }
             }
-            .frame(maxHeight: .infinity)
+            .frame(maxHeight: .infinity, alignment: .top)
         }
-        .frame(width: 600, height: 550)
+        .moaiyModalAdaptiveSize(minWidth: 520, idealWidth: 620, maxWidth: 760, minHeight: 500, idealHeight: 620, maxHeight: 860)
         .alert("edit_success_title", isPresented: $showSuccess) {
             Button("action_ok") { dismiss() }
         } message: {
@@ -415,8 +411,6 @@ struct PassphraseEditView: View {
                 SecureField("edit_passphrase_placeholder", text: $currentPassphrase)
                     .textFieldStyle(.roundedBorder)
             }
-
-            Divider()
 
             // New passphrase
             VStack(alignment: .leading, spacing: 8) {

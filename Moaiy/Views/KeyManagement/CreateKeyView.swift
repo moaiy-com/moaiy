@@ -24,10 +24,8 @@ struct CreateKeyView: View {
     @State private var showNoPasswordConfirmation = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 16) {
             headerView
-
-            Divider()
 
             Group {
                 if isCreating {
@@ -44,12 +42,12 @@ struct CreateKeyView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
             if !isCreating && !showSuccess {
-                Divider()
                 footerView
-                    .padding(16)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 16)
             }
         }
-        .frame(width: 560)
+        .moaiyModalAdaptiveSize(minWidth: 500, idealWidth: 580, maxWidth: 720, minHeight: 520, idealHeight: 640)
         .alert("create_key_empty_passphrase_title", isPresented: $showNoPasswordConfirmation) {
             Button("create_key_empty_passphrase_confirm", role: .destructive) {
                 createKey()

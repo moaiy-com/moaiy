@@ -155,7 +155,7 @@ struct KeySigningSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 550, height: 650)
+        .moaiyModalAdaptiveSize(minWidth: 500, idealWidth: 580, maxWidth: 720, minHeight: 560, idealHeight: 660)
         .onAppear {
             selectedSignerKey = viewModel.secretKeys.first
         }

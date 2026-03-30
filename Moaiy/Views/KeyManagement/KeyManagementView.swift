@@ -289,7 +289,7 @@ struct FilterSheet: View {
             }
         }
         .padding(32)
-        .frame(width: 450)
+        .moaiyModalAdaptiveSize(minWidth: 400, idealWidth: 480, maxWidth: 620)
     }
 }
 

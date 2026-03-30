@@ -37,7 +37,7 @@ struct UploadToKeyserverSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 450)
+        .moaiyModalAdaptiveSize(minWidth: 400, idealWidth: 480, maxWidth: 620)
     }
     
     private var headerView: some View {
@@ -93,9 +93,7 @@ struct UploadToKeyserverSheet: View {
                 
                 Spacer()
             }
-            .padding()
-            .background(Color.secondary.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .moaiyModalCard()
         }
     }
     
@@ -130,9 +128,10 @@ struct UploadToKeyserverSheet: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
-            .padding()
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.red.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
     }
     
