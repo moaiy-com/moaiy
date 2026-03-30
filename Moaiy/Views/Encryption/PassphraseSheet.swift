@@ -9,6 +9,7 @@ import SwiftUI
 
 struct PassphraseSheet: View {
     let keyName: String?
+    var allowsEmptyPassphrase = false
     let onConfirm: (String) -> Void
     let onCancel: () -> Void
     
@@ -66,11 +67,20 @@ struct PassphraseSheet: View {
             )
             .focused($isFieldFocused)
             .onSubmit {
-                if !passphrase.isEmpty {
+                if allowsEmptyPassphrase || !passphrase.isEmpty {
                     onConfirm(passphrase)
+                } else {
+                    showError = true
                 }
             }
-            
+
+            if allowsEmptyPassphrase {
+                Text("wizard_password_optional")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
             if showError {
                 Text("passphrase_error_empty")
                     .font(.caption)
@@ -86,14 +96,14 @@ struct PassphraseSheet: View {
                 .keyboardShortcut(.escape, modifiers: [])
                 
                 Button("action_confirm") {
-                    if passphrase.isEmpty {
+                    if !allowsEmptyPassphrase && passphrase.isEmpty {
                         showError = true
                     } else {
                         onConfirm(passphrase)
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(passphrase.isEmpty)
+                .disabled(!allowsEmptyPassphrase && passphrase.isEmpty)
                 .keyboardShortcut(.return, modifiers: [])
             }
         }

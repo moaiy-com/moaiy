@@ -32,6 +32,42 @@ struct KeyActionFilePlanner {
     }
 }
 
+enum KeyActionAlertDecision: Equatable {
+    case none
+    case success(String)
+    case error(String)
+}
+
+struct KeyActionBatchResultPlanner {
+    static func makeAlertDecision(
+        successCount: Int,
+        failureCount: Int,
+        successMessage: String,
+        firstErrorMessage: String?
+    ) -> KeyActionAlertDecision {
+        guard successCount > 0 || failureCount > 0 else {
+            return .none
+        }
+
+        if failureCount == 0 {
+            return .success(successMessage)
+        }
+
+        let fallbackErrorMessage = String(localized: "error_occurred")
+        let errorText: String
+        if let firstErrorMessage, !firstErrorMessage.isEmpty {
+            errorText = firstErrorMessage
+        } else {
+            errorText = fallbackErrorMessage
+        }
+
+        if successCount > 0 {
+            return .error("\(successMessage)\n\(errorText)")
+        }
+        return .error(errorText)
+    }
+}
+
 struct KeyActionMenu: View {
     let key: GPGKey
     var onDelete: (() -> Void)?
@@ -140,6 +176,7 @@ struct KeyActionMenu: View {
         ) {
             PassphraseSheet(
                 keyName: key.name,
+                allowsEmptyPassphrase: true,
                 onConfirm: { passphrase in
                     guard let action = pendingPassphraseAction else { return }
                     pendingPassphraseAction = nil
@@ -245,9 +282,12 @@ struct KeyActionMenu: View {
 
     @MainActor
     private func encryptFiles(_ urls: [URL]) async {
-        do {
-            var encryptedFileCount = 0
-            for url in urls {
+        var encryptedFileCount = 0
+        var failedFileCount = 0
+        var firstError: Error?
+
+        for url in urls {
+            do {
                 let defaultOutputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
                 guard let outputURL = presentFileOperationSavePanel(
                     defaultFileName: defaultOutputURL.lastPathComponent,
@@ -273,20 +313,30 @@ struct KeyActionMenu: View {
                     recipients: [key.fingerprint]
                 )
                 encryptedFileCount += 1
+            } catch {
+                failedFileCount += 1
+                if firstError == nil {
+                    firstError = error
+                }
             }
-            if encryptedFileCount > 0 {
-                showSuccess(message: String(localized: "operation_success_encrypt"))
-            }
-        } catch {
-            showError(message: error.localizedDescription)
         }
+
+        showBatchOperationResult(
+            successCount: encryptedFileCount,
+            failureCount: failedFileCount,
+            successMessage: String(localized: "operation_success_encrypt"),
+            firstError: firstError
+        )
     }
 
     @MainActor
     private func decryptFiles(_ urls: [URL], passphrase: String) async {
-        do {
-            var decryptedFileCount = 0
-            for url in urls {
+        var decryptedFileCount = 0
+        var failedFileCount = 0
+        var firstError: Error?
+
+        for url in urls {
+            do {
                 let defaultOutputURL = KeyActionFilePlanner.decryptedOutputURL(for: url)
                 guard let outputURL = presentFileOperationSavePanel(
                     defaultFileName: defaultOutputURL.lastPathComponent,
@@ -312,13 +362,20 @@ struct KeyActionMenu: View {
                     passphrase: passphrase
                 )
                 decryptedFileCount += 1
+            } catch {
+                failedFileCount += 1
+                if firstError == nil {
+                    firstError = error
+                }
             }
-            if decryptedFileCount > 0 {
-                showSuccess(message: String(localized: "operation_success_decrypt"))
-            }
-        } catch {
-            showError(message: error.localizedDescription)
         }
+
+        showBatchOperationResult(
+            successCount: decryptedFileCount,
+            failureCount: failedFileCount,
+            successMessage: String(localized: "operation_success_decrypt"),
+            firstError: firstError
+        )
     }
 
     @MainActor
@@ -380,6 +437,29 @@ struct KeyActionMenu: View {
         alertTitle = "operation_success"
         alertMessage = message
         showingAlert = true
+    }
+
+    private func showBatchOperationResult(
+        successCount: Int,
+        failureCount: Int,
+        successMessage: String,
+        firstError: Error?
+    ) {
+        let decision = KeyActionBatchResultPlanner.makeAlertDecision(
+            successCount: successCount,
+            failureCount: failureCount,
+            successMessage: successMessage,
+            firstErrorMessage: firstError?.localizedDescription
+        )
+
+        switch decision {
+        case .none:
+            return
+        case .success(let message):
+            showSuccess(message: message)
+        case .error(let message):
+            showError(message: message)
+        }
     }
 
     private func showError(message: String) {

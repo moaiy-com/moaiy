@@ -150,7 +150,7 @@ struct KeySigningSheet: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(passphrase.isEmpty || isSigning || viewModel.secretKeys.isEmpty)
+                .disabled(isSigning || viewModel.secretKeys.isEmpty)
                 .keyboardShortcut(.defaultAction)
             }
         }

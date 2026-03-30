@@ -18,7 +18,8 @@ struct BackupManagerView: View {
     @State private var restoreSuccessMessage = String(localized: "restore_success_message")
     @State private var showError = false
     @State private var errorMessage: String?
-    @State private var backupURL: URL?
+    @State private var pendingBackupURL: URL?
+    @State private var showingSecretKeyPassphraseSheet = false
     @State private var includeSecretKeys = true
     @State private var lastBackupDate: Date?
     @State private var backupHistory: [BackupRecord] = []
@@ -184,6 +185,21 @@ struct BackupManagerView: View {
         .onAppear {
             loadBackupHistory()
         }
+        .sheet(isPresented: $showingSecretKeyPassphraseSheet) {
+            PassphraseSheet(
+                keyName: nil,
+                allowsEmptyPassphrase: true,
+                onConfirm: { passphrase in
+                    showingSecretKeyPassphraseSheet = false
+                    guard let destinationURL = pendingBackupURL else { return }
+                    createBackup(at: destinationURL, secretKeyPassphrase: passphrase)
+                },
+                onCancel: {
+                    showingSecretKeyPassphraseSheet = false
+                    pendingBackupURL = nil
+                }
+            )
+        }
         .alert("backup_success_title", isPresented: $showBackupSuccess) {
             Button("action_ok") { }
         } message: {
@@ -206,31 +222,46 @@ struct BackupManagerView: View {
     // MARK: - Backup Operations
 
     private func createBackup() {
+        // Create save panel
+        let savePanel = NSSavePanel()
+        savePanel.title = String(localized: "backup_create_section")
+        savePanel.nameFieldStringValue = "Moaiy_Backup_\(Date().formatted(date: .abbreviated, time: .omitted)).zip"
+        savePanel.allowedContentTypes = [.zip]
+        savePanel.canCreateDirectories = true
+
+        guard savePanel.runModal() == .OK, let url = savePanel.url else {
+            return
+        }
+
+        if includeSecretKeys && !viewModel.secretKeys.isEmpty {
+            pendingBackupURL = url
+            showingSecretKeyPassphraseSheet = true
+            return
+        }
+
+        createBackup(at: url, secretKeyPassphrase: nil)
+    }
+
+    private func createBackup(at url: URL, secretKeyPassphrase: String?) {
         isCreatingBackup = true
 
         Task {
             do {
-                // Create save panel
-                let savePanel = NSSavePanel()
-                savePanel.title = String(localized: "backup_create_section")
-                savePanel.nameFieldStringValue = "Moaiy_Backup_\(Date().formatted(date: .abbreviated, time: .omitted)).zip"
-                savePanel.allowedContentTypes = [.zip]
-                savePanel.canCreateDirectories = true
-
-                guard savePanel.runModal() == .OK, let url = savePanel.url else {
-                    isCreatingBackup = false
-                    return
-                }
-
                 // Create backup
-                try await createBackupArchive(at: url)
+                let summary = try await createBackupArchive(
+                    at: url,
+                    secretKeyPassphrase: secretKeyPassphrase
+                )
 
                 // Record backup
                 let record = BackupRecord(
                     date: Date(),
                     location: url,
                     keyCount: viewModel.keys.count,
-                    includeSecretKeys: includeSecretKeys
+                    includeSecretKeys: includeSecretKeys,
+                    exportedPublicKeyCount: summary.exportedPublicKeyCount,
+                    exportedSecretKeyCount: summary.exportedSecretKeyCount,
+                    failedSecretKeyCount: summary.failedSecretKeyCount
                 )
                 backupHistory.insert(record, at: 0)
                 lastBackupDate = Date()
@@ -242,10 +273,11 @@ struct BackupManagerView: View {
                 showError = true
             }
             isCreatingBackup = false
+            pendingBackupURL = nil
         }
     }
 
-    private func createBackupArchive(at url: URL) async throws {
+    private func createBackupArchive(at url: URL, secretKeyPassphrase: String?) async throws -> BackupExportSummary {
         // Create temporary directory for backup contents
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("MoaiyBackup_\(UUID().uuidString)")
@@ -255,18 +287,47 @@ struct BackupManagerView: View {
             try? FileManager.default.removeItem(at: tempDir)
         }
 
+        var exportedPublicKeyCount = 0
+        var exportedSecretKeyCount = 0
+        var failedSecretKeyFingerprints: [String] = []
+        var firstSecretKeyExportError: String?
+
         // Export all public keys
         for key in viewModel.keys {
             let publicData = try await viewModel.exportPublicKey(key)
             let publicFile = tempDir.appendingPathComponent("\(key.fingerprint)_public.asc")
             try publicData.write(to: publicFile)
+            exportedPublicKeyCount += 1
 
             // Export secret keys if included
             if includeSecretKeys && key.isSecret {
-                // Note: This would require passphrase input in production
-                // For now, we'll skip secret key export in the backup
-                // In production, you'd need to collect passphrases for each secret key
+                do {
+                    let secretData = try await viewModel.exportSecretKey(
+                        key,
+                        passphrase: secretKeyPassphrase ?? ""
+                    )
+                    let secretFile = tempDir.appendingPathComponent("\(key.fingerprint)_secret.asc")
+                    try secretData.write(to: secretFile)
+                    exportedSecretKeyCount += 1
+                } catch {
+                    failedSecretKeyFingerprints.append(key.fingerprint)
+                    if firstSecretKeyExportError == nil {
+                        firstSecretKeyExportError = error.localizedDescription
+                    }
+                }
             }
+        }
+
+        let summary = BackupExportSummary(
+            exportedPublicKeyCount: exportedPublicKeyCount,
+            requestedSecretKeyCount: includeSecretKeys ? viewModel.secretKeys.count : 0,
+            exportedSecretKeyCount: exportedSecretKeyCount,
+            failedSecretKeyFingerprints: failedSecretKeyFingerprints,
+            firstSecretKeyExportError: firstSecretKeyExportError
+        )
+
+        if includeSecretKeys, summary.hasSecretExportFailures {
+            throw BackupError.secretKeyExportIncomplete(summary)
         }
 
         // Create manifest
@@ -275,6 +336,9 @@ struct BackupManagerView: View {
             created: Date(),
             keyCount: viewModel.keys.count,
             includeSecretKeys: includeSecretKeys,
+            exportedPublicKeyCount: summary.exportedPublicKeyCount,
+            exportedSecretKeyCount: summary.exportedSecretKeyCount,
+            failedSecretKeyCount: summary.failedSecretKeyCount,
             keys: viewModel.keys.map { BackupKeyInfo(
                 fingerprint: $0.fingerprint,
                 name: $0.name,
@@ -299,6 +363,8 @@ struct BackupManagerView: View {
         guard process.terminationStatus == 0 else {
             throw BackupError.invalidBackupFormat
         }
+
+        return summary
     }
 
     private func restoreFromBackup() {
@@ -447,6 +513,26 @@ private struct RestoreSummary {
     let failedFiles: [String]
 }
 
+struct BackupExportSummary {
+    let exportedPublicKeyCount: Int
+    let requestedSecretKeyCount: Int
+    let exportedSecretKeyCount: Int
+    let failedSecretKeyFingerprints: [String]
+    let firstSecretKeyExportError: String?
+
+    var failedSecretKeyCount: Int {
+        failedSecretKeyFingerprints.count
+    }
+
+    var hasSecretExportFailures: Bool {
+        failedSecretKeyCount > 0
+    }
+
+    var isSecretExportComplete: Bool {
+        failedSecretKeyCount == 0 && requestedSecretKeyCount == exportedSecretKeyCount
+    }
+}
+
 // MARK: - Supporting Types
 
 struct BackupRecord: Identifiable, Codable {
@@ -455,13 +541,27 @@ struct BackupRecord: Identifiable, Codable {
     let location: URL
     let keyCount: Int
     let includeSecretKeys: Bool
+    let exportedPublicKeyCount: Int?
+    let exportedSecretKeyCount: Int?
+    let failedSecretKeyCount: Int?
 
-    init(date: Date, location: URL, keyCount: Int, includeSecretKeys: Bool) {
+    init(
+        date: Date,
+        location: URL,
+        keyCount: Int,
+        includeSecretKeys: Bool,
+        exportedPublicKeyCount: Int? = nil,
+        exportedSecretKeyCount: Int? = nil,
+        failedSecretKeyCount: Int? = nil
+    ) {
         self.id = UUID()
         self.date = date
         self.location = location
         self.keyCount = keyCount
         self.includeSecretKeys = includeSecretKeys
+        self.exportedPublicKeyCount = exportedPublicKeyCount
+        self.exportedSecretKeyCount = exportedSecretKeyCount
+        self.failedSecretKeyCount = failedSecretKeyCount
     }
 }
 
@@ -470,6 +570,9 @@ struct BackupManifest: Codable {
     let created: Date
     let keyCount: Int
     let includeSecretKeys: Bool
+    let exportedPublicKeyCount: Int?
+    let exportedSecretKeyCount: Int?
+    let failedSecretKeyCount: Int?
     let keys: [BackupKeyInfo]
 }
 
@@ -480,9 +583,10 @@ struct BackupKeyInfo: Codable {
     let isSecret: Bool
 }
 
-enum BackupError: Error, LocalizedError {
+private enum BackupError: Error, LocalizedError {
     case manifestNotFound
     case invalidBackupFormat
+    case secretKeyExportIncomplete(BackupExportSummary)
 
     var errorDescription: String? {
         switch self {
@@ -490,6 +594,9 @@ enum BackupError: Error, LocalizedError {
             return String(localized: "backup_error_manifest_not_found")
         case .invalidBackupFormat:
             return String(localized: "backup_error_invalid_format")
+        case .secretKeyExportIncomplete(let summary):
+            let firstError = summary.firstSecretKeyExportError ?? String(localized: "error_export_failed")
+            return "\(firstError) (\(summary.exportedSecretKeyCount)/\(summary.requestedSecretKeyCount))"
         }
     }
 }
@@ -572,7 +679,7 @@ struct BackupHistoryRow: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
 
-                Text("\(record.keyCount) \(String(localized: "backup_keys_total")) • \(record.includeSecretKeys ? String(localized: "backup_include_secret") : String(localized: "key_type_public"))")
+                Text(backupDetailText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -586,6 +693,20 @@ struct BackupHistoryRow: View {
             .buttonStyle(.plain)
         }
         .padding(.vertical, 8)
+    }
+
+    private var backupDetailText: String {
+        if
+            let exportedPublicKeyCount = record.exportedPublicKeyCount,
+            let exportedSecretKeyCount = record.exportedSecretKeyCount
+        {
+            if record.includeSecretKeys {
+                return "\(exportedPublicKeyCount) \(String(localized: "key_type_public")) • \(exportedSecretKeyCount) \(String(localized: "backup_keys_secret"))"
+            }
+            return "\(exportedPublicKeyCount) \(String(localized: "key_type_public"))"
+        }
+
+        return "\(record.keyCount) \(String(localized: "backup_keys_total")) • \(record.includeSecretKeys ? String(localized: "backup_include_secret") : String(localized: "key_type_public"))"
     }
 }
 
