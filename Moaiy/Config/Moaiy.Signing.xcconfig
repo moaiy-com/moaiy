@@ -1,0 +1,5 @@
+// Shared signing placeholders for App Store preparation.
+// Fill MOAIY_DEVELOPMENT_TEAM_ID after you have an Apple Developer account.
+
+MOAIY_DEVELOPMENT_TEAM_ID =
+DEVELOPMENT_TEAM = $(MOAIY_DEVELOPMENT_TEAM_ID)

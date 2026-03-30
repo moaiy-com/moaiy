@@ -140,6 +140,25 @@ final class GPGService {
     
     /// Default timeout for GPG operations (in seconds)
     static let defaultTimeout = Constants.GPG.defaultTimeout
+
+    static let isDebugBuild: Bool = {
+#if DEBUG
+        true
+#else
+        false
+#endif
+    }()
+
+    static func allowsExternalGPGFallback(isDebugBuild: Bool) -> Bool {
+        isDebugBuild
+    }
+
+    static func allowsSystemGPGHomeOverride(isDebugBuild: Bool, environment: [String: String]) -> Bool {
+        guard isDebugBuild else {
+            return false
+        }
+        return environment["MOAIY_USE_SYSTEM_GNUPG"] == "1"
+    }
     
     // MARK: - Initialization
     
@@ -184,6 +203,12 @@ final class GPGService {
             }
         } else {
             logger.debug("No gpg.bundle found in app bundle")
+        }
+
+        let allowsExternalFallback = Self.allowsExternalGPGFallback(isDebugBuild: Self.isDebugBuild)
+        guard allowsExternalFallback else {
+            logger.error("Bundled GPG missing in non-debug build; refusing external fallback")
+            throw GPGError.gpgNotFound
         }
         
         // Fallback to system GPG (for development)
@@ -230,7 +255,10 @@ final class GPGService {
         // Keep GNUPGHOME in app-controlled storage by default.
         // Developers can explicitly opt in to system ~/.gnupg during local debugging.
         let systemGPGHome = systemGPGHomeURL
-        let useSystemHome = ProcessInfo.processInfo.environment["MOAIY_USE_SYSTEM_GNUPG"] == "1"
+        let useSystemHome = Self.allowsSystemGPGHomeOverride(
+            isDebugBuild: Self.isDebugBuild,
+            environment: ProcessInfo.processInfo.environment
+        )
         if useSystemHome, FileManager.default.fileExists(atPath: systemGPGHome.path) {
             stopScopedExternalGPGHomeAccess()
             gpgHome = systemGPGHome
