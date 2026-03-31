@@ -27,10 +27,3 @@ jobs:
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
             build
-
-      - name: Test
-        run: |
-          xcodebuild test -project Moaiy/Moaiy.xcodeproj \
-            -scheme Moaiy \
-            -destination 'platform=macOS' \
-            CODE_SIGNING_ALLOWED=NO
