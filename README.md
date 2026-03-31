@@ -95,7 +95,8 @@ moaiy/
 
 ## Security
 
-If you discover a security issue, prefer private disclosure via GitHub Security Advisories instead of filing a public issue first.
+If you discover a security issue, use private disclosure channels described in
+[SECURITY.md](./SECURITY.md) instead of filing a public issue.
 
 ## License
 
