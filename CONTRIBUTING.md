@@ -372,7 +372,7 @@ moaiy/
 ## Getting Help
 
 - **Issues**: Report bugs or request features via [GitHub Issues](https://github.com/moaiy-com/moaiy/issues)
-- **Discussions**: Ask questions in [GitHub Discussions](https://github.com/moaiy-com/moaiy/discussions)
+- **Q&A**: Open a GitHub Issue for usage questions and onboarding help
 - **Documentation**: Check the `doc/` directory for technical details
 
 ## License
