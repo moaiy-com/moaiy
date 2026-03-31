@@ -1,0 +1,23 @@
+{
+  "version": "1.0",
+  "gpg_version": "2.5.18",
+  "created": "2026-03-28T12:53:57Z",
+  "platform": "arm64",
+  "architecture": "arm64",
+  "macos_min_version": "12.0",
+  "checksums": {
+    "gpg": "12c4c80223db4f2591fa01359b56d6f90be36b6a554ef5cb1a8692acdfbe484d",
+    "gpg-agent": "4598bab011e382b8762d7a0fad9fac2fdc948100ae7ae551a8e0eb3e758127d6",
+    "gpg-connect-agent": "ef17c32e63922b7399e43e3c63ac733391c0ad17a70b29a4a639a78e7175dd39",
+    "gpg-wks-server": "feb98d897af35fbbb066137ccde08da9e1286ebd0823c25b5d66774c282febf4",
+    "gpgconf": "69ce7e98c58d168fc52f1ea1d6019265abbddcc973423cf73f4a38f961841a25",
+    "gpgtar": "a42ce7c888eb5de6e53f76d76aabb12c96f3e0728cecc9cd2434aa2f040786cc",
+    "libassuan.9.dylib": "ec85d6cafb3de4597530f114eec86f6539989c500c7124729a4a2a96c90e211f",
+    "libgcrypt.20.dylib": "9019ec8d144e2f0ffe4cafeb35283f0eb533bf146e9adc3f580ba516171db5e2",
+    "libgpg-error.0.dylib": "97048590e3ada9f13fdba098d8acc989774541aa0c9a21242012deb0292fde8b",
+    "libintl.8.dylib": "e0703e8dd4b317ee4cc6bdb8b66ff594b03f7d33029da0236782f3655006c2c3",
+    "libksba.8.dylib": "657302eacd5bfcd8c9d1a018491a0b4319fed5987a7c85d6e9a2d8f052b06e58",
+    "libnpth.0.dylib": "4e15e619c371499e881022308f0eea57c5ec0ea0697947e01e1eb5ff213186a5",
+    "libreadline.8.dylib": "2eed4c1ff74acb1c662448b334dca1dc6bc86bb6787b06f658892fe60984c606"
+  }
+}
