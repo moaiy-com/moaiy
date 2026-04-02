@@ -49,6 +49,12 @@ enum Constants {
         
         /// Default window height
         static let defaultWindowHeight: CGFloat = 700
+
+        /// Minimum window width to keep key cards fully visible
+        static let minWindowWidth: CGFloat = 880
+
+        /// Minimum window height for core key management layout
+        static let minWindowHeight: CGFloat = 620
         
         /// Minimum sidebar width
         static let minSidebarWidth: CGFloat = 180

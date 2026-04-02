@@ -9,6 +9,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct KeyDropZoneView: View {
+    var hintTextKey: LocalizedStringKey = "drop_zone_hint"
     var onDrop: (([URL]) -> Void)?
     var onTap: (() -> Void)?
     @State private var isTargeted = false
@@ -30,7 +31,7 @@ struct KeyDropZoneView: View {
                         Image(systemName: "arrow.down.doc.on.clip")
                             .font(.title3)
                             .foregroundStyle(isTargeted ? Color.accentColor : .secondary)
-                        Text("drop_zone_hint")
+                        Text(hintTextKey)
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }

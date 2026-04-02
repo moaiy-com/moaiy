@@ -149,27 +149,21 @@ struct KeyCardView: View {
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .layoutPriority(2)
-
-            GeometryReader { geometry in
-                let availableWidth = geometry.size.width
-                let adaptiveWidth = min(availableWidth, max(140, availableWidth * 0.7))
-
-                KeyDropZoneView(
-                    onDrop: { urls in
-                        handleDroppedFiles(urls: urls)
-                    },
-                    onTap: {
-                        selectFilesAndProcess()
-                    }
-                )
-                .frame(width: adaptiveWidth, height: 52, alignment: .trailing)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-            }
-            .frame(minWidth: 120, idealWidth: 240, maxWidth: .infinity)
-            .frame(height: 52)
+            .frame(minWidth: 280, idealWidth: 340, maxWidth: 800, alignment: .leading)
             .layoutPriority(1)
+
+            KeyDropZoneView(
+                hintTextKey: key.isSecret ? "drop_zone_hint" : "drop_zone_encrypt_title",
+                onDrop: { urls in
+                    handleDroppedFiles(urls: urls)
+                },
+                onTap: {
+                    selectFilesAndProcess()
+                }
+            )
+            .frame(minWidth: 80, idealWidth: 520, maxWidth: .infinity, alignment: .trailing)
+            .frame(height: 52)
+            .layoutPriority(3)
 
             KeyActionMenu(key: key, onDelete: onDelete)
                 .frame(width: 36, alignment: .trailing)

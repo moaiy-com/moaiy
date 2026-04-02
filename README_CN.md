@@ -45,6 +45,23 @@ xcodebuild -project Moaiy/Moaiy.xcodeproj \
            build
 ```
 
+## DMG 打包
+
+使用一条命令完成构建并生成带时间戳的 DMG：
+
+```bash
+./scripts/package_dmg.sh
+```
+
+常用参数：
+
+```bash
+./scripts/package_dmg.sh --configuration Release
+./scripts/package_dmg.sh --skip-build --open
+```
+
+建议在你本机终端直接执行该脚本，这样可以避免在 AI 会话里反复触发沙盒提权。
+
 ## 运行测试
 
 ```bash

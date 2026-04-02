@@ -45,6 +45,23 @@ xcodebuild -project Moaiy/Moaiy.xcodeproj \
            build
 ```
 
+## Package DMG
+
+Use one command to build and package a timestamped DMG:
+
+```bash
+./scripts/package_dmg.sh
+```
+
+Useful options:
+
+```bash
+./scripts/package_dmg.sh --configuration Release
+./scripts/package_dmg.sh --skip-build --open
+```
+
+This script is intended to be run in your local terminal. Running it locally avoids repeated sandbox escalation prompts in AI sessions.
+
 ## Run Tests
 
 ```bash

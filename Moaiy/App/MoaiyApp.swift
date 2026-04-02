@@ -24,12 +24,17 @@ struct MoaiyApp: App {
     var body: some Scene {
         WindowGroup {
             MainView()
+                .frame(
+                    minWidth: Constants.UI.minWindowWidth,
+                    minHeight: Constants.UI.minWindowHeight
+                )
                 .onAppear {
                     logger.notice("MainView appeared")
                     logger.notice("GPGService.isReady after view appear: \(GPGService.shared.isReady)")
                 }
         }
         .windowStyle(.automatic)
+        .windowResizability(.contentMinSize)
         .defaultSize(
             width: Constants.UI.defaultWindowWidth,
             height: Constants.UI.defaultWindowHeight
