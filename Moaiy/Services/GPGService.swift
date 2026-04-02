@@ -8,13 +8,29 @@
 import Foundation
 import os.log
 
+private final class PipeAccumulator {
+    private let lock = NSLock()
+    private var buffer = Data()
+
+    func append(_ data: Data) {
+        guard !data.isEmpty else { return }
+        lock.lock()
+        buffer.append(data)
+        lock.unlock()
+    }
+
+    var data: Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return buffer
+    }
+}
+
 // MARK: - GPG Process Actor
 
 /// Actor for executing GPG commands off the main thread
 actor GPGProcessExecutor {
-    
-    private let logger = Logger(subsystem: "com.moaiy.app", category: "GPGProcess")
-    
+
     /// Execute a GPG command
     func execute(
         executableURL: URL,
@@ -52,6 +68,26 @@ actor GPGProcessExecutor {
             process.standardInput = stdinPipe
         }
         
+        let stdoutAccumulator = PipeAccumulator()
+        let stderrAccumulator = PipeAccumulator()
+
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                return
+            }
+            stdoutAccumulator.append(chunk)
+        }
+        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                return
+            }
+            stderrAccumulator.append(chunk)
+        }
+
         // Execute with timeout
         try process.run()
         
@@ -70,12 +106,41 @@ actor GPGProcessExecutor {
         
         if process.isRunning {
             process.terminate()
-            throw GPGError.executionFailed("Operation timed out after \(Int(timeout)) seconds")
+
+            let terminateDeadline = Date().addingTimeInterval(1.0)
+            while process.isRunning && Date() < terminateDeadline {
+                try await Task.sleep(nanoseconds: 50_000_000)
+            }
+
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            let timeoutStderr = String(data: stderrAccumulator.data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let timeoutStdout = String(data: stdoutAccumulator.data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let timeoutMessage: String?
+            if let timeoutStderr, !timeoutStderr.isEmpty {
+                timeoutMessage = timeoutStderr
+            } else if let timeoutStdout, !timeoutStdout.isEmpty {
+                timeoutMessage = timeoutStdout
+            } else {
+                timeoutMessage = nil
+            }
+            let fallbackMessage = "Operation timed out after \(Int(timeout)) seconds"
+            throw GPGError.executionFailed(timeoutMessage?.isEmpty == false ? timeoutMessage! : fallbackMessage)
         }
-        
-        // Read output
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+
+        stdoutPipe.fileHandleForReading.readabilityHandler = nil
+        stderrPipe.fileHandleForReading.readabilityHandler = nil
+
+        // Capture any trailing bytes after readability handlers are removed.
+        let stdoutTail = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderrTail = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        stdoutAccumulator.append(stdoutTail)
+        stderrAccumulator.append(stderrTail)
+
+        let stdoutData = stdoutAccumulator.data
+        let stderrData = stderrAccumulator.data
         
         let stdout = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let stderr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -172,6 +237,7 @@ final class GPGService {
     private func setupGPG() {
         Task {
             do {
+                SecureTempStorage.cleanupStaleDirectories()
                 try findGPGExecutable()
                 logger.info("Found GPG at: \(self.gpgPath)")
                 try setupGPGHome()
@@ -297,10 +363,14 @@ final class GPGService {
         defaults.set(true, forKey: useExternalGPGHomeKey)
 
         let accessGranted = url.startAccessingSecurityScopedResource()
-        if accessGranted {
-            stopScopedExternalGPGHomeAccess()
-            scopedExternalGPGHomeURL = url
+        guard accessGranted else {
+            defaults.set(false, forKey: useExternalGPGHomeKey)
+            defaults.removeObject(forKey: externalGPGHomeBookmarkKey)
+            throw GPGError.fileAccessDenied(url.path)
         }
+
+        stopScopedExternalGPGHomeAccess()
+        scopedExternalGPGHomeURL = url
 
         gpgHome = url
         isUsingExternalGPGHome = true
@@ -445,15 +515,16 @@ final class GPGService {
         }
 
         let accessGranted = url.startAccessingSecurityScopedResource()
-        if accessGranted {
-            stopScopedExternalGPGHomeAccess()
-            scopedExternalGPGHomeURL = url
-        } else if !FileManager.default.fileExists(atPath: url.path) {
-            logger.warning("External GPG home unavailable, falling back to app-managed keyring")
+        guard accessGranted else {
+            logger.warning("External GPG home security-scope access denied, falling back to app-managed keyring")
             defaults.set(false, forKey: useExternalGPGHomeKey)
             defaults.removeObject(forKey: externalGPGHomeBookmarkKey)
+            stopScopedExternalGPGHomeAccess()
             return nil
         }
+
+        stopScopedExternalGPGHomeAccess()
+        scopedExternalGPGHomeURL = url
 
         try ensureGPGHomeDirectoryExists(at: url)
         return url
@@ -916,7 +987,13 @@ final class GPGService {
     ///   - signingKey: Key ID to sign with (required if sign is true)
     /// - Returns: Encrypted text
     func encrypt(text: String, recipients: [String], sign: Bool = false, signingKey: String? = nil) async throws -> String {
-        var arguments = ["--encrypt", "--armor", "--batch", "--trust-model", "always"]
+        var arguments = [
+            "--encrypt",
+            "--armor",
+            "--batch",
+            "--trust-model", "always",
+            "--cipher-algo", Constants.GPG.defaultCipherAlgorithm
+        ]
         
         // Add recipients
         for recipient in recipients {
@@ -978,21 +1055,24 @@ final class GPGService {
     ///   - destinationURL: Destination file URL
     ///   - recipients: Array of key IDs to encrypt for
     ///   - armor: If true, output ASCII armor format
-    func encryptFile(sourceURL: URL, destinationURL: URL, recipients: [String], armor: Bool = false) async throws {
+    func encryptFile(sourceURL: URL, destinationURL: URL, recipients: [String], armor: Bool = false) async throws -> URL {
         let fileManager = FileManager.default
-        let stagingDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("moaiy-gpg-file-op-\(UUID().uuidString)", isDirectory: true)
+        let stagingDirectory = try secureOperationDirectory(prefix: "file-op")
         let stagedSourceURL = stagingDirectory.appendingPathComponent("input")
         let stagedOutputURL = stagingDirectory.appendingPathComponent("output")
-
-        try fileManager.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
         defer {
             try? fileManager.removeItem(at: stagingDirectory)
         }
 
         try fileManager.copyItem(at: sourceURL, to: stagedSourceURL)
 
-        var arguments = ["--encrypt", "--batch", "--yes", "--trust-model", "always"]
+        var arguments = [
+            "--encrypt",
+            "--batch",
+            "--yes",
+            "--trust-model", "always",
+            "--cipher-algo", Constants.GPG.defaultCipherAlgorithm
+        ]
         
         // Add recipients
         for recipient in recipients {
@@ -1014,10 +1094,9 @@ final class GPGService {
             throw GPGError.encryptionFailed("No output generated")
         }
 
-        if fileManager.fileExists(atPath: destinationURL.path) {
-            try fileManager.removeItem(at: destinationURL)
-        }
-        try fileManager.copyItem(at: stagedOutputURL, to: destinationURL)
+        let resolvedDestinationURL = makeNonConflictingDestinationURL(for: destinationURL)
+        try fileManager.copyItem(at: stagedOutputURL, to: resolvedDestinationURL)
+        return resolvedDestinationURL
     }
     
     /// Decrypt a file
@@ -1025,16 +1104,13 @@ final class GPGService {
     ///   - sourceURL: Source file URL
     ///   - destinationURL: Destination file URL
     ///   - passphrase: Passphrase for the private key
-    func decryptFile(sourceURL: URL, destinationURL: URL, passphrase: String) async throws {
+    func decryptFile(sourceURL: URL, destinationURL: URL, passphrase: String) async throws -> URL {
         try await ensureGPGAgentRunningIfNeeded()
 
         let fileManager = FileManager.default
-        let stagingDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("moaiy-gpg-file-op-\(UUID().uuidString)", isDirectory: true)
+        let stagingDirectory = try secureOperationDirectory(prefix: "file-op")
         let stagedSourceURL = stagingDirectory.appendingPathComponent("input")
         let stagedOutputURL = stagingDirectory.appendingPathComponent("output")
-
-        try fileManager.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
         defer {
             try? fileManager.removeItem(at: stagingDirectory)
         }
@@ -1062,10 +1138,9 @@ final class GPGService {
             throw GPGError.decryptionFailed("No output generated")
         }
 
-        if fileManager.fileExists(atPath: destinationURL.path) {
-            try fileManager.removeItem(at: destinationURL)
-        }
-        try fileManager.copyItem(at: stagedOutputURL, to: destinationURL)
+        let resolvedDestinationURL = makeNonConflictingDestinationURL(for: destinationURL)
+        try fileManager.copyItem(at: stagedOutputURL, to: resolvedDestinationURL)
+        return resolvedDestinationURL
     }
 
     /// Verify if a file is a valid GPG file
@@ -1074,9 +1149,16 @@ final class GPGService {
     /// - Returns: True if file is a valid GPG file
     func verifyGPGFile(at fileURL: URL) async -> Bool {
         let fileManager = FileManager.default
-        let stagingDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("moaiy-gpg-verify-\(UUID().uuidString)", isDirectory: true)
-        let stagedInputURL = stagingDirectory.appendingPathComponent("input")
+        let stagedInputURL: URL
+        let stagingDirectory: URL
+
+        do {
+            stagingDirectory = try secureOperationDirectory(prefix: "verify")
+            stagedInputURL = stagingDirectory.appendingPathComponent("input")
+        } catch {
+            logger.debug("verifyGPGFile cannot create secure temp dir: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
 
         let accessGranted = fileURL.startAccessingSecurityScopedResource()
         defer {
@@ -1087,7 +1169,6 @@ final class GPGService {
         }
 
         do {
-            try fileManager.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
             try fileManager.copyItem(at: fileURL, to: stagedInputURL)
 
             let result = try await executeGPG(
@@ -1330,6 +1411,37 @@ final class GPGService {
         }
     }
 
+    private func secureOperationDirectory(prefix: String) throws -> URL {
+        SecureTempStorage.cleanupStaleDirectories()
+        return try SecureTempStorage.makeOperationDirectory(prefix: prefix)
+    }
+
+    private func makeNonConflictingDestinationURL(for url: URL) -> URL {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: url.path) else { return url }
+
+        let ext = url.pathExtension
+        let baseName = ext.isEmpty
+            ? url.lastPathComponent
+            : String(url.lastPathComponent.dropLast(ext.count + 1))
+        let directory = url.deletingLastPathComponent()
+
+        var index = 1
+        while true {
+            let candidateName: String
+            if ext.isEmpty {
+                candidateName = "\(baseName) (\(index))"
+            } else {
+                candidateName = "\(baseName) (\(index)).\(ext)"
+            }
+            let candidateURL = directory.appendingPathComponent(candidateName)
+            if !fileManager.fileExists(atPath: candidateURL.path) {
+                return candidateURL
+            }
+            index += 1
+        }
+    }
+
     private func listKeys(at homeURL: URL, secretOnly: Bool) async throws -> [GPGKey] {
         let arguments = secretOnly
             ? ["--list-secret-keys", "--with-colons", "--fixed-list-mode"]
@@ -1353,9 +1465,7 @@ final class GPGService {
     }
 
     private func importArmorData(_ data: Data, fileName: String) async throws -> KeyImportResult {
-        let tempRoot = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("moaiy-migration-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        let tempRoot = try secureOperationDirectory(prefix: "migration")
         defer {
             try? FileManager.default.removeItem(at: tempRoot)
         }

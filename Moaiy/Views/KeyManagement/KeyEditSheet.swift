@@ -119,12 +119,27 @@ struct ExpirationEditView: View {
     @State private var showError = false
     @State private var errorMessage: String?
 
-    enum ExpirationOption: String, CaseIterable {
-        case never = "Never"
-        case oneYear = "1 Year"
-        case twoYears = "2 Years"
-        case fiveYears = "5 Years"
-        case custom = "Custom Date"
+    enum ExpirationOption: CaseIterable {
+        case never
+        case oneYear
+        case twoYears
+        case fiveYears
+        case custom
+
+        var titleKey: LocalizedStringKey {
+            switch self {
+            case .never:
+                return "edit_expiration_never"
+            case .oneYear:
+                return "edit_expiration_one_year"
+            case .twoYears:
+                return "edit_expiration_two_years"
+            case .fiveYears:
+                return "edit_expiration_five_years"
+            case .custom:
+                return "edit_expiration_custom_date"
+            }
+        }
     }
 
     var body: some View {
@@ -161,7 +176,7 @@ struct ExpirationEditView: View {
                             Image(systemName: expirationOption == option ? "checkmark.circle.fill" : "circle")
                                 .foregroundStyle(expirationOption == option ? Color.moaiyAccent : .secondary)
 
-                            Text(option.rawValue)
+                            Text(option.titleKey)
                                 .font(.subheadline)
                                 .foregroundStyle(.primary)
 

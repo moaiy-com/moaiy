@@ -1,8 +1,10 @@
 # Moaiy
 
-> 像摩艾一样守护您的秘密
+> 通过拖放，保护你最重要的信息。
 
-Moaiy 是一个开源的 macOS 原生应用，专注于 OpenPGP（GPG）密钥管理与加解密工作流，使用 SwiftUI 构建。
+Moaiy 帮你通过简单、易操作的步骤保护重要信息。
+
+Moaiy 是一个开源的 macOS 原生应用，专注于信息保护与恢复工作流，使用 SwiftUI 构建。
 
 **[English Version](./README.md)**
 

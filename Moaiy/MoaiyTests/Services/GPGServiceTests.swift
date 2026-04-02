@@ -262,6 +262,62 @@ struct GPGServiceTests {
 
         #expect(detected == .notGPG)
     }
+
+    @Test("GPG file detector treats .moy extension as encrypted fallback")
+    func detectFileType_moyExtensionFallsBackToEncrypted() async throws {
+        let detector = GPGFileTypeDetector()
+        let fileManager = FileManager.default
+        let tempDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("moaiy-detector-test-\(UUID().uuidString)", isDirectory: true)
+
+        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: tempDirectory) }
+
+        let encryptedLikeURL = tempDirectory.appendingPathComponent("sample.moy")
+        try Data("not-a-valid-openpgp-packet".utf8).write(to: encryptedLikeURL)
+
+        let detected = await detector.detectFileType(at: encryptedLikeURL)
+
+        #expect(detected == .encrypted)
+    }
+
+    @Test("GPG file detector does not classify PNG as signature")
+    func detectFileType_pngStaysNotGPG() async throws {
+        let detector = GPGFileTypeDetector()
+        let fileManager = FileManager.default
+        let tempDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("moaiy-detector-test-\(UUID().uuidString)", isDirectory: true)
+
+        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: tempDirectory) }
+
+        let pngURL = tempDirectory.appendingPathComponent("moaiy_icon.png")
+        let pngHeader: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        try Data(pngHeader).write(to: pngURL)
+
+        let detected = await detector.detectFileType(at: pngURL)
+
+        #expect(detected == .notGPG)
+    }
+
+    @Test("Secure temp cleanup removes stale directories only")
+    func secureTempCleanup_removesStaleDirectoriesOnly() throws {
+        let fileManager = FileManager.default
+        let staleDirectory = try SecureTempStorage.makeOperationDirectory(prefix: "stale")
+        let freshDirectory = try SecureTempStorage.makeOperationDirectory(prefix: "fresh")
+        defer {
+            try? fileManager.removeItem(at: staleDirectory)
+            try? fileManager.removeItem(at: freshDirectory)
+        }
+
+        let oldDate = Date().addingTimeInterval(-7200)
+        try fileManager.setAttributes([.modificationDate: oldDate], ofItemAtPath: staleDirectory.path)
+
+        SecureTempStorage.cleanupStaleDirectories(olderThan: 3600)
+
+        #expect(fileManager.fileExists(atPath: staleDirectory.path) == false)
+        #expect(fileManager.fileExists(atPath: freshDirectory.path) == true)
+    }
 }
 
 // MARK: - Helper Functions for Testing

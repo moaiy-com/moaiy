@@ -58,6 +58,23 @@
         }
       }
     },
+    "about_gpg_embedded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Built-in"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "应用内置"
+          }
+        }
+      }
+    },
     "about_icon_credit_link": {
       "extractionState": "manual",
       "localizations": {
@@ -1759,6 +1776,91 @@
       }
     },
     "edit_custom_date": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom Date"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义日期"
+          }
+        }
+      }
+    },
+    "edit_expiration_never": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Never"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "永不过期"
+          }
+        }
+      }
+    },
+    "edit_expiration_one_year": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Year"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 年"
+          }
+        }
+      }
+    },
+    "edit_expiration_two_years": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2 Years"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2 年"
+          }
+        }
+      }
+    },
+    "edit_expiration_five_years": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 Years"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 年"
+          }
+        }
+      }
+    },
+    "edit_expiration_custom_date": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -5036,6 +5138,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "搜索密钥..."
+          }
+        }
+      }
+    },
+    "privacy_policy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy Policy"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隐私政策"
           }
         }
       }

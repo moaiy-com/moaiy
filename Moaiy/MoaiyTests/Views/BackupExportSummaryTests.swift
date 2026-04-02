@@ -46,7 +46,7 @@ struct BackupExportSummaryTests {
     func backupRecord_persistsExportStatistics() {
         let record = BackupRecord(
             date: Date(timeIntervalSince1970: 1_700_000_000),
-            location: URL(fileURLWithPath: "/tmp/moaiy-backup.zip"),
+            backupFileName: "moaiy-backup.zip",
             keyCount: 6,
             includeSecretKeys: true,
             exportedPublicKeyCount: 6,
@@ -54,8 +54,27 @@ struct BackupExportSummaryTests {
             failedSecretKeyCount: 1
         )
 
+        #expect(record.backupFileName == "moaiy-backup.zip")
         #expect(record.exportedPublicKeyCount == 6)
         #expect(record.exportedSecretKeyCount == 2)
         #expect(record.failedSecretKeyCount == 1)
+    }
+
+    @Test("Backup record decodes legacy location field into file name")
+    func backupRecord_decodesLegacyLocation() throws {
+        let legacyJSON = """
+        {
+          "id": "\(UUID().uuidString)",
+          "date": 1700000000,
+          "location": "file:///tmp/legacy-backup.zip",
+          "keyCount": 4,
+          "includeSecretKeys": true
+        }
+        """
+
+        let data = try #require(legacyJSON.data(using: .utf8))
+        let decoded = try JSONDecoder().decode(BackupRecord.self, from: data)
+
+        #expect(decoded.backupFileName == "legacy-backup.zip")
     }
 }

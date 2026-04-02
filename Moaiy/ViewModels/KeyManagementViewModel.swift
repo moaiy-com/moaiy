@@ -7,7 +7,6 @@
 
 import Foundation
 import os.log
-import AppKit
 
 @MainActor
 @Observable
@@ -21,7 +20,6 @@ final class KeyManagementViewModel {
     var isLoading = false
     var errorMessage: String?
     var searchText = ""
-    var showSystemKeyringMigrationPrompt = false
     var isSystemKeyringMigrationRunning = false
 
     // Filter options
@@ -38,7 +36,6 @@ final class KeyManagementViewModel {
     private var retryCount = 0
     private let maxRetries = Constants.GPG.maxRetries
     private var retryTask: Task<Void, Never>?
-    private let migrationHandledKey = Constants.StorageKeys.systemKeyringMigrationHandled
 
     // Expiration reminder service
     let expirationReminder = ExpirationReminderService()
@@ -127,7 +124,6 @@ final class KeyManagementViewModel {
             }
 
             await loadKeys()
-            await evaluateSystemKeyringMigrationPromptIfNeeded()
         }
     }
     
@@ -516,31 +512,19 @@ final class KeyManagementViewModel {
         await loadKeys()
     }
 
-    func dismissSystemKeyringMigrationPrompt() {
-        UserDefaults.standard.set(true, forKey: migrationHandledKey)
-        showSystemKeyringMigrationPrompt = false
-    }
-
-    func migrateFromSystemKeyring() async {
-        guard !isSystemKeyringMigrationRunning else { return }
-
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.directoryURL = gpgService.systemGPGHomeURL.deletingLastPathComponent()
-        panel.message = String(localized: "migration_keyring_picker_message")
-        panel.prompt = String(localized: "action_import_key")
-
-        if panel.runModal() != .OK {
-            return
+    func migrateKeysFromExternalKeyring(at sourceURL: URL) async throws -> KeyMigrationResult {
+        guard !isSystemKeyringMigrationRunning else {
+            throw GPGError.operationCancelled
         }
-        guard let sourceURL = panel.url else { return }
 
         isSystemKeyringMigrationRunning = true
         errorMessage = nil
 
         let hasSecurityScope = sourceURL.startAccessingSecurityScopedResource()
+        guard hasSecurityScope || FileManager.default.isReadableFile(atPath: sourceURL.path) else {
+            isSystemKeyringMigrationRunning = false
+            throw GPGError.fileAccessDenied(sourceURL.path)
+        }
         defer {
             if hasSecurityScope {
                 sourceURL.stopAccessingSecurityScopedResource()
@@ -548,15 +532,15 @@ final class KeyManagementViewModel {
         }
 
         do {
-            _ = try await gpgService.migrateKeys(fromExternalGPGHome: sourceURL)
-            UserDefaults.standard.set(true, forKey: migrationHandledKey)
-            showSystemKeyringMigrationPrompt = false
+            let result = try await gpgService.migrateKeys(fromExternalGPGHome: sourceURL)
             await loadKeys()
+            isSystemKeyringMigrationRunning = false
+            return result
         } catch {
             errorMessage = error.localizedDescription
+            isSystemKeyringMigrationRunning = false
+            throw error
         }
-
-        isSystemKeyringMigrationRunning = false
     }
 
     // MARK: - Search History
@@ -603,24 +587,6 @@ final class KeyManagementViewModel {
         filterAlgorithm != nil ||
         !showExpiredKeys ||
         !searchText.isEmpty
-    }
-
-    private func evaluateSystemKeyringMigrationPromptIfNeeded() async {
-        guard !UserDefaults.standard.bool(forKey: migrationHandledKey) else { return }
-        guard !gpgService.isUsingExternalGPGHome else { return }
-        guard keys.isEmpty else { return }
-        guard gpgService.systemGPGHomeLikelyExists() else { return }
-
-        do {
-            let snapshot = try await gpgService.inspectKeyring(at: gpgService.systemGPGHomeURL)
-            if snapshot.totalKeyCount > 0 {
-                showSystemKeyringMigrationPrompt = true
-            }
-        } catch {
-            // Sandbox may block direct ~/.gnupg probing. Still offer migration prompt via picker.
-            logger.warning("System keyring probe failed: \(error.localizedDescription)")
-            showSystemKeyringMigrationPrompt = true
-        }
     }
 }
 

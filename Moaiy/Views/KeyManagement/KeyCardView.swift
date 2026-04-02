@@ -273,25 +273,26 @@ struct KeyCardView: View {
                 ) else {
                     return
                 }
+                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: outputURL)
 
                 let hasSourceAccess = url.startAccessingSecurityScopedResource()
-                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
+                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
                 defer {
                     if hasSourceAccess {
                         url.stopAccessingSecurityScopedResource()
                     }
                     if hasOutputAccess {
-                        outputURL.stopAccessingSecurityScopedResource()
+                        plannedOutputURL.stopAccessingSecurityScopedResource()
                     }
                 }
 
-                try await GPGService.shared.encryptFile(
+                let finalOutputURL = try await GPGService.shared.encryptFile(
                     sourceURL: url,
-                    destinationURL: outputURL,
+                    destinationURL: plannedOutputURL,
                     recipients: [key.fingerprint]
                 )
                 operationResults.append(
-                    OperationResult.successEncrypt(fileURL: url, outputURL: outputURL)
+                    OperationResult.successEncrypt(fileURL: url, outputURL: finalOutputURL)
                 )
                 
             case .publicKey, .privateKey:
@@ -342,24 +343,25 @@ struct KeyCardView: View {
 
         for request in pendingDecryptRequests {
             do {
+                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: request.outputURL)
                 let hasSourceAccess = request.sourceURL.startAccessingSecurityScopedResource()
-                let hasOutputAccess = request.outputURL.startAccessingSecurityScopedResource()
+                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
                 defer {
                     if hasSourceAccess {
                         request.sourceURL.stopAccessingSecurityScopedResource()
                     }
                     if hasOutputAccess {
-                        request.outputURL.stopAccessingSecurityScopedResource()
+                        plannedOutputURL.stopAccessingSecurityScopedResource()
                     }
                 }
 
-                try await GPGService.shared.decryptFile(
+                let finalOutputURL = try await GPGService.shared.decryptFile(
                     sourceURL: request.sourceURL,
-                    destinationURL: request.outputURL,
+                    destinationURL: plannedOutputURL,
                     passphrase: password
                 )
                 operationResults.append(
-                    OperationResult.successDecrypt(fileURL: request.sourceURL, outputURL: request.outputURL)
+                    OperationResult.successDecrypt(fileURL: request.sourceURL, outputURL: finalOutputURL)
                 )
             } catch {
                 operationResults.append(

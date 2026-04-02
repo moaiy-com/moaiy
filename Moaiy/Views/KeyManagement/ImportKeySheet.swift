@@ -15,6 +15,7 @@ struct ImportKeySheet: View {
     private enum ImportMode: String, CaseIterable, Identifiable {
         case file
         case keyserver
+        case system
 
         var id: String { rawValue }
     }
@@ -23,9 +24,12 @@ struct ImportKeySheet: View {
     @State private var importedFileURL: URL?
     @State private var keyserverQuery = ""
     @State private var selectedKeyserver = "keys.openpgp.org"
+    @State private var systemKeyringURL: URL?
     @State private var isImporting = false
     @State private var importError: String?
     @State private var importResult: KeyImportResult?
+    @State private var migrationResult: KeyMigrationResult?
+    @State private var showIncompleteSecretMigrationAlert = false
 
     private let keyservers = [
         "keys.openpgp.org",
@@ -38,7 +42,7 @@ struct ImportKeySheet: View {
             // Header
             HStack(alignment: .top) {
                 VStack(spacing: 8) {
-                    Image(systemName: importMode == .file ? "square.and.arrow.down" : "globe")
+                    Image(systemName: headerIconName)
                         .font(.system(size: 48))
                         .foregroundStyle(Color.moaiyAccent)
 
@@ -64,11 +68,13 @@ struct ImportKeySheet: View {
             Picker("", selection: $importMode) {
                 Text("action_select_files").tag(ImportMode.file)
                 Text("import_from_keyserver").tag(ImportMode.keyserver)
+                Text("migration_system_keyring_title").tag(ImportMode.system)
             }
             .pickerStyle(.segmented)
             .onChange(of: importMode) { _, _ in
                 importError = nil
                 importResult = nil
+                migrationResult = nil
             }
 
             // Import source
@@ -87,7 +93,7 @@ struct ImportKeySheet: View {
                             importResult = nil
                         }
                     }
-                } else {
+                } else if importMode == .keyserver {
                     KeyserverImportCard(
                         query: $keyserverQuery,
                         selectedKeyserver: $selectedKeyserver,
@@ -96,6 +102,16 @@ struct ImportKeySheet: View {
                     .onChange(of: keyserverQuery) { _, _ in
                         importError = nil
                         importResult = nil
+                    }
+                } else {
+                    SystemKeyringImportCard(
+                        selectedURL: systemKeyringURL,
+                        isImporting: isImporting,
+                        onSelectFolder: chooseSystemKeyringFolder
+                    )
+
+                    if let migrationResult {
+                        MigrationResultCard(result: migrationResult)
                     }
                 }
             }
@@ -106,7 +122,7 @@ struct ImportKeySheet: View {
             }
 
             // Success message
-            if let result = importResult {
+            if let result = importResult, importMode != .system {
                 SuccessBanner(
                     message: String(localized: "import_success_message"),
                     details: String(
@@ -143,20 +159,44 @@ struct ImportKeySheet: View {
         }
         .padding(32)
         .moaiyModalAdaptiveSize(minWidth: 420, idealWidth: 540, maxWidth: 720)
+        .alert("migration_system_keyring_title", isPresented: $showIncompleteSecretMigrationAlert) {
+            Button("action_retry") {
+                importFromSystemKeyring()
+            }
+            Button("action_ok", role: .cancel) { }
+        } message: {
+            Text("migration_system_keyring_message")
+        }
     }
 
     private var canImport: Bool {
         if importMode == .file {
             return importedFileURL != nil
         }
-        return !keyserverQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if importMode == .keyserver {
+            return !keyserverQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        return systemKeyringURL != nil
+    }
+
+    private var headerIconName: String {
+        switch importMode {
+        case .file:
+            return "square.and.arrow.down"
+        case .keyserver:
+            return "globe"
+        case .system:
+            return "internaldrive"
+        }
     }
 
     private func runImport() {
         if importMode == .file {
             importFromFile()
-        } else {
+        } else if importMode == .keyserver {
             importFromKeyserver()
+        } else {
+            importFromSystemKeyring()
         }
     }
 
@@ -207,6 +247,126 @@ struct ImportKeySheet: View {
                 isImporting = false
             }
         }
+    }
+
+    private func chooseSystemKeyringFolder() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.directoryURL = GPGService.shared.systemGPGHomeURL.deletingLastPathComponent()
+        panel.message = String(localized: "migration_keyring_picker_message")
+        panel.prompt = String(localized: "action_select_external_keyring")
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return
+        }
+
+        systemKeyringURL = url
+        importError = nil
+        migrationResult = nil
+    }
+
+    private func importFromSystemKeyring() {
+        guard let sourceURL = systemKeyringURL else { return }
+
+        isImporting = true
+        importError = nil
+        importResult = nil
+        migrationResult = nil
+
+        Task { @MainActor in
+            do {
+                let result = try await viewModel.migrateKeysFromExternalKeyring(at: sourceURL)
+                migrationResult = result
+                isImporting = false
+
+                if result.sourceSecretKeyCount > 0 && !result.secretKeysMigrated {
+                    showIncompleteSecretMigrationAlert = true
+                }
+            } catch {
+                importError = error.localizedDescription
+                isImporting = false
+            }
+        }
+    }
+}
+
+struct SystemKeyringImportCard: View {
+    let selectedURL: URL?
+    let isImporting: Bool
+    let onSelectFolder: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("migration_system_keyring_message")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            if let selectedURL {
+                HStack(spacing: 8) {
+                    Image(systemName: "folder.fill")
+                        .foregroundStyle(Color.moaiyAccent)
+                    Text(selectedURL.path)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                }
+                .padding(10)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+
+            Button(action: onSelectFolder) {
+                if isImporting {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Label("action_select_external_keyring", systemImage: "folder")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.bordered)
+        }
+        .moaiyModalCard()
+    }
+}
+
+struct MigrationResultCard: View {
+    let result: KeyMigrationResult
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("import_success_message")
+                .font(.headline)
+
+            Text(
+                String(
+                    format: String(localized: "import_success_details"),
+                    locale: Locale.current,
+                    Int64(result.imported),
+                    Int64(result.unchanged)
+                )
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            Text(
+                "\(result.sourcePublicKeyCount) \(String(localized: "key_type_public")) • \(result.sourceSecretKeyCount) \(String(localized: "backup_keys_secret"))"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if result.sourceSecretKeyCount > 0 && !result.secretKeysMigrated {
+                Text("backup_secret_warning")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding()
+        .background(Color.green.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

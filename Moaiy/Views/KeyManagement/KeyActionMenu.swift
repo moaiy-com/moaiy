@@ -9,14 +9,42 @@ import SwiftUI
 
 struct KeyActionFilePlanner {
     static func encryptedOutputURL(for inputURL: URL) -> URL {
-        inputURL.appendingPathExtension("gpg")
+        inputURL.appendingPathExtension(Constants.File.defaultEncryptedExtension)
     }
 
     static func decryptedOutputURL(for inputURL: URL) -> URL {
-        if inputURL.pathExtension.isEmpty {
+        let ext = inputURL.pathExtension.lowercased()
+        if Constants.File.encryptedExtensions.contains(ext) {
+            return inputURL.deletingPathExtension()
+        }
+        if ext.isEmpty {
             return inputURL.appendingPathExtension("decrypted")
         }
         return inputURL.deletingPathExtension()
+    }
+
+    static func nonConflictingURL(for desiredURL: URL, fileManager: FileManager = .default) -> URL {
+        guard fileManager.fileExists(atPath: desiredURL.path) else {
+            return desiredURL
+        }
+
+        let ext = desiredURL.pathExtension
+        let baseName = ext.isEmpty
+            ? desiredURL.lastPathComponent
+            : String(desiredURL.lastPathComponent.dropLast(ext.count + 1))
+        let directory = desiredURL.deletingLastPathComponent()
+
+        var index = 1
+        while true {
+            let candidateName = ext.isEmpty
+                ? "\(baseName) (\(index))"
+                : "\(baseName) (\(index)).\(ext)"
+            let candidateURL = directory.appendingPathComponent(candidateName)
+            if !fileManager.fileExists(atPath: candidateURL.path) {
+                return candidateURL
+            }
+            index += 1
+        }
     }
 
     static func defaultPublicFileName(for keyName: String) -> String {
@@ -295,21 +323,22 @@ struct KeyActionMenu: View {
                 ) else {
                     continue
                 }
+                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: outputURL)
 
                 let hasSourceAccess = url.startAccessingSecurityScopedResource()
-                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
+                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
                 defer {
                     if hasSourceAccess {
                         url.stopAccessingSecurityScopedResource()
                     }
                     if hasOutputAccess {
-                        outputURL.stopAccessingSecurityScopedResource()
+                        plannedOutputURL.stopAccessingSecurityScopedResource()
                     }
                 }
 
-                try await GPGService.shared.encryptFile(
+                _ = try await GPGService.shared.encryptFile(
                     sourceURL: url,
-                    destinationURL: outputURL,
+                    destinationURL: plannedOutputURL,
                     recipients: [key.fingerprint]
                 )
                 encryptedFileCount += 1
@@ -344,21 +373,22 @@ struct KeyActionMenu: View {
                 ) else {
                     continue
                 }
+                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: outputURL)
 
                 let hasSourceAccess = url.startAccessingSecurityScopedResource()
-                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
+                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
                 defer {
                     if hasSourceAccess {
                         url.stopAccessingSecurityScopedResource()
                     }
                     if hasOutputAccess {
-                        outputURL.stopAccessingSecurityScopedResource()
+                        plannedOutputURL.stopAccessingSecurityScopedResource()
                     }
                 }
 
-                try await GPGService.shared.decryptFile(
+                _ = try await GPGService.shared.decryptFile(
                     sourceURL: url,
-                    destinationURL: outputURL,
+                    destinationURL: plannedOutputURL,
                     passphrase: passphrase
                 )
                 decryptedFileCount += 1

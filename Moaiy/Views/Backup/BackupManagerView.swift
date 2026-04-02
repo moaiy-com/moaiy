@@ -181,6 +181,7 @@ struct BackupManagerView: View {
         }
         .moaiyModalAdaptiveSize(minWidth: 540, idealWidth: 640, maxWidth: 780, minHeight: 560, idealHeight: 720, maxHeight: 920)
         .onAppear {
+            SecureTempStorage.cleanupStaleDirectories()
             loadBackupHistory()
         }
         .sheet(isPresented: $showingSecretKeyPassphraseSheet) {
@@ -254,7 +255,7 @@ struct BackupManagerView: View {
                 // Record backup
                 let record = BackupRecord(
                     date: Date(),
-                    location: url,
+                    backupFileName: url.lastPathComponent,
                     keyCount: viewModel.keys.count,
                     includeSecretKeys: includeSecretKeys,
                     exportedPublicKeyCount: summary.exportedPublicKeyCount,
@@ -277,9 +278,7 @@ struct BackupManagerView: View {
 
     private func createBackupArchive(at url: URL, secretKeyPassphrase: String?) async throws -> BackupExportSummary {
         // Create temporary directory for backup contents
-        let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MoaiyBackup_\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let tempDir = try SecureTempStorage.makeOperationDirectory(prefix: "backup")
 
         defer {
             try? FileManager.default.removeItem(at: tempDir)
@@ -405,9 +404,7 @@ struct BackupManagerView: View {
 
     private func restoreFromBackupArchive(at url: URL) async throws -> RestoreSummary {
         // Create temporary directory for extraction
-        let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MoaiyRestore_\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let tempDir = try SecureTempStorage.makeOperationDirectory(prefix: "restore")
 
         defer {
             try? FileManager.default.removeItem(at: tempDir)
@@ -486,22 +483,22 @@ struct BackupManagerView: View {
 
     private func loadBackupHistory() {
         // Load from UserDefaults
-        if let data = UserDefaults.standard.data(forKey: "backupHistory"),
+        if let data = UserDefaults.standard.data(forKey: Constants.StorageKeys.backupHistory),
            let records = try? JSONDecoder().decode([BackupRecord].self, from: data) {
             backupHistory = records
         }
 
-        if let date = UserDefaults.standard.object(forKey: "lastBackupDate") as? Date {
+        if let date = UserDefaults.standard.object(forKey: Constants.StorageKeys.lastBackupDate) as? Date {
             lastBackupDate = date
         }
     }
 
     private func saveBackupHistory() {
         if let data = try? JSONEncoder().encode(backupHistory) {
-            UserDefaults.standard.set(data, forKey: "backupHistory")
+            UserDefaults.standard.set(data, forKey: Constants.StorageKeys.backupHistory)
         }
 
-        UserDefaults.standard.set(lastBackupDate, forKey: "lastBackupDate")
+        UserDefaults.standard.set(lastBackupDate, forKey: Constants.StorageKeys.lastBackupDate)
     }
 }
 
@@ -536,7 +533,7 @@ struct BackupExportSummary {
 struct BackupRecord: Identifiable, Codable {
     let id: UUID
     let date: Date
-    let location: URL
+    let backupFileName: String?
     let keyCount: Int
     let includeSecretKeys: Bool
     let exportedPublicKeyCount: Int?
@@ -545,7 +542,7 @@ struct BackupRecord: Identifiable, Codable {
 
     init(
         date: Date,
-        location: URL,
+        backupFileName: String?,
         keyCount: Int,
         includeSecretKeys: Bool,
         exportedPublicKeyCount: Int? = nil,
@@ -554,12 +551,54 @@ struct BackupRecord: Identifiable, Codable {
     ) {
         self.id = UUID()
         self.date = date
-        self.location = location
+        self.backupFileName = backupFileName
         self.keyCount = keyCount
         self.includeSecretKeys = includeSecretKeys
         self.exportedPublicKeyCount = exportedPublicKeyCount
         self.exportedSecretKeyCount = exportedSecretKeyCount
         self.failedSecretKeyCount = failedSecretKeyCount
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case date
+        case backupFileName
+        case location
+        case keyCount
+        case includeSecretKeys
+        case exportedPublicKeyCount
+        case exportedSecretKeyCount
+        case failedSecretKeyCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        date = try container.decode(Date.self, forKey: .date)
+        if let fileName = try container.decodeIfPresent(String.self, forKey: .backupFileName) {
+            backupFileName = fileName
+        } else if let legacyLocation = try container.decodeIfPresent(URL.self, forKey: .location) {
+            backupFileName = legacyLocation.lastPathComponent
+        } else {
+            backupFileName = nil
+        }
+        keyCount = try container.decode(Int.self, forKey: .keyCount)
+        includeSecretKeys = try container.decode(Bool.self, forKey: .includeSecretKeys)
+        exportedPublicKeyCount = try container.decodeIfPresent(Int.self, forKey: .exportedPublicKeyCount)
+        exportedSecretKeyCount = try container.decodeIfPresent(Int.self, forKey: .exportedSecretKeyCount)
+        failedSecretKeyCount = try container.decodeIfPresent(Int.self, forKey: .failedSecretKeyCount)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(date, forKey: .date)
+        try container.encodeIfPresent(backupFileName, forKey: .backupFileName)
+        try container.encode(keyCount, forKey: .keyCount)
+        try container.encode(includeSecretKeys, forKey: .includeSecretKeys)
+        try container.encodeIfPresent(exportedPublicKeyCount, forKey: .exportedPublicKeyCount)
+        try container.encodeIfPresent(exportedSecretKeyCount, forKey: .exportedSecretKeyCount)
+        try container.encodeIfPresent(failedSecretKeyCount, forKey: .failedSecretKeyCount)
     }
 }
 
@@ -676,6 +715,13 @@ struct BackupHistoryRow: View {
                 Text(record.date.formatted(date: .abbreviated, time: .shortened))
                     .font(.subheadline)
                     .fontWeight(.medium)
+
+                if let backupFileName = record.backupFileName, !backupFileName.isEmpty {
+                    Text(backupFileName)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
 
                 Text(backupDetailText)
                     .font(.caption)

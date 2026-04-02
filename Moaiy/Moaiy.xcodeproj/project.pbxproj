@@ -18,18 +18,13 @@
 		0BE22B5A2F6FC4CC009DDCB2 /* TrustManagementSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BE22B572F6FC4CC009DDCB2 /* TrustManagementSheet.swift */; };
 		0BEF4DE52F6D80E00053CE56 /* GPGError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DE32F6D80E00053CE56 /* GPGError.swift */; };
 		0BEF4DE62F6D80E00053CE56 /* GPGService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DE42F6D80E00053CE56 /* GPGService.swift */; };
-		0BEF4DF42F6D8D630053CE56 /* EncryptionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DF12F6D8D630053CE56 /* EncryptionViewModel.swift */; };
 		0BEF4DF52F6D8D630053CE56 /* KeyManagementViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEF4DF22F6D8D630053CE56 /* KeyManagementViewModel.swift */; };
 		1A1000012F70000100000001 /* BackupManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2000012F70000100000001 /* BackupManagerView.swift */; };
 		1A1000022F70000100000002 /* ExpirationReminderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2000022F70000100000002 /* ExpirationReminderService.swift */; };
 		1A1000032F70000100000003 /* KeyStatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2000032F70000100000003 /* KeyStatisticsView.swift */; };
 		1A1000042F70000100000004 /* ExpirationReminderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2000042F70000100000004 /* ExpirationReminderSettingsView.swift */; };
 		2A1000012F71000100000001 /* PassphraseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2000012F71000100000001 /* PassphraseSheet.swift */; };
-		2A1000012F71000100000002 /* RecipientKeyPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2000012F71000100000002 /* RecipientKeyPicker.swift */; };
 		2A1000012F71000100000003 /* SecureInputField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2000012F71000100000003 /* SecureInputField.swift */; };
-			2A1000012F71000100000004 /* LoadingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2000012F71000100000004 /* LoadingOverlay.swift */; };
-			2A1000012F71000100000005 /* FileBookmarkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2000012F71000100000005 /* FileBookmarkManager.swift */; };
-			2A1000012F71000100000006 /* OperationHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2000012F71000100000006 /* OperationHistoryView.swift */; };
 			3A1000012F76000100000001 /* OperationResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2000012F76000100000001 /* OperationResult.swift */; };
 			3A1000012F76000100000002 /* GPGFileTypeDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2000012F76000100000002 /* GPGFileTypeDetector.swift */; };
 			3A1000012F76000100000003 /* KeyCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2000012F76000100000003 /* KeyCardView.swift */; };
@@ -43,7 +38,6 @@
 		B00000000002 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000002 /* MainView.swift */; };
 		B00000000003 /* KeyManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000003 /* KeyManagementView.swift */; };
 		B00000000004 /* CreateKeyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000004 /* CreateKeyView.swift */; };
-		B00000000005 /* EncryptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000005 /* EncryptionView.swift */; };
 		B00000000006 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000006 /* SettingsView.swift */; };
 		B00000000008 /* Color+Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000008 /* Color+Theme.swift */; };
 		B00000000009 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000009 /* Constants.swift */; };
@@ -76,18 +70,13 @@
 		0BE22B572F6FC4CC009DDCB2 /* TrustManagementSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustManagementSheet.swift; sourceTree = "<group>"; };
 		0BEF4DE32F6D80E00053CE56 /* GPGError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPGError.swift; sourceTree = "<group>"; };
 		0BEF4DE42F6D80E00053CE56 /* GPGService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPGService.swift; sourceTree = "<group>"; };
-		0BEF4DF12F6D8D630053CE56 /* EncryptionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncryptionViewModel.swift; sourceTree = "<group>"; };
 		0BEF4DF22F6D8D630053CE56 /* KeyManagementViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyManagementViewModel.swift; sourceTree = "<group>"; };
 		1A2000012F70000100000001 /* BackupManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManagerView.swift; sourceTree = "<group>"; };
 		1A2000022F70000100000002 /* ExpirationReminderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpirationReminderService.swift; sourceTree = "<group>"; };
 		1A2000032F70000100000003 /* KeyStatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyStatisticsView.swift; sourceTree = "<group>"; };
 		1A2000042F70000100000004 /* ExpirationReminderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpirationReminderSettingsView.swift; sourceTree = "<group>"; };
 		2A2000012F71000100000001 /* PassphraseSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PassphraseSheet.swift; sourceTree = "<group>"; };
-		2A2000012F71000100000002 /* RecipientKeyPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipientKeyPicker.swift; sourceTree = "<group>"; };
 		2A2000012F71000100000003 /* SecureInputField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureInputField.swift; sourceTree = "<group>"; };
-			2A2000012F71000100000004 /* LoadingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingOverlay.swift; sourceTree = "<group>"; };
-			2A2000012F71000100000005 /* FileBookmarkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBookmarkManager.swift; sourceTree = "<group>"; };
-			2A2000012F71000100000006 /* OperationHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationHistoryView.swift; sourceTree = "<group>"; };
 			3A2000012F76000100000001 /* OperationResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationResult.swift; sourceTree = "<group>"; };
 			3A2000012F76000100000002 /* GPGFileTypeDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPGFileTypeDetector.swift; sourceTree = "<group>"; };
 			3A2000012F76000100000003 /* KeyCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyCardView.swift; sourceTree = "<group>"; };
@@ -101,7 +90,6 @@
 		A00000000002 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		A00000000003 /* KeyManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyManagementView.swift; sourceTree = "<group>"; };
 		A00000000004 /* CreateKeyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateKeyView.swift; sourceTree = "<group>"; };
-		A00000000005 /* EncryptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncryptionView.swift; sourceTree = "<group>"; };
 		A00000000006 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A00000000008 /* Color+Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Theme.swift"; sourceTree = "<group>"; };
 		A00000000009 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
@@ -143,7 +131,6 @@
 		0BEF4DF32F6D8D630053CE56 /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
-				0BEF4DF12F6D8D630053CE56 /* EncryptionViewModel.swift */,
 				0BEF4DF22F6D8D630053CE56 /* KeyManagementViewModel.swift */,
 				A0000000000A /* AppState.swift */,
 			);
@@ -228,7 +215,6 @@
 					0BEF4DE42F6D80E00053CE56 /* GPGService.swift */,
 					3A2000012F76000100000002 /* GPGFileTypeDetector.swift */,
 					1A2000022F70000100000002 /* ExpirationReminderService.swift */,
-					2A2000012F71000100000005 /* FileBookmarkManager.swift */,
 				);
 				path = Services;
 			sourceTree = "<group>";
@@ -291,12 +277,8 @@
 		D0000000000D /* Encryption */ = {
 			isa = PBXGroup;
 			children = (
-				A00000000005 /* EncryptionView.swift */,
 				2A2000012F71000100000001 /* PassphraseSheet.swift */,
-				2A2000012F71000100000002 /* RecipientKeyPicker.swift */,
 				2A2000012F71000100000003 /* SecureInputField.swift */,
-				2A2000012F71000100000004 /* LoadingOverlay.swift */,
-				2A2000012F71000100000006 /* OperationHistoryView.swift */,
 			);
 			path = Encryption;
 			sourceTree = "<group>";
@@ -508,7 +490,6 @@
 					0BE22B582F6FC4CC009DDCB2 /* KeyEditSheet.swift in Sources */,
 					0BE22B592F6FC4CC009DDCB2 /* KeySigningSheet.swift in Sources */,
 					0BE22B5A2F6FC4CC009DDCB2 /* TrustManagementSheet.swift in Sources */,
-					0BEF4DF42F6D8D630053CE56 /* EncryptionViewModel.swift in Sources */,
 					0BEF4DF52F6D8D630053CE56 /* KeyManagementViewModel.swift in Sources */,
 					0B77CCFA2F753FEF00C15184 /* HowToView.swift in Sources */,
 					B00000000004 /* CreateKeyView.swift in Sources */,
@@ -527,11 +508,7 @@
 				1A1000032F70000100000003 /* KeyStatisticsView.swift in Sources */,
 				1A1000042F70000100000004 /* ExpirationReminderSettingsView.swift in Sources */,
 				2A1000012F71000100000001 /* PassphraseSheet.swift in Sources */,
-				2A1000012F71000100000002 /* RecipientKeyPicker.swift in Sources */,
 				2A1000012F71000100000003 /* SecureInputField.swift in Sources */,
-				2A1000012F71000100000004 /* LoadingOverlay.swift in Sources */,
-				2A1000012F71000100000005 /* FileBookmarkManager.swift in Sources */,
-				2A1000012F71000100000006 /* OperationHistoryView.swift in Sources */,
 				B0000000000A /* AppState.swift in Sources */,
 				B00000000009 /* Constants.swift in Sources */,
 			);
@@ -558,7 +535,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taugast.MoaiyTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -580,7 +557,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taugast.MoaiyTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -745,7 +722,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.moaiy.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -780,7 +757,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.moaiy.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
