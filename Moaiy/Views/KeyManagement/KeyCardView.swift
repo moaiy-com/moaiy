@@ -150,14 +150,26 @@ struct KeyCardView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .layoutPriority(1)
+            .layoutPriority(2)
 
-            KeyDropZoneView(onDrop: { urls in
-                handleDroppedFiles(urls: urls)
-            })
-            .frame(minWidth: 220, idealWidth: 280, maxWidth: 360)
+            GeometryReader { geometry in
+                let availableWidth = geometry.size.width
+                let adaptiveWidth = min(availableWidth, max(140, availableWidth * 0.7))
+
+                KeyDropZoneView(
+                    onDrop: { urls in
+                        handleDroppedFiles(urls: urls)
+                    },
+                    onTap: {
+                        selectFilesAndProcess()
+                    }
+                )
+                .frame(width: adaptiveWidth, height: 52, alignment: .trailing)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+            }
+            .frame(minWidth: 120, idealWidth: 240, maxWidth: .infinity)
             .frame(height: 52)
-            .layoutPriority(0)
+            .layoutPriority(1)
 
             KeyActionMenu(key: key, onDelete: onDelete)
                 .frame(width: 36, alignment: .trailing)
@@ -294,32 +306,35 @@ struct KeyCardView: View {
                 operationResults.append(
                     OperationResult.successEncrypt(fileURL: url, outputURL: finalOutputURL)
                 )
-                
-            case .publicKey, .privateKey:
-                operationResults.append(
-                    OperationResult.failure(
-                        fileURL: url,
-                        operation: .import,
-                        errorMessage: String(localized: "info_use_import_menu")
-                    )
+
+            case .publicKey, .privateKey, .signature, .unknown:
+                let defaultOutputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
+                guard let outputURL = presentFileOperationSavePanel(
+                    defaultFileName: defaultOutputURL.lastPathComponent,
+                    preferredDirectory: url.deletingLastPathComponent()
+                ) else {
+                    return
+                }
+                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: outputURL)
+
+                let hasSourceAccess = url.startAccessingSecurityScopedResource()
+                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
+                defer {
+                    if hasSourceAccess {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                    if hasOutputAccess {
+                        plannedOutputURL.stopAccessingSecurityScopedResource()
+                    }
+                }
+
+                let finalOutputURL = try await GPGService.shared.encryptFile(
+                    sourceURL: url,
+                    destinationURL: plannedOutputURL,
+                    recipients: [key.fingerprint]
                 )
-                
-            case .signature:
                 operationResults.append(
-                    OperationResult.failure(
-                        fileURL: url,
-                        operation: .verify,
-                        errorMessage: String(localized: "error_signature_not_implemented")
-                    )
-                )
-                
-            case .unknown:
-                operationResults.append(
-                    OperationResult.failure(
-                        fileURL: url,
-                        operation: .encrypt,
-                        errorMessage: String(localized: "error_unknown_file_type")
-                    )
+                    OperationResult.successEncrypt(fileURL: url, outputURL: finalOutputURL)
                 )
             }
         } catch {
@@ -386,5 +401,18 @@ struct KeyCardView: View {
         panel.nameFieldStringValue = defaultFileName
         panel.directoryURL = preferredDirectory
         return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    private func selectFilesAndProcess() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.resolvesAliases = true
+        panel.message = String(localized: "action_select_files")
+        panel.prompt = String(localized: "action_select_files")
+
+        guard panel.runModal() == .OK else { return }
+        handleDroppedFiles(urls: panel.urls)
     }
 }

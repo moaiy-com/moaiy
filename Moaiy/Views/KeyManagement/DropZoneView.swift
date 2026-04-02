@@ -10,6 +10,7 @@ import UniformTypeIdentifiers
 
 struct KeyDropZoneView: View {
     var onDrop: (([URL]) -> Void)?
+    var onTap: (() -> Void)?
     @State private var isTargeted = false
     @State private var isProcessing = false
     
@@ -38,6 +39,11 @@ struct KeyDropZoneView: View {
             .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
                 handleFileDrop(providers: providers)
                 return true
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .onTapGesture {
+                guard !isProcessing else { return }
+                onTap?()
             }
     }
     

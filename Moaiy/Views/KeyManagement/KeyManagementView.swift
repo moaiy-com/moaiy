@@ -11,7 +11,6 @@ struct KeyManagementView: View {
     @State private var viewModel: KeyManagementViewModel
     @State private var showingCreateKey = false
     @State private var showingImportKey = false
-    @State private var showingFilters = false
     @State private var keyToDelete: GPGKey?
 
     init(viewModel: KeyManagementViewModel? = nil) {
@@ -48,19 +47,15 @@ struct KeyManagementView: View {
                 Button(action: { Task { await viewModel.refresh() } }) {
                     Label("action_refresh", systemImage: "arrow.clockwise")
                 }
+                .buttonStyle(.borderedProminent)
                 .keyboardShortcut("r", modifiers: .command)
             }
             ToolbarItem(placement: .automatic) {
                 Button(action: { showingImportKey = true }) {
                     Label("action_import_key", systemImage: "square.and.arrow.down")
                 }
+                .buttonStyle(.borderedProminent)
                 .keyboardShortcut("i", modifiers: .command)
-            }
-            ToolbarItem(placement: .automatic) {
-                Button(action: { showingFilters = true }) {
-                    Label("action_filters", systemImage: "line.3.horizontal.decrease.circle")
-                }
-                .badge(viewModel.hasActiveFilters ? "!" : nil)
             }
         }
         .searchable(text: $viewModel.searchText, prompt: "prompt_search_keys")
@@ -74,9 +69,6 @@ struct KeyManagementView: View {
         .sheet(isPresented: $showingImportKey) {
             ImportKeySheet()
                 .environment(viewModel)
-        }
-        .sheet(isPresented: $showingFilters) {
-            FilterSheet(viewModel: viewModel)
         }
         .confirmationDialog(
             "confirm_delete_key_title",
@@ -123,6 +115,13 @@ struct KeyManagementView: View {
             if let error = viewModel.errorMessage {
                 Text(error)
             }
+        }
+        .safeAreaInset(edge: .bottom) {
+            Text("Protect what matters with drag and drop.")
+                .font(.footnote)
+                .foregroundStyle(.secondary.opacity(0.75))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
         }
     }
 }
