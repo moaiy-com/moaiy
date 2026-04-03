@@ -26,17 +26,11 @@ struct KeyCardView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
             keyInfoSection
         }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.92))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.04), radius: 2, y: 0.5)
+        .padding(MoaiyUI.Spacing.md)
+        .moaiyCardStyle(cornerRadius: MoaiyUI.Radius.lg)
         .sheet(isPresented: $showingResultOverlay) {
             OperationResultOverlay(
                 results: operationResults,
@@ -88,27 +82,32 @@ struct KeyCardView: View {
     // MARK: - Subviews
     
     private var keyInfoSection: some View {
-        HStack(alignment: .center, spacing: 12) {
-            HStack(spacing: 16) {
+        HStack(alignment: .center, spacing: MoaiyUI.Spacing.md) {
+            HStack(spacing: MoaiyUI.Spacing.lg) {
                 Image(systemName: key.isSecret ? "key.fill" : "key")
                     .font(.title2)
                     .foregroundStyle(keyIconColor)
                     .frame(width: 40, height: 40)
-                    .background(keyIconColor.opacity(0.1))
+                    .background(Color.moaiySurfaceSecondary)
                     .clipShape(Circle())
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: MoaiyUI.Spacing.xs) {
                     Text(key.name)
                         .font(.headline)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                         .lineLimit(1)
                         .truncationMode(.tail)
 
-                    HStack(spacing: 8) {
+                    HStack(spacing: MoaiyUI.Spacing.sm) {
                         Text(key.isSecret ? "key_type_private" : "key_type_public")
                             .font(.caption)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(keyTypeBadgeColor.opacity(0.2))
+                            .background(keyTypeBadgeColor.opacity(0.15))
+                            .overlay(
+                                Capsule()
+                                    .stroke(keyTypeBadgeColor.opacity(0.35), lineWidth: 1)
+                            )
                             .foregroundStyle(keyTypeBadgeColor)
                             .clipShape(Capsule())
 
@@ -116,7 +115,11 @@ struct KeyCardView: View {
                             .font(.caption)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(trustLevelColor.opacity(0.2))
+                            .background(trustLevelColor.opacity(0.15))
+                            .overlay(
+                                Capsule()
+                                    .stroke(trustLevelColor.opacity(0.35), lineWidth: 1)
+                            )
                             .foregroundStyle(trustLevelColor)
                             .clipShape(Capsule())
 
@@ -126,6 +129,10 @@ struct KeyCardView: View {
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
                                 .background(Color.red.opacity(0.2))
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.red.opacity(0.35), lineWidth: 1)
+                                )
                                 .foregroundStyle(.red)
                                 .clipShape(Capsule())
                         }
@@ -133,18 +140,18 @@ struct KeyCardView: View {
 
                     Text(key.email)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
 
-                    HStack(spacing: 12) {
+                    HStack(spacing: MoaiyUI.Spacing.md) {
                         Label(key.displayKeyType, systemImage: "number")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
 
                         Label(keyDateRangeDisplayText, systemImage: "calendar")
                             .font(.caption)
-                            .foregroundStyle(key.isExpired ? Color.red : .secondary)
+                            .foregroundStyle(key.isExpired ? Color.red : Color.moaiyTextSecondary)
                             .lineLimit(1)
                     }
                 }
@@ -175,25 +182,25 @@ struct KeyCardView: View {
     // MARK: - Color Computed Properties
     
     private var keyIconColor: Color {
-        key.isSecret ? Color.moaiyAccent : .secondary
+        key.isSecret ? Color.moaiyAccentV2 : Color.moaiyTextSecondary
     }
     
     private var keyTypeBadgeColor: Color {
-        key.isSecret ? Color.moaiyAccent : .blue
+        key.isSecret ? Color.moaiyAccentV2 : Color.moaiyInfo
     }
     
     private var trustLevelColor: Color {
         switch key.trustLevel {
         case .ultimate:
-            return .green
+            return Color.moaiySuccess
         case .full:
-            return .blue
+            return Color.moaiyInfo
         case .marginal:
-            return .orange
+            return Color.moaiyWarning
         case .none:
-            return .red
+            return Color.moaiyError
         case .unknown:
-            return .secondary
+            return Color.moaiyTextSecondary
         }
     }
 

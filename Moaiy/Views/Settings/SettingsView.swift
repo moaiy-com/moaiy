@@ -30,106 +30,120 @@ struct SettingsView: View {
     }
     
     var body: some View {
-        Form {
-            Section {
-                Picker("setting_default_key_type", selection: $defaultKeyType) {
-                    Text("key_type_rsa4096").tag(0)
-                    Text("key_type_rsa2048").tag(1)
-                    Text("key_type_ecc_curve25519").tag(2)
-                }
-            } header: {
-                Text("section_general")
-                    .font(.headline)
-            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: MoaiyUI.Spacing.lg) {
+                VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
+                    Text("section_general")
+                        .font(.headline)
+                        .foregroundStyle(Color.moaiyTextPrimary)
 
-            Section {
-                HStack(alignment: .top) {
-                    Text("setting_keyring_path")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if activeGPGHomePath.isEmpty {
-                        Text("setting_keyring_path_unavailable")
-                            .foregroundStyle(.primary)
-                            .multilineTextAlignment(.trailing)
-                    } else {
-                        Text(activeGPGHomePath)
-                            .foregroundStyle(.primary)
-                            .multilineTextAlignment(.trailing)
-                            .lineLimit(2)
-                            .truncationMode(.middle)
+                    Picker("setting_default_key_type", selection: $defaultKeyType) {
+                        Text("key_type_rsa4096").tag(0)
+                        Text("key_type_rsa2048").tag(1)
+                        Text("key_type_ecc_curve25519").tag(2)
                     }
+                    .pickerStyle(.segmented)
                 }
+                .moaiyModalCard()
 
-                if !activeGPGHomePath.isEmpty {
-                    Button("open_in_finder") {
-                        NSWorkspace.shared.open(URL(fileURLWithPath: activeGPGHomePath, isDirectory: true))
-                    }
-                }
-            } header: {
-                Text("section_keyring")
-                    .font(.headline)
-            }
-            
-            Section {
-                HStack {
-                    Text("about_app_version")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("\(appVersion) (\(appBuild))")
-                        .foregroundStyle(.primary)
-                }
-                
-                HStack {
-                    Text("about_gpg_version")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if gpgVersion.isEmpty {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                            .frame(width: 16, height: 16)
-                    } else {
-                        Text("\(gpgVersion) · \(String(localized: "about_gpg_embedded"))")
-                            .foregroundStyle(.primary)
-                            .multilineTextAlignment(.trailing)
-                    }
-                }
+                VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
+                    Text("section_keyring")
+                        .font(.headline)
+                        .foregroundStyle(Color.moaiyTextPrimary)
 
-                HStack {
-                    Text("setting_keyring_mode")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("setting_keyring_mode_app")
-                        .foregroundStyle(.primary)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("about_icon_credit_title")
-                        .foregroundStyle(.secondary)
-
-                    Text("about_icon_credit_text")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    if let nounProjectMoaiURL {
-                        Link(destination: nounProjectMoaiURL) {
-                            Text("about_icon_credit_link")
+                    HStack(alignment: .top) {
+                        Text("setting_keyring_path")
+                            .foregroundStyle(Color.moaiyTextSecondary)
+                        Spacer()
+                        if activeGPGHomePath.isEmpty {
+                            Text("setting_keyring_path_unavailable")
+                                .foregroundStyle(Color.moaiyTextPrimary)
+                                .multilineTextAlignment(.trailing)
+                        } else {
+                            Text(activeGPGHomePath)
+                                .foregroundStyle(Color.moaiyTextPrimary)
+                                .multilineTextAlignment(.trailing)
+                                .lineLimit(2)
+                                .truncationMode(.middle)
                         }
-                        .font(.caption)
                     }
-                }
 
-                if let privacyPolicyURL {
-                    Link(destination: privacyPolicyURL) {
-                        Text("privacy_policy")
+                    if !activeGPGHomePath.isEmpty {
+                        Button("open_in_finder") {
+                            NSWorkspace.shared.open(URL(fileURLWithPath: activeGPGHomePath, isDirectory: true))
+                        }
+                        .buttonStyle(.bordered)
                     }
                 }
-            } header: {
-                Text("section_about")
-                    .font(.headline)
+                .moaiyModalCard()
+
+                VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
+                    Text("section_about")
+                        .font(.headline)
+                        .foregroundStyle(Color.moaiyTextPrimary)
+
+                    HStack {
+                        Text("about_app_version")
+                            .foregroundStyle(Color.moaiyTextSecondary)
+                        Spacer()
+                        Text("\(appVersion) (\(appBuild))")
+                            .foregroundStyle(Color.moaiyTextPrimary)
+                    }
+
+                    HStack {
+                        Text("about_gpg_version")
+                            .foregroundStyle(Color.moaiyTextSecondary)
+                        Spacer()
+                        if gpgVersion.isEmpty {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .frame(width: 16, height: 16)
+                        } else {
+                            Text("\(gpgVersion) · \(String(localized: "about_gpg_embedded"))")
+                                .foregroundStyle(Color.moaiyTextPrimary)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+
+                    HStack {
+                        Text("setting_keyring_mode")
+                            .foregroundStyle(Color.moaiyTextSecondary)
+                        Spacer()
+                        Text("setting_keyring_mode_app")
+                            .foregroundStyle(Color.moaiyTextPrimary)
+                    }
+
+                    VStack(alignment: .leading, spacing: MoaiyUI.Spacing.xs) {
+                        Text("about_icon_credit_title")
+                            .foregroundStyle(Color.moaiyTextSecondary)
+
+                        Text("about_icon_credit_text")
+                            .font(.caption)
+                            .foregroundStyle(Color.moaiyTextSecondary)
+
+                        if let nounProjectMoaiURL {
+                            Link(destination: nounProjectMoaiURL) {
+                                Text("about_icon_credit_link")
+                            }
+                            .font(.caption)
+                            .tint(Color.moaiyAccentV2)
+                        }
+                    }
+
+                    if let privacyPolicyURL {
+                        Link(destination: privacyPolicyURL) {
+                            Label("privacy_policy", systemImage: "hand.raised")
+                                .font(.subheadline)
+                        }
+                        .tint(Color.moaiyAccentV2)
+                    }
+                }
+                .moaiyModalCard()
             }
+            .padding(MoaiyUI.Spacing.xxl)
         }
-        .formStyle(.grouped)
-        .frame(minWidth: 400, minHeight: 400)
+        .background(Color.moaiySurfaceBackground)
+        .moaiyModalAdaptiveSize(minWidth: 420, idealWidth: 560, maxWidth: 760, minHeight: 440, idealHeight: 620, maxHeight: 900)
         .task {
             await loadGPGVersion()
             refreshKeyringState()

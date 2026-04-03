@@ -6,6 +6,41 @@
 //
 
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
+
+enum MoaiyUI {
+    enum Spacing {
+        static let xs: CGFloat = 4
+        static let sm: CGFloat = 8
+        static let md: CGFloat = 12
+        static let lg: CGFloat = 16
+        static let xl: CGFloat = 20
+        static let xxl: CGFloat = 24
+        static let xxxl: CGFloat = 32
+    }
+
+    enum Radius {
+        static let sm: CGFloat = 8
+        static let md: CGFloat = 10
+        static let lg: CGFloat = 12
+        static let xl: CGFloat = 16
+    }
+
+    enum Shadow {
+        static let cardOpacity: Double = 0.06
+        static let cardRadius: CGFloat = 4
+        static let cardYOffset: CGFloat = 1
+
+        static let overlayOpacity: Double = 0.16
+        static let overlayRadius: CGFloat = 24
+        static let overlayYOffset: CGFloat = 6
+    }
+
+    static let animationFast: Double = 0.12
+    static let animationNormal: Double = 0.18
+}
 
 extension Color {
     // MARK: - Brand Colors
@@ -23,13 +58,15 @@ extension Color {
         green: 114 / 255,
         blue: 128 / 255
     )
+
+    /// Alias for compatibility with corrected spelling.
+    static let moaiyPrimary = moiayPrimary
+
+    /// Alias for compatibility with corrected spelling.
+    static let moaiySecondary = moiaySecondary
     
-    /// Accent color - Gold (like the sunset on Easter Island)
-    static let moaiyAccent = Color(
-        red: 212 / 255,
-        green: 175 / 255,
-        blue: 55 / 255
-    )
+    /// Accent color compatibility alias (mapped to v2 accent).
+    static let moaiyAccent = moaiyAccentV2
     
     // MARK: - Semantic Colors
     
@@ -60,6 +97,79 @@ extension Color {
         green: 130 / 255,
         blue: 246 / 255
     )
+
+    /// Alias for compatibility with corrected spelling.
+    static let moaiySuccess = moiaySuccess
+
+    /// Alias for compatibility with corrected spelling.
+    static let moaiyWarning = moiayWarning
+
+    /// Alias for compatibility with corrected spelling.
+    static let moaiyError = moiayError
+
+    /// Alias for compatibility with corrected spelling.
+    static let moaiyInfo = moiayInfo
+
+    // MARK: - UI v2 Semantic Colors
+
+#if os(macOS)
+    private static func moaiyDynamic(light: NSColor, dark: NSColor) -> Color {
+        Color(
+            nsColor: NSColor(name: nil) { appearance in
+                let match = appearance.bestMatch(from: [.darkAqua, .aqua])
+                return match == .darkAqua ? dark : light
+            }
+        )
+    }
+#endif
+
+    /// App-level background color.
+    static let moaiySurfaceBackground = moaiyDynamic(
+        light: NSColor(red: 245 / 255, green: 246 / 255, blue: 248 / 255, alpha: 1),
+        dark: NSColor(red: 22 / 255, green: 24 / 255, blue: 29 / 255, alpha: 1)
+    )
+
+    /// Primary card and sheet surface.
+    static let moaiySurfacePrimary = moaiyDynamic(
+        light: NSColor.white,
+        dark: NSColor(red: 30 / 255, green: 34 / 255, blue: 43 / 255, alpha: 1)
+    )
+
+    /// Secondary elevated surface.
+    static let moaiySurfaceSecondary = moaiyDynamic(
+        light: NSColor(red: 241 / 255, green: 243 / 255, blue: 246 / 255, alpha: 1),
+        dark: NSColor(red: 37 / 255, green: 42 / 255, blue: 53 / 255, alpha: 1)
+    )
+
+    /// Primary text color.
+    static let moaiyTextPrimary = moaiyDynamic(
+        light: NSColor(red: 17 / 255, green: 19 / 255, blue: 23 / 255, alpha: 1),
+        dark: NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1)
+    )
+
+    /// Secondary text color.
+    static let moaiyTextSecondary = moaiyDynamic(
+        light: NSColor(red: 89 / 255, green: 98 / 255, blue: 115 / 255, alpha: 1),
+        dark: NSColor(red: 169 / 255, green: 179 / 255, blue: 198 / 255, alpha: 1)
+    )
+
+    /// Border color for cards and inputs.
+    static let moaiyBorderPrimary = moaiyDynamic(
+        light: NSColor(red: 217 / 255, green: 222 / 255, blue: 231 / 255, alpha: 1),
+        dark: NSColor(red: 58 / 255, green: 66 / 255, blue: 82 / 255, alpha: 1)
+    )
+
+    /// Primary action accent color for v2.
+    static let moaiyAccentV2 = moaiyDynamic(
+        light: NSColor(red: 31 / 255, green: 107 / 255, blue: 255 / 255, alpha: 1),
+        dark: NSColor(red: 109 / 255, green: 156 / 255, blue: 255 / 255, alpha: 1)
+    )
+
+    /// Focus ring color.
+    static let moaiyFocusRing = moaiyDynamic(
+        light: NSColor(red: 91 / 255, green: 140 / 255, blue: 255 / 255, alpha: 1),
+        dark: NSColor(red: 143 / 255, green: 176 / 255, blue: 255 / 255, alpha: 1)
+    )
 }
 
 extension View {
@@ -84,9 +194,46 @@ extension View {
     }
 
     /// Standard card surface for grouped sections inside modals.
-    func moaiyModalCard(cornerRadius: CGFloat = 12) -> some View {
+    func moaiyModalCard(cornerRadius: CGFloat = MoaiyUI.Radius.lg) -> some View {
         padding(16)
-            .background(Color(nsColor: .controlBackgroundColor))
+            .background(Color.moaiySurfacePrimary)
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.moaiyBorderPrimary.opacity(0.85), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .shadow(
+                color: .black.opacity(MoaiyUI.Shadow.cardOpacity),
+                radius: MoaiyUI.Shadow.cardRadius,
+                y: MoaiyUI.Shadow.cardYOffset
+            )
+    }
+
+    /// Standard card style for list rows and content blocks.
+    func moaiyCardStyle(cornerRadius: CGFloat = MoaiyUI.Radius.lg) -> some View {
+        background(Color.moaiySurfacePrimary)
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.moaiyBorderPrimary.opacity(0.8), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .shadow(
+                color: .black.opacity(MoaiyUI.Shadow.cardOpacity),
+                radius: MoaiyUI.Shadow.cardRadius,
+                y: MoaiyUI.Shadow.cardYOffset
+            )
+    }
+
+    /// Standard highlighted banner style used by status/info/warning messages.
+    func moaiyBannerStyle(
+        tint: Color,
+        cornerRadius: CGFloat = MoaiyUI.Radius.md
+    ) -> some View {
+        background(tint.opacity(0.1))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(tint.opacity(0.28), lineWidth: 1)
+            )
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }

@@ -25,16 +25,17 @@ struct BackupManagerView: View {
     @State private var backupHistory: [BackupRecord] = []
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: MoaiyUI.Spacing.lg) {
             // Header
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("backup_title")
                         .font(.title2)
                         .fontWeight(.semibold)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                     Text("backup_subtitle")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
 
                 Spacer()
@@ -42,7 +43,7 @@ struct BackupManagerView: View {
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -70,14 +71,13 @@ struct BackupManagerView: View {
                             if includeSecretKeys {
                                 HStack(spacing: 8) {
                                     Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundStyle(.orange)
+                                        .foregroundStyle(Color.moaiyWarning)
                                     Text("backup_secret_warning")
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(Color.moaiyTextSecondary)
                                 }
-                                .padding(8)
-                                .background(Color.orange.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .padding(MoaiyUI.Spacing.sm)
+                                .moaiyBannerStyle(tint: Color.moaiyWarning, cornerRadius: MoaiyUI.Radius.sm)
                             }
                         }
 
@@ -92,12 +92,12 @@ struct BackupManagerView: View {
                             }
                         }
                         .buttonStyle(.borderedProminent)
+                        .tint(Color.moaiyAccentV2)
                         .controlSize(.large)
                         .disabled(isCreatingBackup || viewModel.keys.isEmpty)
                     }
-                    .padding()
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(MoaiyUI.Spacing.lg)
+                    .moaiyCardStyle()
 
                     // Restore from backup
                     VStack(alignment: .leading, spacing: 12) {
@@ -106,7 +106,7 @@ struct BackupManagerView: View {
 
                         Text("backup_restore_description")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
 
                         Button(action: restoreFromBackup) {
                             if isRestoring {
@@ -122,9 +122,8 @@ struct BackupManagerView: View {
                         .controlSize(.large)
                         .disabled(isRestoring)
                     }
-                    .padding()
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(MoaiyUI.Spacing.lg)
+                    .moaiyCardStyle()
 
                     // Backup history
                     if !backupHistory.isEmpty {
@@ -141,7 +140,7 @@ struct BackupManagerView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .font(.caption)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Color.moaiyError)
                             }
 
                             ForEach(backupHistory) { record in
@@ -152,33 +151,32 @@ struct BackupManagerView: View {
                                 }
                             }
                         }
-                        .padding()
-                        .background(Color(nsColor: .controlBackgroundColor))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(MoaiyUI.Spacing.lg)
+                        .moaiyCardStyle()
                     }
 
                     // Info section
                     VStack(alignment: .leading, spacing: 8) {
                         Label("backup_info_1", systemImage: "info.circle.fill")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
 
                         Label("backup_info_2", systemImage: "lock.shield.fill")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
 
                         Label("backup_info_3", systemImage: "clock.fill")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
                     }
-                    .padding()
+                    .padding(MoaiyUI.Spacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.blue.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .moaiyBannerStyle(tint: Color.moaiyInfo)
                 }
                 .padding(24)
             }
         }
+        .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 540, idealWidth: 640, maxWidth: 780, minHeight: 560, idealHeight: 720, maxHeight: 920)
         .onAppear {
             SecureTempStorage.cleanupStaleDirectories()
@@ -646,14 +644,15 @@ struct BackupStatusCard: View {
     let secretKeys: Int
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: MoaiyUI.Spacing.lg) {
             Image(systemName: "externaldrive.fill.badge.icloud")
                 .font(.system(size: 40))
-                .foregroundStyle(Color.moaiyAccent)
+                .foregroundStyle(Color.moaiyAccentV2)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("backup_status_title")
                     .font(.headline)
+                    .foregroundStyle(Color.moaiyTextPrimary)
 
                 if let date = lastBackupDate {
                     Text(
@@ -664,11 +663,11 @@ struct BackupStatusCard: View {
                         )
                     )
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 } else {
                     Text("backup_status_never")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color.moaiyWarning)
                 }
             }
 
@@ -681,7 +680,7 @@ struct BackupStatusCard: View {
                         .fontWeight(.bold)
                     Text("backup_keys_total")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
 
                 HStack(spacing: 4) {
@@ -690,13 +689,12 @@ struct BackupStatusCard: View {
                         .fontWeight(.semibold)
                     Text("backup_keys_secret")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
             }
         }
-        .padding()
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(MoaiyUI.Spacing.lg)
+        .moaiyCardStyle()
     }
 }
 
@@ -709,7 +707,7 @@ struct BackupHistoryRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "doc.fill")
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.moaiyInfo)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(record.date.formatted(date: .abbreviated, time: .shortened))
@@ -719,24 +717,24 @@ struct BackupHistoryRow: View {
                 if let backupFileName = record.backupFileName, !backupFileName.isEmpty {
                     Text(backupFileName)
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.moaiyTextSecondary.opacity(0.8))
                         .lineLimit(1)
                 }
 
                 Text(backupDetailText)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
             }
 
             Spacer()
 
             Button(action: onDelete) {
                 Image(systemName: "trash")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.moaiyError)
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, MoaiyUI.Spacing.sm)
     }
 
     private var backupDetailText: String {
