@@ -268,6 +268,7 @@ struct TrustLevelRow: View {
                         .foregroundStyle(Color.moaiyAccentV2)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
             .background(isSelected ? Color.moaiyAccentV2.opacity(0.12) : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -278,8 +279,10 @@ struct TrustLevelRow: View {
                         lineWidth: isSelected ? 2 : 1
                     )
             )
+            .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     private var icon: String {
