@@ -143,19 +143,24 @@ struct UploadToKeyserverSheet: View {
                 onDismiss()
             }
             .buttonStyle(.bordered)
+            .controlSize(.large)
             .disabled(isUploading)
             
             Spacer()
             
             Button(action: uploadKey) {
-                if isUploading {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                } else {
+                ZStack {
                     Text("upload_button")
+                        .opacity(isUploading ? 0 : 1)
+
+                    if isUploading {
+                        UploadingDotsIndicator()
+                    }
                 }
+                .frame(minWidth: 92, minHeight: 20)
             }
             .buttonStyle(.borderedProminent)
+            .controlSize(.large)
             .tint(Color.moaiyAccentV2)
             .disabled(isUploading)
         }
@@ -176,6 +181,18 @@ struct UploadToKeyserverSheet: View {
                 .font(.body)
                 .foregroundStyle(Color.moaiyTextSecondary)
                 .multilineTextAlignment(.center)
+
+            HStack(spacing: 10) {
+                Image(systemName: "envelope.badge")
+                    .foregroundStyle(Color.moaiyInfo)
+                Text("upload_success_verification_hint")
+                    .font(.caption)
+                    .foregroundStyle(Color.moaiyTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(MoaiyUI.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .moaiyBannerStyle(tint: Color.moaiyInfo, cornerRadius: MoaiyUI.Radius.md)
             
             Button("done") {
                 onSuccess()
@@ -206,6 +223,25 @@ struct UploadToKeyserverSheet: View {
                     errorMessage = UserFacingErrorMapper.message(for: error, context: .keyserverUpload)
                 }
             }
+        }
+    }
+}
+
+private struct UploadingDotsIndicator: View {
+    @State private var activeIndex = 0
+    private let timer = Timer.publish(every: 0.28, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 6, height: 6)
+                    .opacity(activeIndex == index ? 1.0 : 0.35)
+            }
+        }
+        .onReceive(timer) { _ in
+            activeIndex = (activeIndex + 1) % 3
         }
     }
 }

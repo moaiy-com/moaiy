@@ -3045,6 +3045,40 @@
         }
       }
     },
+    "error_keyserver_upload_network" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't connect to the keyserver. Please check your network and try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法连接到密钥服务器。请检查网络后重试。"
+          }
+        }
+      }
+    },
+    "error_keyserver_upload_unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This keyserver is temporarily unavailable. Try another server and try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前密钥服务器暂不可用。请切换服务器后重试。"
+          }
+        }
+      }
+    },
     "error_occurred" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7535,6 +7569,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "您的公钥已上传到密钥服务器"
+          }
+        }
+      }
+    },
+    "upload_success_verification_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You may receive a verification email from the keyserver. Please check your inbox to finish publishing."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥服务器可能会发送验证邮件，请检查收件箱并按提示完成发布。"
           }
         }
       }

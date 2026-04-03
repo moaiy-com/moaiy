@@ -184,8 +184,8 @@ enum UserFacingErrorMapper {
             return String(localized: "error_trust_update_failed")
         case .keySigningFailed:
             return String(localized: "error_key_signing_failed")
-        case .keyserverUploadFailed:
-            return String(localized: "error_keyserver_upload_failed")
+        case .keyserverUploadFailed(let message):
+            return mapRawMessage(message, context: .keyserverUpload)
         case .invalidOutput(let message), .executionFailed(let message):
             return mapRawMessage(message, context: context)
         }
@@ -214,6 +214,21 @@ enum UserFacingErrorMapper {
             || lowercasedMessage.contains("secret key not available")
             || lowercasedMessage.contains("decryption requires a private key") {
             return String(localized: "error_decryption_requires_private_key")
+        }
+        if context == .keyserverUpload {
+            if lowercasedMessage.contains("no dirmngr")
+                || lowercasedMessage.contains("can't connect to the dirmngr")
+                || lowercasedMessage.contains("keyserver rejected upload")
+                || lowercasedMessage.contains("hkp upload failed") {
+                return String(localized: "error_keyserver_upload_unavailable")
+            }
+            if lowercasedMessage.contains("timed out")
+                || lowercasedMessage.contains("offline")
+                || lowercasedMessage.contains("network")
+                || lowercasedMessage.contains("could not connect")
+                || lowercasedMessage.contains("connection refused") {
+                return String(localized: "error_keyserver_upload_network")
+            }
         }
         if context == .verify {
             return friendlyVerifyMessage(from: lowercasedMessage)

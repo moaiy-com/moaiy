@@ -711,6 +711,7 @@ final class GPGService {
     func importFromKeyserver(query: String, keyserver: String = "keys.openpgp.org") async throws -> KeyImportResult {
         let queryKind = try parseKeyserverImportQuery(query)
         let beforeFingerprints = Set(try await listKeys(secretOnly: false).map(\.fingerprint))
+        let resolvedKeyserver = normalizedGPGKeyserver(keyserver)
 
         let arguments: [String]
         switch queryKind {
@@ -718,7 +719,7 @@ final class GPGService {
             arguments = [
                 "--batch",
                 "--yes",
-                "--keyserver", keyserver,
+                "--keyserver", resolvedKeyserver,
                 "--status-fd", "1",
                 "--recv-keys",
                 value
@@ -728,7 +729,7 @@ final class GPGService {
                 "--batch",
                 "--yes",
                 "--status-fd", "1",
-                "--keyserver", keyserver,
+                "--keyserver", resolvedKeyserver,
                 "--auto-key-locate", "keyserver",
                 "--locate-keys",
                 value
@@ -934,22 +935,41 @@ final class GPGService {
     ///   - keyID: Key ID or fingerprint to ///   - keyserver: Keyserver URL (default: keys.openpgp.org)
     /// - Throws: GPGError if upload fails
     func uploadToKeyserver(keyID: String, keyserver: String = "keys.openpgp.org") async throws {
+        let normalizedKeyID = normalizeKeyReference(keyID) ??
+            keyID.replacingOccurrences(of: " ", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedKeyserver = normalizedGPGKeyserver(keyserver)
         let arguments = [
             "--send-keys",
-            "--keyserver", keyserver,
+            "--keyserver", resolvedKeyserver,
             "--batch",
             "--yes",
-            keyID
+            normalizedKeyID
         ]
         
         let result = try await executeGPG(
             arguments: arguments,
             timeout: 60.0  // 60 second timeout for network operations
         )
-        
-        guard result.exitCode == 0 else {
-            let errorMsg = result.stderr ?? "Upload failed with exit code \(result.exitCode)"
-            throw GPGError.keyserverUploadFailed(errorMsg)
+
+        if result.exitCode == 0 {
+            return
+        }
+
+        let gpgErrorMessage = result.stderr ?? result.stdout ?? "Upload failed with exit code \(result.exitCode)"
+
+        // Fallback path for bundled builds where keyserver helpers (like dirmngr) are unavailable.
+        do {
+            let armoredKeyData = try await exportPublicKey(keyID: normalizedKeyID, armor: true)
+            guard let armoredKey = String(data: armoredKeyData, encoding: .utf8), !armoredKey.isEmpty else {
+                throw GPGError.exportFailed("No key data exported")
+            }
+
+            try await uploadPublicKeyDirectly(armoredKey: armoredKey, keyserver: keyserver)
+            return
+        } catch {
+            let fallbackMessage = error.localizedDescription
+            throw GPGError.keyserverUploadFailed("\(gpgErrorMessage)\n\(fallbackMessage)")
         }
     }
     
@@ -959,9 +979,10 @@ final class GPGService {
     ///   - keyserver: Keyserver URL (default: keys.openpgp.org)
     /// - Returns: True if key was found
     func searchKeyserver(keyID: String, keyserver: String = "keys.openpgp.org") async throws -> Bool {
+        let resolvedKeyserver = normalizedGPGKeyserver(keyserver)
         let arguments = [
             "--search-keys",
-            "--keyserver", keyserver,
+            "--keyserver", resolvedKeyserver,
             keyID
         ]
         
@@ -1791,6 +1812,118 @@ final class GPGService {
         }
 
         return nil
+    }
+
+    private func normalizedGPGKeyserver(_ keyserver: String) -> String {
+        let trimmed = keyserver.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return "hkps://keys.openpgp.org"
+        }
+        if trimmed.contains("://") {
+            return trimmed
+        }
+        guard let host = normalizedKeyserverHost(trimmed) else {
+            return trimmed
+        }
+        if host == "pgp.mit.edu" {
+            return "hkp://\(host)"
+        }
+        return "hkps://\(host)"
+    }
+
+    private func normalizedKeyserverHost(_ keyserver: String) -> String? {
+        let trimmed = keyserver.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let url = URL(string: trimmed), let host = url.host {
+            return host.lowercased()
+        }
+
+        let withoutScheme = trimmed.replacingOccurrences(
+            of: #"^[a-zA-Z][a-zA-Z0-9+\-.]*://"#,
+            with: "",
+            options: .regularExpression
+        )
+        guard let hostPart = withoutScheme.split(separator: "/").first else {
+            return nil
+        }
+        return hostPart.split(separator: ":").first.map { String($0).lowercased() }
+    }
+
+    private func uploadPublicKeyDirectly(armoredKey: String, keyserver: String) async throws {
+        guard let host = normalizedKeyserverHost(keyserver) else {
+            throw GPGError.keyserverUploadFailed("Invalid keyserver")
+        }
+
+        if host == "keys.openpgp.org" {
+            try await uploadToOpenPGPServer(armoredKey: armoredKey)
+            return
+        }
+
+        var lastError: String?
+        for endpoint in hkpUploadEndpoints(forHost: host) {
+            do {
+                try await uploadToHKPEndpoint(armoredKey: armoredKey, endpoint: endpoint)
+                return
+            } catch {
+                lastError = error.localizedDescription
+            }
+        }
+
+        throw GPGError.keyserverUploadFailed(lastError ?? "Direct keyserver upload failed")
+    }
+
+    private func uploadToOpenPGPServer(armoredKey: String) async throws {
+        guard let url = URL(string: "https://keys.openpgp.org/vks/v1/upload") else {
+            throw GPGError.keyserverUploadFailed("Invalid OpenPGP server URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue("application/pgp-keys", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data(armoredKey.utf8)
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw GPGError.keyserverUploadFailed("OpenPGP server rejected upload (\(statusCode))")
+        }
+    }
+
+    private func hkpUploadEndpoints(forHost host: String) -> [URL] {
+        let candidates = [
+            "https://\(host)/pks/add",
+            "http://\(host)/pks/add",
+            "http://\(host):11371/pks/add"
+        ]
+        return candidates.compactMap(URL.init(string:))
+    }
+
+    private func uploadToHKPEndpoint(armoredKey: String, endpoint: URL) async throws {
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data("keytext=\(formURLEncode(armoredKey))".utf8)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let bodyPreview = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .prefix(160) ?? ""
+            throw GPGError.keyserverUploadFailed("HKP upload failed (\(statusCode)): \(bodyPreview)")
+        }
+    }
+
+    private func formURLEncode(_ value: String) -> String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._* ")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed)?
+            .replacingOccurrences(of: " ", with: "+") ?? value
     }
     
     /// Parse key list output
