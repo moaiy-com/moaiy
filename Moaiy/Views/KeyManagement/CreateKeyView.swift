@@ -228,7 +228,7 @@ struct CreateKeyView: View {
                 }
             } catch {
                 isCreating = false
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingErrorMapper.message(for: error, context: .general)
             }
         }
     }

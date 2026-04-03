@@ -231,7 +231,7 @@ struct ExpirationEditView: View {
             .disabled(isUpdating)
         }
         .padding(MoaiyUI.Spacing.xxl)
-        .alert("error_occurred", isPresented: $showError) {
+        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .keyEdit)), isPresented: $showError) {
             Button("action_ok") { }
         } message: {
             if let error = errorMessage {
@@ -267,7 +267,7 @@ struct ExpirationEditView: View {
                 passphrase = ""
                 onSuccess(String(localized: "edit_expiration_success"))
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingErrorMapper.message(for: error, context: .keyEdit)
                 showError = true
             }
             isUpdating = false
@@ -366,7 +366,7 @@ struct UserIDsEditView: View {
             .moaiyBannerStyle(tint: Color.moaiyInfo)
         }
         .padding(MoaiyUI.Spacing.xxl)
-        .alert("error_occurred", isPresented: $showError) {
+        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .keyEdit)), isPresented: $showError) {
             Button("action_ok") { }
         } message: {
             if let error = errorMessage {
@@ -391,7 +391,7 @@ struct UserIDsEditView: View {
                 passphrase = ""
                 onSuccess(String(localized: "edit_userid_success"))
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingErrorMapper.message(for: error, context: .keyEdit)
                 showError = true
             }
             isAdding = false
@@ -465,7 +465,7 @@ struct PassphraseEditView: View {
             .disabled(currentPassphrase.isEmpty || newPassphrase.isEmpty || newPassphrase != confirmPassphrase || isUpdating)
         }
         .padding(MoaiyUI.Spacing.xxl)
-        .alert("error_occurred", isPresented: $showError) {
+        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .keyEdit)), isPresented: $showError) {
             Button("action_ok") { }
         } message: {
             if let error = errorMessage {
@@ -489,7 +489,7 @@ struct PassphraseEditView: View {
                 confirmPassphrase = ""
                 onSuccess(String(localized: "edit_passphrase_success"))
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingErrorMapper.message(for: error, context: .keyEdit)
                 showError = true
             }
             isUpdating = false

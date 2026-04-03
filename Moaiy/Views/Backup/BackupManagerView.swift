@@ -207,7 +207,7 @@ struct BackupManagerView: View {
         } message: {
             Text(restoreSuccessMessage)
         }
-        .alert("error_occurred", isPresented: $showError) {
+        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .backup)), isPresented: $showError) {
             Button("action_ok") { }
         } message: {
             if let error = errorMessage {
@@ -266,7 +266,7 @@ struct BackupManagerView: View {
 
                 showBackupSuccess = true
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingErrorMapper.message(for: error, context: .backup)
                 showError = true
             }
             isCreatingBackup = false
@@ -307,7 +307,7 @@ struct BackupManagerView: View {
                 } catch {
                     failedSecretKeyFingerprints.append(key.fingerprint)
                     if firstSecretKeyExportError == nil {
-                        firstSecretKeyExportError = error.localizedDescription
+                        firstSecretKeyExportError = UserFacingErrorMapper.message(for: error, context: .exportKey)
                     }
                 }
             }
@@ -393,7 +393,7 @@ struct BackupManagerView: View {
                     throw GPGError.importFailed("\(summary.successfulFiles)/\(summary.totalFiles) - \(failed)")
                 }
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingErrorMapper.message(for: error, context: .backup)
                 showError = true
             }
             isRestoring = false

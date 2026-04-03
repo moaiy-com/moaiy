@@ -111,7 +111,7 @@ struct TrustManagementSheet: View {
         .task {
             await loadTrustDetails()
         }
-        .alert("error_occurred", isPresented: $showError) {
+        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .trust)), isPresented: $showError) {
             Button("action_ok") { }
         } message: {
             if let error = errorMessage {
@@ -137,7 +137,7 @@ struct TrustManagementSheet: View {
                 try await viewModel.setTrust(for: key, trustLevel: selectedTrustLevel)
                 dismiss()
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingErrorMapper.message(for: error, context: .trust)
                 showError = true
             }
             isUpdating = false

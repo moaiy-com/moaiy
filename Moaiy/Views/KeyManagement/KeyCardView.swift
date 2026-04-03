@@ -343,7 +343,7 @@ struct KeyCardView: View {
                 OperationResult.failure(
                     fileURL: url,
                     operation: .encrypt,
-                    errorMessage: error.localizedDescription
+                    errorMessage: UserFacingErrorMapper.message(for: error, context: .encrypt)
                 )
             )
         }
@@ -384,7 +384,7 @@ struct KeyCardView: View {
                     OperationResult.failure(
                         fileURL: request.sourceURL,
                         operation: .decrypt,
-                        errorMessage: error.localizedDescription
+                        errorMessage: UserFacingErrorMapper.message(for: error, context: .decrypt)
                     )
                 )
             }

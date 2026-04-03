@@ -502,7 +502,7 @@ struct ExportKeySheet: View {
                 isExporting = false
                 dismiss()
             } catch {
-                exportError = error.localizedDescription
+                exportError = UserFacingErrorMapper.message(for: error, context: .exportKey)
                 isExporting = false
             }
         }
@@ -526,7 +526,7 @@ struct ExportKeySheet: View {
                 isExporting = false
                 dismiss()
             } catch {
-                exportError = error.localizedDescription
+                exportError = UserFacingErrorMapper.message(for: error, context: .exportKey)
                 isExporting = false
             }
         }
@@ -703,7 +703,7 @@ struct DeleteKeySheet: View {
                 dismiss()
                 onDeleteSuccess?()
             } catch {
-                deleteError = error.localizedDescription
+                deleteError = UserFacingErrorMapper.message(for: error, context: .keyEdit)
                 isDeleting = false
             }
         }

@@ -19,6 +19,7 @@ final class KeyManagementViewModel {
     var keys: [GPGKey] = []
     var isLoading = false
     var errorMessage: String?
+    var errorContext: UserFacingErrorContext = .general
     var searchText = ""
     var isSystemKeyringMigrationRunning = false
 
@@ -119,6 +120,7 @@ final class KeyManagementViewModel {
 
             guard gpgService.isReady else {
                 logger.error("GPGService readiness timed out")
+                errorContext = .general
                 errorMessage = String(localized: "error_gpg_not_found")
                 return
             }
@@ -136,6 +138,7 @@ final class KeyManagementViewModel {
 
         isLoading = true
         errorMessage = nil
+        errorContext = .general
 
         do {
             // Load both public and secret keys
@@ -179,7 +182,7 @@ final class KeyManagementViewModel {
             expirationReminder.updateKeys(keys)
             await expirationReminder.scheduleReminders()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .keyList)
             logger.error("Failed to load keys: \(error.localizedDescription)")
 
             // Auto-retry with exponential backoff
@@ -220,7 +223,7 @@ final class KeyManagementViewModel {
             await loadKeys()
             return fingerprint
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .general)
             isLoading = false
             throw error
         }
@@ -251,7 +254,7 @@ final class KeyManagementViewModel {
             await loadKeys()
             return result
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .importKey)
             isLoading = false
             throw error
         }
@@ -271,7 +274,7 @@ final class KeyManagementViewModel {
             await loadKeys()
             return result
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .importKey)
             isLoading = false
             throw error
         }
@@ -337,7 +340,7 @@ final class KeyManagementViewModel {
             }
             await loadKeys()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .keyEdit)
             isLoading = false
             throw error
         }
@@ -364,7 +367,7 @@ final class KeyManagementViewModel {
             try await gpgService.setTrust(keyID: key.fingerprint, trustLevel: trustLevel)
             await loadKeys()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .trust)
             isLoading = false
             throw error
         }
@@ -394,7 +397,7 @@ final class KeyManagementViewModel {
             )
             await loadKeys()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .sign)
             isLoading = false
             throw error
         }
@@ -409,7 +412,7 @@ final class KeyManagementViewModel {
             try await gpgService.updateTrustDB()
             await loadKeys()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .trust)
             isLoading = false
             throw error
         }
@@ -430,7 +433,7 @@ final class KeyManagementViewModel {
             )
             await loadKeys()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .keyEdit)
             isLoading = false
             throw error
         }
@@ -461,7 +464,7 @@ final class KeyManagementViewModel {
             )
             await loadKeys()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .keyEdit)
             isLoading = false
             throw error
         }
@@ -494,7 +497,7 @@ final class KeyManagementViewModel {
             )
             await loadKeys()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .keyEdit)
             isLoading = false
             throw error
         }
@@ -504,6 +507,7 @@ final class KeyManagementViewModel {
 
     func clearError() {
         errorMessage = nil
+        errorContext = .general
         retryCount = 0
     }
 
@@ -537,7 +541,7 @@ final class KeyManagementViewModel {
             isSystemKeyringMigrationRunning = false
             return result
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .importKey)
             isSystemKeyringMigrationRunning = false
             throw error
         }
@@ -564,6 +568,11 @@ final class KeyManagementViewModel {
 
     func clearSearchHistory() {
         searchHistory = []
+    }
+
+    private func setError(_ error: Error, context: UserFacingErrorContext) {
+        errorContext = context
+        errorMessage = UserFacingErrorMapper.message(for: error, context: context)
     }
 
     private func isValidEmail(_ email: String) -> Bool {

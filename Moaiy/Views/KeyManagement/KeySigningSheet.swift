@@ -20,6 +20,7 @@ struct KeySigningSheet: View {
     @State private var showError = false
     @State private var errorMessage: String?
     @State private var showSuccess = false
+    @State private var successMessageKey: LocalizedStringKey = "sign_success_message"
     
     var body: some View {
         VStack(spacing: MoaiyUI.Spacing.xxl) {
@@ -166,9 +167,9 @@ struct KeySigningSheet: View {
         .alert("sign_success_title", isPresented: $showSuccess) {
             Button("action_ok") { dismiss() }
         } message: {
-            Text("sign_success_message")
+            Text(successMessageKey)
         }
-        .alert("error_occurred", isPresented: $showError) {
+        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .sign)), isPresented: $showError) {
             Button("action_ok") { }
         } message: {
             if let error = errorMessage {
@@ -188,9 +189,10 @@ struct KeySigningSheet: View {
                     passphrase: passphrase,
                     trustLevel: setTrustAfterSigning ? selectedTrustLevel : nil
                 )
+                successMessageKey = setTrustAfterSigning ? "sign_success_message" : "sign_success_message_no_trust_update"
                 showSuccess = true
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingErrorMapper.message(for: error, context: .sign)
                 showError = true
             }
             isSigning = false

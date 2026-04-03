@@ -411,7 +411,9 @@ struct KeyActionMenu: View {
             successCount: encryptedFileCount,
             failureCount: failedFileCount,
             successMessage: String(localized: "operation_success_encrypt"),
-            firstError: firstError
+            firstError: firstError,
+            errorContext: .encrypt,
+            failureTitleKey: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .encrypt))
         )
     }
 
@@ -461,7 +463,9 @@ struct KeyActionMenu: View {
             successCount: decryptedFileCount,
             failureCount: failedFileCount,
             successMessage: String(localized: "operation_success_decrypt"),
-            firstError: firstError
+            firstError: firstError,
+            errorContext: .decrypt,
+            failureTitleKey: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt))
         )
     }
 
@@ -512,7 +516,9 @@ struct KeyActionMenu: View {
             successCount: signedFileCount,
             failureCount: failedFileCount,
             successMessage: String(localized: "operation_success_sign_detached"),
-            firstError: firstError
+            firstError: firstError,
+            errorContext: .sign,
+            failureTitleKey: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .sign))
         )
     }
 
@@ -557,7 +563,7 @@ struct KeyActionMenu: View {
             } catch {
                 failedFileCount += 1
                 if firstErrorMessage == nil {
-                    firstErrorMessage = friendlyVerifyErrorMessage(from: error)
+                    firstErrorMessage = UserFacingErrorMapper.message(for: error, context: .verify)
                 }
             }
         }
@@ -575,64 +581,11 @@ struct KeyActionMenu: View {
         case .success(let message):
             showSuccess(message: message)
         case .error(let message):
-            showError(title: "verify_alert_title_failure", message: message)
+            showError(
+                title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .verify)),
+                message: message
+            )
         }
-    }
-
-    private func friendlyVerifyErrorMessage(from error: Error) -> String {
-        let rawMessage: String
-        if let gpgError = error as? GPGError {
-            switch gpgError {
-            case .executionFailed(let message),
-                 .invalidOutput(let message),
-                 .decryptionFailed(let message):
-                rawMessage = message
-            default:
-                rawMessage = gpgError.localizedDescription
-            }
-        } else {
-            rawMessage = error.localizedDescription
-        }
-
-        let predefinedFriendlyMessages: Set<String> = [
-            String(localized: "verify_signature_error_no_signature"),
-            String(localized: "verify_signature_error_bad_signature"),
-            String(localized: "verify_signature_error_missing_public_key"),
-            String(localized: "verify_signature_error_missing_original"),
-            String(localized: "verify_signature_failed"),
-            String(localized: "verify_signature_error_generic")
-        ]
-        if predefinedFriendlyMessages.contains(rawMessage) {
-            return rawMessage
-        }
-
-        let lowercasedMessage = rawMessage.lowercased()
-        if lowercasedMessage.contains("we couldn't verify this signature")
-            || lowercasedMessage.contains("please check the selected files and try again") {
-            return String(localized: "verify_signature_error_bad_signature")
-        }
-        if lowercasedMessage.contains("no signature found") {
-            return String(localized: "verify_signature_error_no_signature")
-        }
-        if lowercasedMessage.contains("badsig")
-            || lowercasedMessage.contains("errsig")
-            || lowercasedMessage.contains("bad signature") {
-            return String(localized: "verify_signature_error_bad_signature")
-        }
-        if lowercasedMessage.contains("no_pubkey")
-            || lowercasedMessage.contains("no public key") {
-            return String(localized: "verify_signature_error_missing_public_key")
-        }
-        if lowercasedMessage.contains("nodata")
-            || lowercasedMessage.contains("no valid openpgp data found") {
-            return String(localized: "verify_signature_error_no_signature")
-        }
-        if lowercasedMessage.contains("can't open signed data")
-            || lowercasedMessage.contains("no such file or directory")
-            || lowercasedMessage.contains("should be the first file") {
-            return String(localized: "verify_signature_error_missing_original")
-        }
-        return String(localized: "verify_signature_error_bad_signature")
     }
 
     @MainActor
@@ -642,7 +595,10 @@ struct KeyActionMenu: View {
             try writeDataSafely(keyData, to: outputURL)
             showSuccess(message: String(localized: "action_export_public_key"))
         } catch {
-            showError(message: error.localizedDescription)
+            showError(
+                title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .exportKey)),
+                message: UserFacingErrorMapper.message(for: error, context: .exportKey)
+            )
         }
     }
 
@@ -653,7 +609,10 @@ struct KeyActionMenu: View {
             try writeDataSafely(keyData, to: outputURL)
             showSuccess(message: String(localized: "action_export_private_key"))
         } catch {
-            showError(message: error.localizedDescription)
+            showError(
+                title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .exportKey)),
+                message: UserFacingErrorMapper.message(for: error, context: .exportKey)
+            )
         }
     }
 
@@ -700,13 +659,17 @@ struct KeyActionMenu: View {
         successCount: Int,
         failureCount: Int,
         successMessage: String,
-        firstError: Error?
+        firstError: Error?,
+        errorContext: UserFacingErrorContext,
+        failureTitleKey: LocalizedStringKey
     ) {
         let decision = KeyActionBatchResultPlanner.makeAlertDecision(
             successCount: successCount,
             failureCount: failureCount,
             successMessage: successMessage,
-            firstErrorMessage: firstError?.localizedDescription
+            firstErrorMessage: firstError.map {
+                UserFacingErrorMapper.message(for: $0, context: errorContext)
+            }
         )
 
         switch decision {
@@ -715,14 +678,8 @@ struct KeyActionMenu: View {
         case .success(let message):
             showSuccess(message: message)
         case .error(let message):
-            showError(message: message)
+            showError(title: failureTitleKey, message: message)
         }
-    }
-
-    private func showError(message: String) {
-        alertTitle = "error_occurred"
-        alertMessage = message
-        showingAlert = true
     }
 
     private func showError(title: LocalizedStringKey, message: String) {

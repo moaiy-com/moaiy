@@ -203,7 +203,7 @@ struct UploadToKeyserverSheet: View {
             } catch {
                 await MainActor.run {
                     isUploading = false
-                    errorMessage = error.localizedDescription
+                    errorMessage = UserFacingErrorMapper.message(for: error, context: .keyserverUpload)
                 }
             }
         }

@@ -111,7 +111,17 @@ struct KeyManagementView: View {
                 )
             }
         }
-        .alert("error_occurred", isPresented: .constant(viewModel.errorMessage != nil)) {
+        .alert(
+            LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: viewModel.errorContext)),
+            isPresented: Binding(
+                get: { viewModel.errorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.clearError()
+                    }
+                }
+            )
+        ) {
             Button("action_retry") {
                 Task { await viewModel.refresh() }
             }

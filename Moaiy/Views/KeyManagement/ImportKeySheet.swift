@@ -221,7 +221,7 @@ struct ImportKeySheet: View {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 dismiss()
             } catch {
-                importError = error.localizedDescription
+                importError = UserFacingErrorMapper.message(for: error, context: .importKey)
                 isImporting = false
             }
         }
@@ -247,7 +247,7 @@ struct ImportKeySheet: View {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 dismiss()
             } catch {
-                importError = error.localizedDescription
+                importError = UserFacingErrorMapper.message(for: error, context: .importKey)
                 isImporting = false
             }
         }
@@ -289,7 +289,7 @@ struct ImportKeySheet: View {
                     showIncompleteSecretMigrationAlert = true
                 }
             } catch {
-                importError = error.localizedDescription
+                importError = UserFacingErrorMapper.message(for: error, context: .importKey)
                 isImporting = false
             }
         }
