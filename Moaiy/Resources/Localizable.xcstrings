@@ -7579,13 +7579,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Select signed files or signature files to verify"
+            "value" : "Select the signed file or a signature file (.sig/.asc) to verify"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择要验证的已签名文件或签名文件"
+            "value" : "选择已签名文件，或选择签名文件（.sig/.asc）进行验证"
           }
         }
       }
@@ -7607,19 +7607,121 @@
         }
       }
     },
+    "verify_alert_title_failure" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verification Not Successful"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证不成功"
+          }
+        }
+      }
+    },
+    "verify_signature_error_bad_signature" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verification was not successful. The original file may have been modified."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证不成功，原文件可能已经被修改。"
+          }
+        }
+      }
+    },
+    "verify_signature_error_generic" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verification was not successful. The original file may have been modified."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证不成功，原文件可能已经被修改。"
+          }
+        }
+      }
+    },
+    "verify_signature_error_missing_original" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't find the original file for this signature. Keep both files in the same folder and try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找不到与该签名对应的原文件。请将签名文件和原文件放在同一文件夹后重试。"
+          }
+        }
+      }
+    },
+    "verify_signature_error_missing_public_key" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We can't verify this signature yet. Import the sender's public key and try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂时无法验证该签名。请先导入发送者的公钥后重试。"
+          }
+        }
+      }
+    },
+    "verify_signature_error_no_signature" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No signature was found in this file. Please choose a signature file or a signed message."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此文件中没有可验证的签名。请选择签名文件或已签名内容。"
+          }
+        }
+      }
+    },
     "verify_signature_failed" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Signature verification failed"
+            "value" : "We couldn't verify the signature"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "签名验证失败"
+            "value" : "无法完成签名验证"
           }
         }
       }

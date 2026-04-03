@@ -1281,12 +1281,46 @@ final class GPGService {
         return parseVerificationResult(output)
     }
 
-    /// Verify a signed file or signature file.
-    /// - Parameter fileURL: Signed file URL
+    /// Verify a signed file or detached signature.
+    /// For detached signatures, this method auto-resolves the counterpart file:
+    /// - selecting `file` tries `file.sig` then `file.asc`
+    /// - selecting `file.sig` / `file.asc` tries `file`
+    /// - Parameter fileURL: Signed file URL or detached signature URL
     /// - Returns: Verification result
     func verifySignatureFile(at fileURL: URL) async throws -> VerificationResult {
         let fileManager = FileManager.default
-        let stagingDirectory = try secureOperationDirectory(prefix: "verify-signature")
+        let fileExtension = fileURL.pathExtension.lowercased()
+
+        // Case 1: user selected a detached signature file (*.sig / *.asc)
+        if fileExtension == "sig" || fileExtension == "asc" {
+            let signedFileURL = fileURL.deletingPathExtension()
+            guard fileManager.fileExists(atPath: signedFileURL.path) else {
+                throw GPGError.executionFailed(String(localized: "verify_signature_error_missing_original"))
+            }
+            return try await verifyDetachedSignatureFile(
+                signatureURL: fileURL,
+                signedFileURL: signedFileURL
+            )
+        }
+
+        // Case 2: user selected the original file, and a sibling detached signature exists.
+        for signatureExtension in ["sig", "asc"] {
+            let siblingSignatureURL = fileURL.appendingPathExtension(signatureExtension)
+            if fileManager.fileExists(atPath: siblingSignatureURL.path) {
+                return try await verifyDetachedSignatureFile(
+                    signatureURL: siblingSignatureURL,
+                    signedFileURL: fileURL
+                )
+            }
+        }
+
+        // Case 3: inline/clearsigned content.
+        return try await verifyInlineSignedFile(fileURL: fileURL)
+    }
+
+    private func verifyInlineSignedFile(fileURL: URL) async throws -> VerificationResult {
+        let fileManager = FileManager.default
+        let stagingDirectory = try secureOperationDirectory(prefix: "verify-inline")
         let stagedInputURL = stagingDirectory.appendingPathComponent("input")
         defer {
             try? fileManager.removeItem(at: stagingDirectory)
@@ -1312,13 +1346,96 @@ final class GPGService {
 
         guard result.exitCode == 0, verificationResult.isValid else {
             let stderr = result.stderr?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let stderr, !stderr.isEmpty {
-                throw GPGError.executionFailed(stderr)
-            }
-            throw GPGError.executionFailed(String(localized: "verify_signature_failed"))
+            let failureMessage = friendlyVerificationFailureMessage(
+                statusOutput: statusOutput,
+                stderr: stderr
+            )
+            throw GPGError.executionFailed(failureMessage)
         }
 
         return verificationResult
+    }
+
+    private func verifyDetachedSignatureFile(
+        signatureURL: URL,
+        signedFileURL: URL
+    ) async throws -> VerificationResult {
+        let fileManager = FileManager.default
+        let stagingDirectory = try secureOperationDirectory(prefix: "verify-detached")
+        let stagedSignatureURL = stagingDirectory.appendingPathComponent("signature.sig")
+        let stagedSignedFileURL = stagingDirectory.appendingPathComponent("signed")
+        defer {
+            try? fileManager.removeItem(at: stagingDirectory)
+        }
+
+        let signatureAccessGranted = signatureURL.startAccessingSecurityScopedResource()
+        let signedFileAccessGranted = signedFileURL.startAccessingSecurityScopedResource()
+        defer {
+            if signatureAccessGranted {
+                signatureURL.stopAccessingSecurityScopedResource()
+            }
+            if signedFileAccessGranted {
+                signedFileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        try fileManager.copyItem(at: signatureURL, to: stagedSignatureURL)
+        try fileManager.copyItem(at: signedFileURL, to: stagedSignedFileURL)
+
+        let result = try await executeGPG(
+            arguments: [
+                "--verify",
+                "--status-fd", "1",
+                stagedSignatureURL.path,
+                stagedSignedFileURL.path
+            ]
+        )
+
+        let statusOutput = [result.stdout, result.stderr]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+        let verificationResult = parseVerificationResult(statusOutput)
+
+        guard result.exitCode == 0, verificationResult.isValid else {
+            let stderr = result.stderr?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let failureMessage = friendlyVerificationFailureMessage(
+                statusOutput: statusOutput,
+                stderr: stderr
+            )
+            throw GPGError.executionFailed(failureMessage)
+        }
+
+        return verificationResult
+    }
+
+    private func friendlyVerificationFailureMessage(statusOutput: String, stderr: String?) -> String {
+        let combinedOutput = [statusOutput, stderr ?? ""]
+            .joined(separator: "\n")
+            .lowercased()
+
+        if combinedOutput.contains("badsig")
+            || combinedOutput.contains("errsig")
+            || combinedOutput.contains("bad signature") {
+            return String(localized: "verify_signature_error_bad_signature")
+        }
+        if combinedOutput.contains("we couldn't verify this signature")
+            || combinedOutput.contains("please check the selected files and try again") {
+            return String(localized: "verify_signature_error_bad_signature")
+        }
+        if combinedOutput.contains("no_pubkey") || combinedOutput.contains("no public key") {
+            return String(localized: "verify_signature_error_missing_public_key")
+        }
+        if combinedOutput.contains("nodata")
+            || combinedOutput.contains("no signature found")
+            || combinedOutput.contains("no valid openpgp data found") {
+            return String(localized: "verify_signature_error_no_signature")
+        }
+        if combinedOutput.contains("can't open signed data")
+            || combinedOutput.contains("no such file or directory")
+            || combinedOutput.contains("should be the first file") {
+            return String(localized: "verify_signature_error_missing_original")
+        }
+        return String(localized: "verify_signature_error_bad_signature")
     }
     
     // MARK: - Trust Management

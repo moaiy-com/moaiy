@@ -520,26 +520,119 @@ struct KeyActionMenu: View {
     private func verifyFiles(_ urls: [URL]) async {
         var verifiedFileCount = 0
         var failedFileCount = 0
-        var firstError: Error?
+        var firstErrorMessage: String?
+        var processedPaths = Set<String>()
+        let selectedPathSet = Set(urls.map(\.path))
 
-        for url in urls {
+        let orderedURLs = urls.sorted { lhs, rhs in
+            lhs.lastPathComponent.localizedCaseInsensitiveCompare(rhs.lastPathComponent) == .orderedAscending
+        }
+
+        for url in orderedURLs {
+            if processedPaths.contains(url.path) {
+                continue
+            }
+
+            let fileExtension = url.pathExtension.lowercased()
+            if fileExtension == "sig" || fileExtension == "asc" {
+                let signedFileURL = url.deletingPathExtension()
+                if selectedPathSet.contains(signedFileURL.path) {
+                    processedPaths.insert(signedFileURL.path)
+                }
+            } else {
+                let signatureURLs = [
+                    url.appendingPathExtension("sig"),
+                    url.appendingPathExtension("asc")
+                ]
+                for signatureURL in signatureURLs where selectedPathSet.contains(signatureURL.path) {
+                    processedPaths.insert(signatureURL.path)
+                }
+            }
+
+            processedPaths.insert(url.path)
+
             do {
                 _ = try await GPGService.shared.verifySignatureFile(at: url)
                 verifiedFileCount += 1
             } catch {
                 failedFileCount += 1
-                if firstError == nil {
-                    firstError = error
+                if firstErrorMessage == nil {
+                    firstErrorMessage = friendlyVerifyErrorMessage(from: error)
                 }
             }
         }
 
-        showBatchOperationResult(
+        let decision = KeyActionBatchResultPlanner.makeAlertDecision(
             successCount: verifiedFileCount,
             failureCount: failedFileCount,
             successMessage: String(localized: "operation_success_verify"),
-            firstError: firstError
+            firstErrorMessage: firstErrorMessage
         )
+
+        switch decision {
+        case .none:
+            return
+        case .success(let message):
+            showSuccess(message: message)
+        case .error(let message):
+            showError(title: "verify_alert_title_failure", message: message)
+        }
+    }
+
+    private func friendlyVerifyErrorMessage(from error: Error) -> String {
+        let rawMessage: String
+        if let gpgError = error as? GPGError {
+            switch gpgError {
+            case .executionFailed(let message),
+                 .invalidOutput(let message),
+                 .decryptionFailed(let message):
+                rawMessage = message
+            default:
+                rawMessage = gpgError.localizedDescription
+            }
+        } else {
+            rawMessage = error.localizedDescription
+        }
+
+        let predefinedFriendlyMessages: Set<String> = [
+            String(localized: "verify_signature_error_no_signature"),
+            String(localized: "verify_signature_error_bad_signature"),
+            String(localized: "verify_signature_error_missing_public_key"),
+            String(localized: "verify_signature_error_missing_original"),
+            String(localized: "verify_signature_failed"),
+            String(localized: "verify_signature_error_generic")
+        ]
+        if predefinedFriendlyMessages.contains(rawMessage) {
+            return rawMessage
+        }
+
+        let lowercasedMessage = rawMessage.lowercased()
+        if lowercasedMessage.contains("we couldn't verify this signature")
+            || lowercasedMessage.contains("please check the selected files and try again") {
+            return String(localized: "verify_signature_error_bad_signature")
+        }
+        if lowercasedMessage.contains("no signature found") {
+            return String(localized: "verify_signature_error_no_signature")
+        }
+        if lowercasedMessage.contains("badsig")
+            || lowercasedMessage.contains("errsig")
+            || lowercasedMessage.contains("bad signature") {
+            return String(localized: "verify_signature_error_bad_signature")
+        }
+        if lowercasedMessage.contains("no_pubkey")
+            || lowercasedMessage.contains("no public key") {
+            return String(localized: "verify_signature_error_missing_public_key")
+        }
+        if lowercasedMessage.contains("nodata")
+            || lowercasedMessage.contains("no valid openpgp data found") {
+            return String(localized: "verify_signature_error_no_signature")
+        }
+        if lowercasedMessage.contains("can't open signed data")
+            || lowercasedMessage.contains("no such file or directory")
+            || lowercasedMessage.contains("should be the first file") {
+            return String(localized: "verify_signature_error_missing_original")
+        }
+        return String(localized: "verify_signature_error_bad_signature")
     }
 
     @MainActor
@@ -628,6 +721,12 @@ struct KeyActionMenu: View {
 
     private func showError(message: String) {
         alertTitle = "error_occurred"
+        alertMessage = message
+        showingAlert = true
+    }
+
+    private func showError(title: LocalizedStringKey, message: String) {
+        alertTitle = title
         alertMessage = message
         showingAlert = true
     }
