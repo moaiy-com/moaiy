@@ -30,8 +30,7 @@ struct SettingsView: View {
     }
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: MoaiyUI.Spacing.lg) {
+        VStack(alignment: .leading, spacing: MoaiyUI.Spacing.lg) {
                 VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
                     Text("section_general")
                         .font(.headline)
@@ -44,6 +43,7 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .moaiyModalCard()
 
                 VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
@@ -75,6 +75,7 @@ struct SettingsView: View {
                         .buttonStyle(.bordered)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .moaiyModalCard()
 
                 VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
@@ -138,12 +139,13 @@ struct SettingsView: View {
                         .tint(Color.moaiyAccentV2)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .moaiyModalCard()
-            }
-            .padding(MoaiyUI.Spacing.xxl)
         }
+        .padding(MoaiyUI.Spacing.xxl)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.moaiySurfaceBackground)
-        .moaiyModalAdaptiveSize(minWidth: 420, idealWidth: 560, maxWidth: 760, minHeight: 440, idealHeight: 620, maxHeight: 900)
+        .moaiyModalAdaptiveSize(minWidth: 420, idealWidth: 560, maxWidth: 760)
         .task {
             await loadGPGVersion()
             refreshKeyringState()
