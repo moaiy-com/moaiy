@@ -168,7 +168,7 @@ struct KeyCardView: View {
                     selectFilesAndProcess()
                 }
             )
-            .frame(minWidth: 80, idealWidth: 520, maxWidth: .infinity, alignment: .trailing)
+            .frame(minWidth: 80, idealWidth: 390, maxWidth: 390, alignment: .trailing)
             .frame(height: 52)
             .layoutPriority(3)
 
