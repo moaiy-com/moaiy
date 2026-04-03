@@ -107,6 +107,8 @@ struct KeyActionMenu: View {
 
     // Reserved feature: key certification/signing is kept in code but hidden from menu for now.
     private let isKeySigningMenuEnabled = false
+    // Reserved feature: backup & restore flow is kept in code but hidden from the menu for now.
+    private let isBackupRestoreMenuEnabled = false
 
     @State private var showingUploadSheet = false
     @State private var showingBackupSheet = false
@@ -180,11 +182,13 @@ struct KeyActionMenu: View {
                     Label("upload_to_keyserver_title", systemImage: "cloud.fill")
                         .font(.system(size: 14))
                 }
-                Button(action: {
-                    showingBackupSheet = true
-                }) {
-                    Label("backup_title", systemImage: "externaldrive.fill")
-                        .font(.system(size: 14))
+                if isBackupRestoreMenuEnabled {
+                    Button(action: {
+                        showingBackupSheet = true
+                    }) {
+                        Label("backup_title", systemImage: "externaldrive.fill")
+                            .font(.system(size: 14))
+                    }
                 }
             }
 
