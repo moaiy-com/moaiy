@@ -141,11 +141,13 @@ struct KeyActionMenu: View {
                         .font(.system(size: 14))
                 }
                 Button(action: {
+                    guard key.isSecret else { return }
                     showingEditSheet = true
                 }) {
                     Label("action_edit", systemImage: "pencil")
                         .font(.system(size: 14))
                 }
+                .disabled(!key.isSecret)
             }
 
             Divider()
