@@ -38,21 +38,22 @@ struct ImportKeySheet: View {
     ]
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: MoaiyUI.Spacing.xxl) {
             // Header
             HStack(alignment: .top) {
                 VStack(spacing: 8) {
                     Image(systemName: headerIconName)
                         .font(.system(size: 48))
-                        .foregroundStyle(Color.moaiyAccent)
+                        .foregroundStyle(Color.moaiyAccentV2)
 
                     Text("action_import_key")
                         .font(.title2)
                         .fontWeight(.semibold)
+                        .foregroundStyle(Color.moaiyTextPrimary)
 
                     Text("import_key_description")
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
@@ -60,7 +61,7 @@ struct ImportKeySheet: View {
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -71,6 +72,7 @@ struct ImportKeySheet: View {
                 Text("migration_system_keyring_title").tag(ImportMode.system)
             }
             .pickerStyle(.segmented)
+            .padding(.horizontal, MoaiyUI.Spacing.xs)
             .onChange(of: importMode) { _, _ in
                 importError = nil
                 importResult = nil
@@ -153,11 +155,13 @@ struct ImportKeySheet: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Color.moaiyAccentV2)
                 .controlSize(.large)
                 .disabled(!canImport || isImporting)
             }
         }
-        .padding(32)
+        .padding(MoaiyUI.Spacing.xxxl)
+        .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 420, idealWidth: 540, maxWidth: 720)
         .alert("migration_system_keyring_title", isPresented: $showIncompleteSecretMigrationAlert) {
             Button("action_retry") {
@@ -298,24 +302,24 @@ struct SystemKeyringImportCard: View {
     let onSelectFolder: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
             Text("migration_system_keyring_message")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
 
             if let selectedURL {
                 HStack(spacing: 8) {
                     Image(systemName: "folder.fill")
-                        .foregroundStyle(Color.moaiyAccent)
+                        .foregroundStyle(Color.moaiyAccentV2)
                     Text(selectedURL.path)
                         .font(.caption)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer()
                 }
-                .padding(10)
-                .background(Color(nsColor: .controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .padding(MoaiyUI.Spacing.sm)
+                .moaiyBannerStyle(tint: Color.moaiyInfo)
             }
 
             Button(action: onSelectFolder) {
@@ -337,9 +341,10 @@ struct MigrationResultCard: View {
     let result: KeyMigrationResult
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: MoaiyUI.Spacing.sm) {
             Text("import_success_message")
                 .font(.headline)
+                .foregroundStyle(Color.moaiyTextPrimary)
 
             Text(
                 String(
@@ -350,23 +355,22 @@ struct MigrationResultCard: View {
                 )
             )
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.moaiyTextSecondary)
 
             Text(
                 "\(result.sourcePublicKeyCount) \(String(localized: "key_type_public")) • \(result.sourceSecretKeyCount) \(String(localized: "backup_keys_secret"))"
             )
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.moaiyTextSecondary)
 
             if result.sourceSecretKeyCount > 0 && !result.secretKeysMigrated {
                 Text("backup_secret_warning")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.moaiyWarning)
             }
         }
-        .padding()
-        .background(Color.green.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(MoaiyUI.Spacing.md)
+        .moaiyBannerStyle(tint: Color.moaiySuccess)
     }
 }
 
@@ -376,9 +380,10 @@ struct KeyserverImportCard: View {
     let keyservers: [String]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
             Text("keyserver_label")
                 .font(.headline)
+                .foregroundStyle(Color.moaiyTextPrimary)
 
             TextField("import_keyserver_query_placeholder", text: $query)
                 .textFieldStyle(.roundedBorder)
@@ -386,7 +391,7 @@ struct KeyserverImportCard: View {
 
             Text("import_keyserver_query_hint")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
 
             Picker("keyserver_label", selection: $selectedKeyserver) {
                 ForEach(keyservers, id: \.self) { keyserver in
@@ -406,31 +411,36 @@ struct DropZoneView: View {
     @State private var isTargeted = false
     
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: MoaiyUI.Spacing.lg) {
             Image(systemName: isTargeted ? "doc.badge.plus" : "doc.text")
                 .font(.system(size: 48))
-                .foregroundStyle(isTargeted ? Color.moaiyAccent : .secondary)
+                .foregroundStyle(isTargeted ? Color.moaiyAccentV2 : Color.moaiyTextSecondary)
             
             Text("drop_zone_title")
                 .font(.headline)
+                .foregroundStyle(Color.moaiyTextPrimary)
             
             Text("drop_zone_subtitle")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
             
             Button("action_select_files") {
                 selectFile()
             }
             .buttonStyle(.borderedProminent)
+            .tint(Color.moaiyAccentV2)
         }
         .frame(maxWidth: .infinity)
         .frame(height: 200)
-        .background(isTargeted ? Color.moaiyAccent.opacity(0.1) : Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(isTargeted ? Color.moaiyAccentV2.opacity(0.08) : Color.moaiySurfaceSecondary.opacity(0.7))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isTargeted ? Color.moaiyAccent : Color.secondary.opacity(0.3), lineWidth: 2, antialiased: true)
+            RoundedRectangle(cornerRadius: MoaiyUI.Radius.lg, style: .continuous)
+                .stroke(
+                    isTargeted ? Color.moaiyFocusRing : Color.moaiyBorderPrimary.opacity(0.85),
+                    style: StrokeStyle(lineWidth: 2, dash: [5, 5])
+                )
         )
+        .clipShape(RoundedRectangle(cornerRadius: MoaiyUI.Radius.lg, style: .continuous))
         .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
             handleDrop(providers: providers)
         }
@@ -476,19 +486,20 @@ struct FilePreviewCard: View {
     let onRemove: () -> Void
     
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: MoaiyUI.Spacing.md) {
             Image(systemName: "doc.text.fill")
                 .font(.title)
-                .foregroundStyle(Color.moaiyAccent)
+                .foregroundStyle(Color.moaiyAccentV2)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(url.lastPathComponent)
                     .font(.headline)
+                    .foregroundStyle(Color.moaiyTextPrimary)
                     .lineLimit(1)
                 
                 Text(url.path)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
                     .lineLimit(1)
             }
             
@@ -496,13 +507,12 @@ struct FilePreviewCard: View {
             
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
             }
             .buttonStyle(.plain)
         }
-        .padding()
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(MoaiyUI.Spacing.md)
+        .moaiyCardStyle(cornerRadius: MoaiyUI.Radius.md)
     }
 }
 
@@ -512,19 +522,18 @@ struct ErrorBanner: View {
     let message: String
     
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: MoaiyUI.Spacing.md) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.moaiyError)
             
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.moaiyTextPrimary)
             
             Spacer()
         }
-        .padding()
-        .background(Color.red.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(MoaiyUI.Spacing.md)
+        .moaiyBannerStyle(tint: Color.moaiyError)
     }
 }
 
@@ -535,15 +544,15 @@ struct SuccessBanner: View {
     let details: String
     
     var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 12) {
+        VStack(spacing: MoaiyUI.Spacing.sm) {
+            HStack(spacing: MoaiyUI.Spacing.md) {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.moaiySuccess)
                 
                 Text(message)
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.moaiyTextPrimary)
                 
                 Spacer()
             }
@@ -552,12 +561,11 @@ struct SuccessBanner: View {
                 Spacer()
                 Text(details)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
             }
         }
-        .padding()
-        .background(Color.green.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(MoaiyUI.Spacing.md)
+        .moaiyBannerStyle(tint: Color.moaiySuccess)
     }
 }
 

@@ -16,24 +16,25 @@ struct BackupSheet: View {
     @State private var isBackingUp = false
     
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: MoaiyUI.Spacing.xl) {
             HStack {
                 Text("backup_title")
                     .font(.title2)
                     .fontWeight(.semibold)
+                    .foregroundStyle(Color.moaiyTextPrimary)
                 Spacer()
 
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
                 .buttonStyle(.plain)
             }
             
             Text("backup_description")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
             
             List(viewModel.keys.filter { $0.isSecret }, selection: $selectedKeys) { key in
                 HStack {
@@ -51,10 +52,12 @@ struct BackupSheet: View {
                             .font(.headline)
                         Text(key.email)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
             
             HStack {
                 Button("backup_select_all") {
@@ -77,7 +80,7 @@ struct BackupSheet: View {
             if let location = backupLocation {
                 Text(location.path)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
             }
             
             Spacer()
@@ -91,10 +94,12 @@ struct BackupSheet: View {
                     performBackup()
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Color.moaiyAccentV2)
                 .disabled(selectedKeys.isEmpty || backupLocation == nil)
             }
         }
-        .padding()
+        .padding(MoaiyUI.Spacing.xxl)
+        .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 440, idealWidth: 540, maxWidth: 720, minHeight: 360, idealHeight: 460)
     }
     

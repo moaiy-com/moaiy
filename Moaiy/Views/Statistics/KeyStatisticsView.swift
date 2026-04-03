@@ -11,85 +11,83 @@ struct KeyStatisticsView: View {
     @Environment(KeyManagementViewModel.self) private var viewModel
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
+        VStack(spacing: MoaiyUI.Spacing.lg) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: MoaiyUI.Spacing.xs) {
                     Text("statistics_title")
                         .font(.title2)
                         .fontWeight(.semibold)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                     Text("statistics_subtitle")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
 
                 Spacer()
             }
-            .padding(24)
-
-            Divider()
+            .padding(.horizontal, MoaiyUI.Spacing.xxl)
+            .padding(.top, MoaiyUI.Spacing.xxl)
 
             ScrollView {
-                VStack(spacing: 20) {
-                    // Overview cards
-                    HStack(spacing: 16) {
+                VStack(spacing: MoaiyUI.Spacing.lg) {
+                    HStack(spacing: MoaiyUI.Spacing.md) {
                         StatCard(
                             title: "statistics_total_keys",
                             value: "\(viewModel.keys.count)",
                             icon: "key.fill",
-                            color: .blue
+                            color: Color.moaiyInfo
                         )
 
                         StatCard(
                             title: "statistics_secret_keys",
                             value: "\(viewModel.secretKeys.count)",
                             icon: "key.viewfinder",
-                            color: Color.moaiyAccent
+                            color: Color.moaiyAccentV2
                         )
 
                         StatCard(
                             title: "statistics_trusted",
                             value: "\(trustedKeysCount)",
                             icon: "checkmark.seal.fill",
-                            color: .green
+                            color: Color.moaiySuccess
                         )
                     }
 
-                    // Algorithm distribution
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
                         Text("statistics_algorithm_distribution")
                             .font(.headline)
+                            .foregroundStyle(Color.moaiyTextPrimary)
 
                         ForEach(algorithmStats.sorted(by: { $0.value > $1.value }), id: \.key) { algorithm, count in
                             HStack {
                                 Text(algorithm)
                                     .font(.subheadline)
+                                    .foregroundStyle(Color.moaiyTextPrimary)
 
                                 Spacer()
 
                                 Text("\(count)")
                                     .font(.subheadline)
                                     .fontWeight(.semibold)
-                                    .foregroundStyle(.blue)
+                                    .foregroundStyle(Color.moaiyAccentV2)
 
                                 Text("(\(Int(Double(count) / Double(viewModel.keys.count) * 100))%)")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.moaiyTextSecondary)
                             }
-                            .padding(.vertical, 4)
+                            .padding(.vertical, MoaiyUI.Spacing.xs)
 
                             ProgressView(value: Double(count), total: Double(viewModel.keys.count))
-                                .tint(.blue)
+                                .tint(Color.moaiyAccentV2)
                         }
                     }
-                    .padding()
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(MoaiyUI.Spacing.lg)
+                    .moaiyCardStyle()
 
-                    // Trust level distribution
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
                         Text("statistics_trust_distribution")
                             .font(.headline)
+                            .foregroundStyle(Color.moaiyTextPrimary)
 
                         ForEach(TrustLevel.allCases, id: \.self) { level in
                             let count = trustLevelStats[level] ?? 0
@@ -101,138 +99,137 @@ struct KeyStatisticsView: View {
 
                                     Text(level.localizedName)
                                         .font(.subheadline)
+                                        .foregroundStyle(Color.moaiyTextPrimary)
 
                                     Spacer()
 
                                     Text("\(count)")
                                         .font(.subheadline)
                                         .fontWeight(.semibold)
+                                        .foregroundStyle(Color.moaiyTextSecondary)
                                 }
-                                .padding(.vertical, 4)
+                                .padding(.vertical, MoaiyUI.Spacing.xs)
                             }
                         }
                     }
-                    .padding()
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(MoaiyUI.Spacing.lg)
+                    .moaiyCardStyle()
 
-                    // Expiration status
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
                         Text("statistics_expiration_status")
                             .font(.headline)
+                            .foregroundStyle(Color.moaiyTextPrimary)
 
-                        HStack(spacing: 16) {
-                            VStack(spacing: 8) {
+                        HStack(spacing: MoaiyUI.Spacing.md) {
+                            VStack(spacing: MoaiyUI.Spacing.sm) {
                                 Image(systemName: "exclamationmark.triangle.fill")
-                                    .font(.title)
-                                    .foregroundStyle(.red)
+                                    .font(.title3)
+                                    .foregroundStyle(Color.moaiyError)
                                 Text("\(expiredKeysCount)")
-                                    .font(.title2)
+                                    .font(.title3)
                                     .fontWeight(.bold)
+                                    .foregroundStyle(Color.moaiyTextPrimary)
                                 Text("statistics_expired")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.moaiyTextSecondary)
                             }
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.red.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .padding(MoaiyUI.Spacing.md)
+                            .moaiyBannerStyle(tint: Color.moaiyError)
 
-                            VStack(spacing: 8) {
+                            VStack(spacing: MoaiyUI.Spacing.sm) {
                                 Image(systemName: "clock.fill")
-                                    .font(.title)
-                                    .foregroundStyle(.orange)
+                                    .font(.title3)
+                                    .foregroundStyle(Color.moaiyWarning)
                                 Text("\(expiringSoonCount)")
-                                    .font(.title2)
+                                    .font(.title3)
                                     .fontWeight(.bold)
+                                    .foregroundStyle(Color.moaiyTextPrimary)
                                 Text("statistics_expiring_soon")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.moaiyTextSecondary)
                             }
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.orange.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .padding(MoaiyUI.Spacing.md)
+                            .moaiyBannerStyle(tint: Color.moaiyWarning)
 
-                            VStack(spacing: 8) {
+                            VStack(spacing: MoaiyUI.Spacing.sm) {
                                 Image(systemName: "infinity")
-                                    .font(.title)
-                                    .foregroundStyle(.green)
+                                    .font(.title3)
+                                    .foregroundStyle(Color.moaiySuccess)
                                 Text("\(neverExpireCount)")
-                                    .font(.title2)
+                                    .font(.title3)
                                     .fontWeight(.bold)
+                                    .foregroundStyle(Color.moaiyTextPrimary)
                                 Text("statistics_no_expiration")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.moaiyTextSecondary)
                             }
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.green.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .padding(MoaiyUI.Spacing.md)
+                            .moaiyBannerStyle(tint: Color.moaiySuccess)
                         }
                     }
-                    .padding()
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(MoaiyUI.Spacing.lg)
+                    .moaiyCardStyle()
 
-                    // Recent activity (placeholder)
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
                         HStack {
                             Text("statistics_recent_activity")
                                 .font(.headline)
+                                .foregroundStyle(Color.moaiyTextPrimary)
 
                             Spacer()
 
                             Text("statistics_last_30_days")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.moaiyTextSecondary)
                         }
 
-                        VStack(spacing: 12) {
+                        VStack(spacing: MoaiyUI.Spacing.md) {
                             ActivityRow(
                                 icon: "plus.circle.fill",
-                                color: .green,
+                                color: Color.moaiySuccess,
                                 title: "statistics_keys_created",
                                 value: "0"
                             )
 
                             ActivityRow(
                                 icon: "square.and.arrow.down.fill",
-                                color: .blue,
+                                color: Color.moaiyInfo,
                                 title: "statistics_keys_imported",
                                 value: "0"
                             )
 
                             ActivityRow(
                                 icon: "signature",
-                                color: Color.moaiyAccent,
+                                color: Color.moaiyAccentV2,
                                 title: "statistics_keys_signed",
                                 value: "0"
                             )
                         }
                     }
-                    .padding()
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(MoaiyUI.Spacing.lg)
+                    .moaiyCardStyle()
 
-                    // Info
-                    HStack(spacing: 12) {
+                    HStack(spacing: MoaiyUI.Spacing.md) {
                         Image(systemName: "info.circle.fill")
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(Color.moaiyInfo)
 
                         Text("statistics_info")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
                     }
-                    .padding()
+                    .padding(MoaiyUI.Spacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.blue.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .moaiyBannerStyle(tint: Color.moaiyInfo)
                 }
-                .padding(24)
+                .padding(.horizontal, MoaiyUI.Spacing.xxl)
+                .padding(.bottom, MoaiyUI.Spacing.xxl)
             }
         }
-        .frame(width: 700, height: 800)
+        .background(Color.moaiySurfaceBackground)
+        .moaiyModalAdaptiveSize(minWidth: 640, idealWidth: 760, maxWidth: 960, minHeight: 620, idealHeight: 780, maxHeight: 980)
     }
 
     // MARK: - Computed Properties
@@ -287,11 +284,11 @@ struct KeyStatisticsView: View {
 
     private func trustColor(for level: TrustLevel) -> Color {
         switch level {
-        case .ultimate: return .green
-        case .full: return .blue
-        case .marginal: return .orange
-        case .none: return .red
-        case .unknown: return .secondary
+        case .ultimate: return Color.moaiySuccess
+        case .full: return Color.moaiyInfo
+        case .marginal: return Color.moaiyWarning
+        case .none: return Color.moaiyError
+        case .unknown: return Color.moaiyTextSecondary
         }
     }
 }
@@ -305,7 +302,7 @@ struct StatCard: View {
     let color: Color
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: MoaiyUI.Spacing.md) {
             Image(systemName: icon)
                 .font(.title)
                 .foregroundStyle(color)
@@ -313,16 +310,16 @@ struct StatCard: View {
             Text(value)
                 .font(.title)
                 .fontWeight(.bold)
+                .foregroundStyle(Color.moaiyTextPrimary)
 
             Text(title)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(MoaiyUI.Spacing.lg)
+        .moaiyCardStyle()
     }
 }
 
@@ -333,20 +330,21 @@ struct ActivityRow: View {
     let value: String
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: MoaiyUI.Spacing.md) {
             Image(systemName: icon)
                 .foregroundStyle(color)
                 .frame(width: 24)
 
             Text(title)
                 .font(.subheadline)
+                .foregroundStyle(Color.moaiyTextPrimary)
 
             Spacer()
 
             Text(value)
                 .font(.subheadline)
                 .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
         }
     }
 }

@@ -46,6 +46,7 @@
 		B0000000000E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A0000000000E /* Assets.xcassets */; };
 		B0000000000F /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A0000000000F /* Localizable.xcstrings */; };
 		B00000000010 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A00000000010 /* PrivacyInfo.xcprivacy */; };
+		B00000000014 /* ScopeOne-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A00000000014 /* ScopeOne-Regular.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -105,6 +106,7 @@
 		A00000000011 /* Moaiy.Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Moaiy.Debug.xcconfig; sourceTree = "<group>"; };
 		A00000000012 /* Moaiy.Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Moaiy.Release.xcconfig; sourceTree = "<group>"; };
 		A00000000013 /* Moaiy.Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Moaiy.Signing.xcconfig; sourceTree = "<group>"; };
+		A00000000014 /* ScopeOne-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "ScopeOne-Regular.ttf"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -244,6 +246,7 @@
 				0B2A177C2F74F09F003D3CB1 /* gpg.bundle */,
 				A0000000000E /* Assets.xcassets */,
 				A0000000000F /* Localizable.xcstrings */,
+				A00000000014 /* ScopeOne-Regular.ttf */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -466,6 +469,7 @@
 				0BBB2BC52F7E54C800282FA8 /* moaiy_icon.icon in Resources */,
 				B00000000010 /* PrivacyInfo.xcprivacy in Resources */,
 				0B2A177D2F74F09F003D3CB1 /* gpg.bundle in Resources */,
+				B00000000014 /* ScopeOne-Regular.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

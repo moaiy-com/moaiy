@@ -24,7 +24,7 @@ struct UploadToKeyserverSheet: View {
     ]
     
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: MoaiyUI.Spacing.xxl) {
             headerView
             
             if uploadSuccess {
@@ -36,7 +36,8 @@ struct UploadToKeyserverSheet: View {
                 buttonsView
             }
         }
-        .padding(24)
+        .padding(MoaiyUI.Spacing.xxl)
+        .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 400, idealWidth: 480, maxWidth: 620)
     }
     
@@ -47,22 +48,23 @@ struct UploadToKeyserverSheet: View {
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
                 .buttonStyle(.plain)
             }
 
             Image(systemName: "globe")
                 .font(.system(size: 48))
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.moaiyAccentV2)
 
             Text("upload_to_keyserver_title")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .foregroundStyle(Color.moaiyTextPrimary)
 
             Text("upload_to_keyserver_description")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
                 .multilineTextAlignment(.center)
         }
     }
@@ -71,24 +73,25 @@ struct UploadToKeyserverSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("key_info")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
             
             HStack {
                 Image(systemName: key.isSecret ? "key.fill" : "key")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(key.name)
                         .font(.headline)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                     
                     Text(key.email)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                     
                     Text(key.fingerprint)
                         .font(.caption)
                         .fontDesign(.monospaced)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.moaiyTextSecondary.opacity(0.8))
                 }
                 
                 Spacer()
@@ -101,7 +104,7 @@ struct UploadToKeyserverSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("keyserver_label")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
             
             Picker("keyserver_label", selection: $selectedKeyserver) {
                 ForEach(keyservers, id: \.self) { keyserver in
@@ -113,7 +116,7 @@ struct UploadToKeyserverSheet: View {
             
             Text("keyserver_note")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.moaiyTextSecondary.opacity(0.8))
         }
     }
     
@@ -122,16 +125,15 @@ struct UploadToKeyserverSheet: View {
         if let error = errorMessage {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.moaiyError)
                 
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.moaiyTextPrimary)
             }
-            .padding(12)
+            .padding(MoaiyUI.Spacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.red.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .moaiyBannerStyle(tint: Color.moaiyError, cornerRadius: MoaiyUI.Radius.md)
         }
     }
     
@@ -154,6 +156,7 @@ struct UploadToKeyserverSheet: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .tint(Color.moaiyAccentV2)
             .disabled(isUploading)
         }
     }
@@ -162,21 +165,23 @@ struct UploadToKeyserverSheet: View {
         VStack(spacing: 16) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.moaiySuccess)
             
             Text("upload_success_title")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .foregroundStyle(Color.moaiyTextPrimary)
             
             Text("upload_success_message")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
                 .multilineTextAlignment(.center)
             
             Button("done") {
                 onSuccess()
             }
             .buttonStyle(.borderedProminent)
+            .tint(Color.moaiyAccentV2)
         }
     }
     

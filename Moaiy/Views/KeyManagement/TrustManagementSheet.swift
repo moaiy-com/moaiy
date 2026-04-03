@@ -24,15 +24,16 @@ struct TrustManagementSheet: View {
     }
     
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: MoaiyUI.Spacing.xl) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("trust_management_title")
                         .font(.title2)
                         .fontWeight(.semibold)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                     Text(key.email)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
                 
                 Spacer()
@@ -40,7 +41,7 @@ struct TrustManagementSheet: View {
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -67,16 +68,15 @@ struct TrustManagementSheet: View {
                     if selectedTrustLevel == .ultimate && key.trustLevel != .ultimate {
                         HStack(spacing: 12) {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(Color.moaiyWarning)
 
                             Text("trust_ultimate_warning")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.moaiyTextSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        .padding()
-                        .background(Color.orange.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .padding(MoaiyUI.Spacing.md)
+                        .moaiyBannerStyle(tint: Color.moaiyWarning)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -100,11 +100,13 @@ struct TrustManagementSheet: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Color.moaiyAccentV2)
                 .disabled(selectedTrustLevel == key.trustLevel || isUpdating)
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(24)
+        .padding(MoaiyUI.Spacing.xxl)
+        .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 500, idealWidth: 600, maxWidth: 720, minHeight: 560, idealHeight: 680, maxHeight: 860)
         .task {
             await loadTrustDetails()
@@ -150,7 +152,7 @@ struct CurrentTrustCard: View {
     let trustDetails: KeyTrustDetails?
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
             HStack {
                 Image(systemName: trustIcon)
                     .font(.title)
@@ -162,51 +164,54 @@ struct CurrentTrustCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("trust_current_level")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                     Text(key.trustLevel.localizedName)
                         .font(.headline)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                 }
                 
                 Spacer()
             }
             
             if let details = trustDetails {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: MoaiyUI.Spacing.sm) {
                     HStack {
                         Text("trust_signatures")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
                         Spacer()
                         Text("\(details.signatureCount)")
                             .font(.caption)
                             .fontWeight(.semibold)
+                            .foregroundStyle(Color.moaiyTextPrimary)
                     }
 
                     HStack {
                         Text("trust_owner_trust")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
                         Spacer()
                         Text(details.ownerTrust.localizedName)
                             .font(.caption)
                             .fontWeight(.semibold)
+                            .foregroundStyle(Color.moaiyTextPrimary)
                     }
 
                     HStack {
                         Text("trust_calculated_trust")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
                         Spacer()
                         Text(details.calculatedTrust.localizedName)
                             .font(.caption)
                             .fontWeight(.semibold)
+                            .foregroundStyle(Color.moaiyTextPrimary)
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(MoaiyUI.Spacing.md)
+        .moaiyCardStyle()
     }
     
     private var trustIcon: String {
@@ -221,11 +226,11 @@ struct CurrentTrustCard: View {
     
     private var trustColor: Color {
         switch key.trustLevel {
-        case .ultimate: return .green
-        case .full: return .blue
-        case .marginal: return .orange
-        case .none: return .red
-        case .unknown: return .secondary
+        case .ultimate: return Color.moaiySuccess
+        case .full: return Color.moaiyInfo
+        case .marginal: return Color.moaiyWarning
+        case .none: return Color.moaiyError
+        case .unknown: return Color.moaiyTextSecondary
         }
     }
 }
@@ -248,11 +253,11 @@ struct TrustLevelRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(level.localizedName)
                         .font(.headline)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                     
                     Text(level.localizedDescription)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 
@@ -260,15 +265,18 @@ struct TrustLevelRow: View {
                 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.moaiyAccent)
+                        .foregroundStyle(Color.moaiyAccentV2)
                 }
             }
             .padding(12)
-            .background(isSelected ? Color.moaiyAccent.opacity(0.1) : Color.clear)
+            .background(isSelected ? Color.moaiyAccentV2.opacity(0.12) : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? Color.moaiyAccent : Color.secondary.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+                    .stroke(
+                        isSelected ? Color.moaiyAccentV2 : Color.moaiyBorderPrimary.opacity(0.8),
+                        lineWidth: isSelected ? 2 : 1
+                    )
             )
         }
         .buttonStyle(.plain)
@@ -286,11 +294,11 @@ struct TrustLevelRow: View {
     
     private var color: Color {
         switch level {
-        case .ultimate: return .green
-        case .full: return .blue
-        case .marginal: return .orange
-        case .none: return .red
-        case .unknown: return .secondary
+        case .ultimate: return Color.moaiySuccess
+        case .full: return Color.moaiyInfo
+        case .marginal: return Color.moaiyWarning
+        case .none: return Color.moaiyError
+        case .unknown: return Color.moaiyTextSecondary
         }
     }
 }

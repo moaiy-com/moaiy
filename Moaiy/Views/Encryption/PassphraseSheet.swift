@@ -18,13 +18,13 @@ struct PassphraseSheet: View {
     @FocusState private var isFieldFocused: Bool
     
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: MoaiyUI.Spacing.xxl) {
             HStack {
                 Spacer()
                 Button(action: onCancel) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -32,13 +32,14 @@ struct PassphraseSheet: View {
             // Icon
             Image(systemName: "lock.shield")
                 .font(.system(size: 48))
-                .foregroundStyle(Color.moaiyAccent)
+                .foregroundStyle(Color.moaiyAccentV2)
             
             // Title
             VStack(spacing: 8) {
                 Text("passphrase_title")
                     .font(.title2)
                     .fontWeight(.semibold)
+                    .foregroundStyle(Color.moaiyTextPrimary)
                 
                 if let keyName = keyName {
                     Text(
@@ -49,12 +50,12 @@ struct PassphraseSheet: View {
                         )
                     )
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                         .multilineTextAlignment(.center)
                 } else {
                     Text("passphrase_subtitle_default")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                         .multilineTextAlignment(.center)
                 }
             }
@@ -77,18 +78,25 @@ struct PassphraseSheet: View {
             if allowsEmptyPassphrase {
                 Text("wizard_password_optional")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
                     .multilineTextAlignment(.center)
             }
 
             if showError {
-                Text("passphrase_error_empty")
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                HStack(spacing: MoaiyUI.Spacing.sm) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color.moaiyError)
+                    Text("passphrase_error_empty")
+                        .font(.caption)
+                        .foregroundStyle(Color.moaiyTextPrimary)
+                }
+                .padding(.horizontal, MoaiyUI.Spacing.md)
+                .padding(.vertical, MoaiyUI.Spacing.sm)
+                .moaiyBannerStyle(tint: Color.moaiyError)
             }
             
             // Buttons
-            HStack(spacing: 16) {
+            HStack(spacing: MoaiyUI.Spacing.lg) {
                 Button("action_cancel", role: .cancel) {
                     onCancel()
                 }
@@ -103,11 +111,13 @@ struct PassphraseSheet: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Color.moaiyAccentV2)
                 .disabled(!allowsEmptyPassphrase && passphrase.isEmpty)
                 .keyboardShortcut(.return, modifiers: [])
             }
         }
-        .padding(32)
+        .padding(MoaiyUI.Spacing.xxxl)
+        .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 360, idealWidth: 420, maxWidth: 520)
         .onAppear {
             isFieldFocused = true

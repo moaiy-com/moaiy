@@ -35,12 +35,15 @@ struct KeyManagementView: View {
             }
         }
         .navigationTitle("Moaiy")
+        .background(Color.moaiySurfaceBackground.ignoresSafeArea())
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { showingCreateKey = true }) {
                     Label("action_create_key", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: MoaiyUI.Radius.md))
+                .tint(Color.moaiyAccentV2)
                 .keyboardShortcut("n", modifiers: .command)
             }
             ToolbarItem(placement: .automatic) {
@@ -48,6 +51,8 @@ struct KeyManagementView: View {
                     Label("action_refresh", systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: MoaiyUI.Radius.md))
+                .tint(Color.moaiyAccentV2)
                 .keyboardShortcut("r", modifiers: .command)
             }
             ToolbarItem(placement: .automatic) {
@@ -55,6 +60,8 @@ struct KeyManagementView: View {
                     Label("action_import_key", systemImage: "square.and.arrow.down")
                 }
                 .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: MoaiyUI.Radius.md))
+                .tint(Color.moaiyAccentV2)
                 .keyboardShortcut("i", modifiers: .command)
             }
         }
@@ -118,10 +125,11 @@ struct KeyManagementView: View {
         }
         .safeAreaInset(edge: .bottom) {
             Text("Protect what matters with drag and drop.")
-                .font(.footnote)
-                .foregroundStyle(.secondary.opacity(0.75))
+                .font(.custom("ScopeOne-Regular", size: 13))
+                .foregroundStyle(Color.moaiyTextSecondary.opacity(0.85))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
+                .background(Color.moaiySurfaceBackground.opacity(0.9))
         }
     }
 }
@@ -135,15 +143,16 @@ struct EmptyKeysView: View {
         VStack(spacing: 20) {
             Image(systemName: "key.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
             
             Text("empty_keys_title")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .foregroundStyle(Color.moaiyTextPrimary)
             
             Text("empty_keys_description")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 400)
             
@@ -151,9 +160,12 @@ struct EmptyKeysView: View {
                 Label("action_create_first_key", systemImage: "plus.circle.fill")
             }
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.roundedRectangle(radius: MoaiyUI.Radius.md))
+            .tint(Color.moaiyAccentV2)
             .controlSize(.large)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.moaiySurfaceBackground)
     }
 }
 
@@ -169,8 +181,11 @@ struct KeyListView: View {
             .environment(viewModel)
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
         }
         .listStyle(.inset)
+        .scrollContentBackground(.hidden)
+        .background(Color.moaiySurfaceBackground)
         .refreshable {
             await viewModel.refresh()
         }

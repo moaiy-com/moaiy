@@ -17,13 +17,13 @@ struct PasswordInputSheet: View {
     @FocusState private var isPasswordFocused: Bool
     
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: MoaiyUI.Spacing.xxl) {
             HStack {
                 Spacer()
                 Button(action: onCancel) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -33,7 +33,8 @@ struct PasswordInputSheet: View {
             errorView
             buttonsView
         }
-        .padding(24)
+        .padding(MoaiyUI.Spacing.xxl)
+        .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 360, idealWidth: 420, maxWidth: 520)
         .onAppear {
             isPasswordFocused = true
@@ -44,15 +45,16 @@ struct PasswordInputSheet: View {
         VStack(spacing: 8) {
             Image(systemName: "lock.shield")
                 .font(.system(size: 48))
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.moaiyAccentV2)
             
             Text("password_required_title")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .foregroundStyle(Color.moaiyTextPrimary)
             
             Text("password_required_description")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
                 .multilineTextAlignment(.center)
         }
     }
@@ -60,7 +62,7 @@ struct PasswordInputSheet: View {
     private var fileInfoView: some View {
         HStack {
             Image(systemName: "doc.fill")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
             
             Text(fileName)
                 .font(.body)
@@ -68,21 +70,20 @@ struct PasswordInputSheet: View {
                 .truncationMode(.middle)
             
             Image(systemName: "arrow.right")
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.moaiyTextSecondary.opacity(0.75))
             
             Image(systemName: "lock.open.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.moaiySuccess)
         }
-        .padding()
-        .background(Color.secondary.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(MoaiyUI.Spacing.md)
+        .moaiyBannerStyle(tint: Color.moaiyInfo)
     }
     
     private var passwordField: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("password_field_label")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
             
             SecureField("password_field_placeholder", text: $password)
                 .textFieldStyle(.roundedBorder)
@@ -102,12 +103,15 @@ struct PasswordInputSheet: View {
         if showError {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.moaiyWarning)
                 
                 Text("password_empty_error")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.moaiyTextPrimary)
             }
+            .padding(.horizontal, MoaiyUI.Spacing.md)
+            .padding(.vertical, MoaiyUI.Spacing.sm)
+            .moaiyBannerStyle(tint: Color.moaiyWarning)
             .transition(.opacity)
         }
     }
@@ -132,6 +136,7 @@ struct PasswordInputSheet: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .tint(Color.moaiyAccentV2)
             .disabled(password.isEmpty)
             .keyboardShortcut(.return, modifiers: [])
         }
