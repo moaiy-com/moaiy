@@ -129,11 +129,13 @@ struct KeyActionMenu: View {
                 }
                 .disabled(!key.isSecret)
                 Button(action: {
+                    guard key.isSecret else { return }
                     showingSigningSheet = true
                 }) {
                     Label("action_sign_key", systemImage: "signature")
                         .font(.system(size: 14))
                 }
+                .disabled(!key.isSecret)
                 Button(action: {
                     showingTrustSheet = true
                 }) {
