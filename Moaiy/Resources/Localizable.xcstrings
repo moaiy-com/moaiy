@@ -903,6 +903,40 @@
         }
       }
     },
+    "action_sign_detached" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign File (Detached)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件签名（分离式）"
+          }
+        }
+      }
+    },
+    "action_verify_signature" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verify Signature"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证签名"
+          }
+        }
+      }
+    },
     "action_swap" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5173,6 +5207,40 @@
         }
       }
     },
+    "operation_success_verify" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verified successfully"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证成功"
+          }
+        }
+      }
+    },
+    "operation_success_sign_detached" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detached signature created successfully"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分离式签名生成成功"
+          }
+        }
+      }
+    },
     "operation_type_backup" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7501,6 +7569,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "上传到密钥服务器"
+          }
+        }
+      }
+    },
+    "verify_file_picker_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select signed files or signature files to verify"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择要验证的已签名文件或签名文件"
+          }
+        }
+      }
+    },
+    "sign_detached_file_picker_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select files to create detached signatures"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择要生成分离式签名的文件"
+          }
+        }
+      }
+    },
+    "verify_signature_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signature verification failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "签名验证失败"
           }
         }
       }

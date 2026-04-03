@@ -1143,6 +1143,59 @@ final class GPGService {
         return resolvedDestinationURL
     }
 
+    /// Create a detached signature for a file.
+    /// - Parameters:
+    ///   - sourceURL: Source file URL
+    ///   - destinationURL: Destination signature URL
+    ///   - keyID: Signing key fingerprint or key ID
+    ///   - passphrase: Passphrase for the signing key
+    /// - Returns: Final signature URL
+    func signFileDetached(
+        sourceURL: URL,
+        destinationURL: URL,
+        keyID: String,
+        passphrase: String
+    ) async throws -> URL {
+        try await ensureGPGAgentRunningIfNeeded()
+
+        let fileManager = FileManager.default
+        let stagingDirectory = try secureOperationDirectory(prefix: "file-sign")
+        let stagedSourceURL = stagingDirectory.appendingPathComponent("input")
+        let stagedOutputURL = stagingDirectory.appendingPathComponent("output.sig")
+        defer {
+            try? fileManager.removeItem(at: stagingDirectory)
+        }
+
+        try fileManager.copyItem(at: sourceURL, to: stagedSourceURL)
+
+        let result = try await executeGPG(
+            arguments: [
+                "--detach-sign",
+                "--batch",
+                "--yes",
+                "--no-tty",
+                "--pinentry-mode", "loopback",
+                "--passphrase-fd", "0",
+                "--local-user", keyID,
+                "--output", stagedOutputURL.path,
+                stagedSourceURL.path
+            ],
+            input: passphrase + "\n"
+        )
+
+        if result.exitCode != 0 {
+            throw GPGError.executionFailed(result.stderr ?? "Detached signing failed")
+        }
+
+        guard fileManager.fileExists(atPath: stagedOutputURL.path) else {
+            throw GPGError.executionFailed("No detached signature generated")
+        }
+
+        let resolvedDestinationURL = makeNonConflictingDestinationURL(for: destinationURL)
+        try fileManager.copyItem(at: stagedOutputURL, to: resolvedDestinationURL)
+        return resolvedDestinationURL
+    }
+
     /// Verify if a file is a valid GPG file
     /// Uses --list-packets for fast validation without processing
     /// - Parameter fileURL: File URL to verify
@@ -1226,6 +1279,46 @@ final class GPGService {
         }
         
         return parseVerificationResult(output)
+    }
+
+    /// Verify a signed file or signature file.
+    /// - Parameter fileURL: Signed file URL
+    /// - Returns: Verification result
+    func verifySignatureFile(at fileURL: URL) async throws -> VerificationResult {
+        let fileManager = FileManager.default
+        let stagingDirectory = try secureOperationDirectory(prefix: "verify-signature")
+        let stagedInputURL = stagingDirectory.appendingPathComponent("input")
+        defer {
+            try? fileManager.removeItem(at: stagingDirectory)
+        }
+
+        let accessGranted = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if accessGranted {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        try fileManager.copyItem(at: fileURL, to: stagedInputURL)
+
+        let result = try await executeGPG(
+            arguments: ["--verify", "--status-fd", "1", stagedInputURL.path]
+        )
+
+        let statusOutput = [result.stdout, result.stderr]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+        let verificationResult = parseVerificationResult(statusOutput)
+
+        guard result.exitCode == 0, verificationResult.isValid else {
+            let stderr = result.stderr?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let stderr, !stderr.isEmpty {
+                throw GPGError.executionFailed(stderr)
+            }
+            throw GPGError.executionFailed(String(localized: "verify_signature_failed"))
+        }
+
+        return verificationResult
     }
     
     // MARK: - Trust Management

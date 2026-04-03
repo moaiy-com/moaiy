@@ -23,6 +23,10 @@ struct KeyActionFilePlanner {
         return inputURL.deletingPathExtension()
     }
 
+    static func detachedSignatureOutputURL(for inputURL: URL) -> URL {
+        inputURL.appendingPathExtension("sig")
+    }
+
     static func nonConflictingURL(for desiredURL: URL, fileManager: FileManager = .default) -> URL {
         guard fileManager.fileExists(atPath: desiredURL.path) else {
             return desiredURL
@@ -101,6 +105,9 @@ struct KeyActionMenu: View {
     var onDelete: (() -> Void)?
     @Environment(KeyManagementViewModel.self) private var viewModel
 
+    // Reserved feature: key certification/signing is kept in code but hidden from menu for now.
+    private let isKeySigningMenuEnabled = false
+
     @State private var showingUploadSheet = false
     @State private var showingBackupSheet = false
     @State private var showingTrustSheet = false
@@ -113,6 +120,7 @@ struct KeyActionMenu: View {
 
     private enum PassphraseAction {
         case decrypt([URL])
+        case signDetached([URL])
         case exportSecret(URL)
     }
 
@@ -128,14 +136,25 @@ struct KeyActionMenu: View {
                         .font(.system(size: 14))
                 }
                 .disabled(!key.isSecret)
-                Button(action: {
-                    guard key.isSecret else { return }
-                    showingSigningSheet = true
-                }) {
-                    Label("action_sign_key", systemImage: "signature")
+                Button(action: signDetachedFromPicker) {
+                    Label("action_sign_detached", systemImage: "signature")
                         .font(.system(size: 14))
                 }
                 .disabled(!key.isSecret)
+                if isKeySigningMenuEnabled {
+                    Button(action: {
+                        guard key.isSecret else { return }
+                        showingSigningSheet = true
+                    }) {
+                        Label("action_sign_key", systemImage: "signature")
+                            .font(.system(size: 14))
+                    }
+                    .disabled(!key.isSecret)
+                }
+                Button(action: verifyFromPicker) {
+                    Label("action_verify_signature", systemImage: "checkmark.seal.fill")
+                        .font(.system(size: 14))
+                }
                 Button(action: {
                     showingTrustSheet = true
                 }) {
@@ -288,6 +307,38 @@ struct KeyActionMenu: View {
         pendingPassphraseAction = .decrypt(selectedURLs)
     }
 
+    private func signDetachedFromPicker() {
+        guard key.isSecret else { return }
+
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.message = String(localized: "sign_detached_file_picker_message")
+
+        guard panel.runModal() == .OK else { return }
+        let selectedURLs = panel.urls
+        guard !selectedURLs.isEmpty else { return }
+
+        pendingPassphraseAction = .signDetached(selectedURLs)
+    }
+
+    private func verifyFromPicker() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.message = String(localized: "verify_file_picker_message")
+
+        guard panel.runModal() == .OK else { return }
+        let selectedURLs = panel.urls
+        guard !selectedURLs.isEmpty else { return }
+
+        Task {
+            await verifyFiles(selectedURLs)
+        }
+    }
+
     private func exportPublicKey() {
         guard let outputURL = presentExportPanel(defaultFileName: defaultPublicFileName) else { return }
 
@@ -307,6 +358,8 @@ struct KeyActionMenu: View {
         switch action {
         case .decrypt(let urls):
             await decryptFiles(urls, passphrase: passphrase)
+        case .signDetached(let urls):
+            await signFilesDetached(urls, passphrase: passphrase)
         case .exportSecret(let outputURL):
             await exportPrivateKey(to: outputURL, passphrase: passphrase)
         }
@@ -408,6 +461,83 @@ struct KeyActionMenu: View {
             successCount: decryptedFileCount,
             failureCount: failedFileCount,
             successMessage: String(localized: "operation_success_decrypt"),
+            firstError: firstError
+        )
+    }
+
+    @MainActor
+    private func signFilesDetached(_ urls: [URL], passphrase: String) async {
+        var signedFileCount = 0
+        var failedFileCount = 0
+        var firstError: Error?
+
+        for url in urls {
+            do {
+                let defaultOutputURL = KeyActionFilePlanner.detachedSignatureOutputURL(for: url)
+                guard let outputURL = presentFileOperationSavePanel(
+                    defaultFileName: defaultOutputURL.lastPathComponent,
+                    preferredDirectory: url.deletingLastPathComponent()
+                ) else {
+                    continue
+                }
+                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: outputURL)
+
+                let hasSourceAccess = url.startAccessingSecurityScopedResource()
+                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
+                defer {
+                    if hasSourceAccess {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                    if hasOutputAccess {
+                        plannedOutputURL.stopAccessingSecurityScopedResource()
+                    }
+                }
+
+                _ = try await GPGService.shared.signFileDetached(
+                    sourceURL: url,
+                    destinationURL: plannedOutputURL,
+                    keyID: key.fingerprint,
+                    passphrase: passphrase
+                )
+                signedFileCount += 1
+            } catch {
+                failedFileCount += 1
+                if firstError == nil {
+                    firstError = error
+                }
+            }
+        }
+
+        showBatchOperationResult(
+            successCount: signedFileCount,
+            failureCount: failedFileCount,
+            successMessage: String(localized: "operation_success_sign_detached"),
+            firstError: firstError
+        )
+    }
+
+    @MainActor
+    private func verifyFiles(_ urls: [URL]) async {
+        var verifiedFileCount = 0
+        var failedFileCount = 0
+        var firstError: Error?
+
+        for url in urls {
+            do {
+                _ = try await GPGService.shared.verifySignatureFile(at: url)
+                verifiedFileCount += 1
+            } catch {
+                failedFileCount += 1
+                if firstError == nil {
+                    firstError = error
+                }
+            }
+        }
+
+        showBatchOperationResult(
+            successCount: verifiedFileCount,
+            failureCount: failedFileCount,
+            successMessage: String(localized: "operation_success_verify"),
             firstError: firstError
         )
     }
