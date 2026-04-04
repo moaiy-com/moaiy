@@ -134,12 +134,20 @@ struct KeyManagementView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            Text("Protect what matters with drag and drop.")
-                .font(.custom("ScopeOne-Regular", size: 13))
-                .foregroundStyle(Color.moaiyTextSecondary.opacity(0.85))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .background(Color.moaiySurfaceBackground.opacity(0.9))
+            VStack(spacing: 6) {
+                Image("BrandLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 72.8)
+                    .accessibilityHidden(true)
+
+                Text("Protect what matters with drag and drop.")
+                    .font(.custom("ScopeOne-Regular", size: 13))
+                    .foregroundStyle(Color(red: 196.0 / 255.0, green: 196.0 / 255.0, blue: 196.0 / 255.0))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(Color.moaiySurfaceBackground.opacity(0.9))
         }
     }
 }
