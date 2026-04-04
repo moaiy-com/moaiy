@@ -52,6 +52,31 @@
 - 加密软件出口合规
 - 商业模式合规方案
 
+### [v0.5.0 Minimal Release Checklist](./v0.5.0-minimal-release-checklist.md) ⭐ **重要** (English)
+- AI-accelerated D1-D6 release execution plan
+- Go/No-Go quality gates
+- Day-by-day checklist and execution log
+
+### [v0.5.0 Core Flow Validation](./v0.5.0-core-flow-validation.md) (English)
+- Release-blocking test flows for key management, encryption, and backup/restore
+- Explicit release exit criteria
+
+### [v0.5.0 Release Blockers](./v0.5.0-release-blockers.md) (English)
+- Tracks open/closed release-blocking issues during D1-D6 execution
+
+### [v0.5.0 Security Audit](./v0.5.0-security-audit.md) (English)
+- Lightweight D3 audit results and applied hardening fixes
+
+### [v0.5.0 D4 Regression Matrix](./v0.5.0-d4-regression-matrix.md) (English)
+- Compatibility and manual-regression progress tracker for D4
+
+### [v0.5.0 D4 Manual Regression Script](./v0.5.0-d4-manual-regression-script.md) (English)
+- Step-by-step UI execution sheet (`MR-01` to `MR-11`) for release-blocking manual validation
+
+### [v0.5.0 External Validation Pack](./v0.5.0-external-validation-pack.md) (English)
+- One-command smoke validation script usage for real Intel and macOS 12.x environments
+- Manual D4 closure template and report-back format
+
 ### [极致易用性设计](./extreme-usability-design.md)
 - 零配置安装体验
 - 智能密钥管理
@@ -64,4 +89,4 @@
 
 ---
 
-*最后更新: 2026-03-08*
+*最后更新: 2026-04-04*

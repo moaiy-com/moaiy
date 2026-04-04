@@ -34,7 +34,7 @@ struct KeyManagementView: View {
                 KeyListView(viewModel: viewModel, keyToDelete: $keyToDelete)
             }
         }
-        .navigationTitle("Moaiy")
+        .navigationTitle("app_name_moaiy")
         .background(Color.moaiySurfaceBackground.ignoresSafeArea())
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -141,7 +141,7 @@ struct KeyManagementView: View {
                     .frame(height: 72.8)
                     .accessibilityHidden(true)
 
-                Text("Protect what matters with drag and drop.")
+                Text("brand_tagline_drag_and_drop")
                     .font(.custom("ScopeOne-Regular", size: 13))
                     .foregroundStyle(Color(red: 196.0 / 255.0, green: 196.0 / 255.0, blue: 196.0 / 255.0))
             }

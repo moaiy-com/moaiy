@@ -172,6 +172,23 @@
         }
       }
     },
+    "app_name_moaiy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moaiy"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moaiy"
+          }
+        }
+      }
+    },
     "action_add" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5683,8 +5700,22 @@
         }
       }
     },
-    "Protect what matters with drag and drop." : {
-
+    "brand_tagline_drag_and_drop" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Protect what matters with drag and drop."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过拖放守护重要内容。"
+          }
+        }
+      }
     },
     "recipient_keys_title" : {
       "extractionState" : "manual",

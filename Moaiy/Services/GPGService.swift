@@ -691,8 +691,18 @@ final class GPGService {
     /// - Parameter fileURL: URL of the key file
     /// - Returns: Import results
     func importKey(from fileURL: URL) async throws -> KeyImportResult {
+        try await ensureGPGAgentRunningIfNeeded()
+
         let result = try await executeGPG(
-            arguments: ["--import", "--status-fd", "1", fileURL.path]
+            arguments: [
+                "--batch",
+                "--yes",
+                "--pinentry-mode", "loopback",
+                "--passphrase", "",
+                "--import",
+                "--status-fd", "1",
+                fileURL.path
+            ]
         )
         try ensureSuccess(result, as: GPGError.importFailed)
         
@@ -1712,8 +1722,18 @@ final class GPGService {
         let armorFileURL = tempRoot.appendingPathComponent(fileName)
         try data.write(to: armorFileURL, options: .atomic)
 
+        try await ensureGPGAgentRunningIfNeeded()
+
         let result = try await executeGPG(
-            arguments: ["--import", "--status-fd", "1", armorFileURL.path]
+            arguments: [
+                "--batch",
+                "--yes",
+                "--pinentry-mode", "loopback",
+                "--passphrase", "",
+                "--import",
+                "--status-fd", "1",
+                armorFileURL.path
+            ]
         )
         try ensureSuccess(result, as: GPGError.importFailed)
 
@@ -2019,6 +2039,14 @@ final class GPGService {
         guard let timestamp = Double(string), timestamp > 0 else { return nil }
         return Date(timeIntervalSince1970: timestamp)
     }
+
+    /// Remove control/newline characters before embedding user input in GPG batch payloads.
+    private func sanitizeBatchField(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
     
     /// Build key generation parameters
     private func buildKeyGenerationParams(
@@ -2027,6 +2055,9 @@ final class GPGService {
         keyType: KeyType,
         passphrase: String?
     ) -> String {
+        let sanitizedName = sanitizeBatchField(name)
+        let sanitizedEmail = sanitizeBatchField(email)
+
         // GPG batch mode handles spaces in Name-Real correctly when passed via stdin
         // No need to escape the name
         var params: String
@@ -2042,8 +2073,8 @@ final class GPGService {
             Subkey-Type: RSA
             Subkey-Length: \(keyType.subkeyLength)
             Subkey-Usage: encrypt
-            Name-Real: \(name)
-            Name-Email: \(email)
+            Name-Real: \(sanitizedName)
+            Name-Email: \(sanitizedEmail)
             Expire-Date: 0
 
             """
@@ -2058,8 +2089,8 @@ final class GPGService {
             Subkey-Type: ecdh
             Subkey-Curve: cv25519
             Subkey-Usage: encrypt
-            Name-Real: \(name)
-            Name-Email: \(email)
+            Name-Real: \(sanitizedName)
+            Name-Email: \(sanitizedEmail)
             Expire-Date: 0
 
             """
@@ -2091,9 +2122,15 @@ final class GPGService {
             }
             if line.contains("IMPORT_RES") {
                 let parts = line.components(separatedBy: " ")
-                if parts.count >= 3 {
-                    imported = Int(parts[1]) ?? 0
-                    unchanged = Int(parts[2]) ?? 0
+                if parts.count >= 7 {
+                    // GnuPG status format:
+                    // [GNUPG:] IMPORT_RES <count> <no_user_id> <imported> <imported_rsa> <unchanged> ...
+                    imported = Int(parts[4]) ?? 0
+                    unchanged = Int(parts[6]) ?? 0
+                } else if parts.count >= 4 {
+                    // Fallback for shortened/stubbed test-like output.
+                    imported = Int(parts[2]) ?? 0
+                    unchanged = Int(parts[3]) ?? 0
                 }
             }
         }

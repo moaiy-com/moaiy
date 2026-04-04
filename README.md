@@ -106,6 +106,10 @@ moaiy/
 - [Technical Architecture](./doc/technical-architecture.md)
 - [Xcode Integration Guide](./doc/xcode-integration-guide.md)
 - [Bundled GPG Summary](./doc/bundled-gpg-summary.md)
+- [v0.5.0 Minimal Release Checklist](./doc/v0.5.0-minimal-release-checklist.md)
+- [v0.5.0 Core Flow Validation](./doc/v0.5.0-core-flow-validation.md)
+- [v0.5.0 Release Blockers](./doc/v0.5.0-release-blockers.md)
+- [Changelog](./CHANGELOG.md)
 
 ## Localization
 

@@ -134,7 +134,7 @@ final class KeyManagementViewModel {
     /// Load all keys from GPG with auto-retry
     func loadKeys() async {
         logger.info("Loading keys...")
-        logger.info("GPGService.isReady = \(self.gpgService.isReady)")
+        logger.info("GPGService ready state: \(self.gpgService.isReady)")
 
         isLoading = true
         errorMessage = nil
@@ -172,9 +172,6 @@ final class KeyManagementViewModel {
 
             keys = allKeys.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
             logger.info("Total keys after merge: \(self.keys.count)")
-            for key in keys {
-                logger.info("Key: \(key.name) <\(key.email)> trust=\(key.trustLevel.displayName)")
-            }
             errorMessage = nil
             retryCount = 0 // Reset retry count on success
 
@@ -282,7 +279,7 @@ final class KeyManagementViewModel {
     
     /// Export a public key
     func exportPublicKey(_ key: GPGKey) async throws -> Data {
-        logger.info("Exporting public key for: \(key.fingerprint)")
+        logger.info("Exporting public key")
 
         do {
             let data = try await gpgService.exportPublicKey(keyID: key.fingerprint, armor: true)
@@ -300,7 +297,7 @@ final class KeyManagementViewModel {
             throw GPGError.keyNotFound("Secret key for \(key.fingerprint)")
         }
 
-        logger.info("Exporting secret key for: \(key.fingerprint)")
+        logger.info("Exporting secret key")
 
         do {
             let data = try await gpgService.exportSecretKey(keyID: key.fingerprint, passphrase: passphrase, armor: true)
@@ -353,7 +350,7 @@ final class KeyManagementViewModel {
         do {
             return try await gpgService.checkTrust(keyID: key.fingerprint)
         } catch {
-            print("Failed to check trust: \(error)")
+            logger.error("Failed to check trust: \(error.localizedDescription)")
             return .unknown
         }
     }

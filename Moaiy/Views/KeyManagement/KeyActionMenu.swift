@@ -70,6 +70,24 @@ enum KeyActionAlertDecision: Equatable {
     case error(String)
 }
 
+struct KeyActionMenuAvailability {
+    let hasSecretKey: Bool
+    let isKeySigningMenuEnabled: Bool
+
+    init(key: GPGKey, isKeySigningMenuEnabled: Bool) {
+        self.hasSecretKey = key.isSecret
+        self.isKeySigningMenuEnabled = isKeySigningMenuEnabled
+    }
+
+    var canDecrypt: Bool { hasSecretKey }
+    var canSignDetached: Bool { hasSecretKey }
+    var canEdit: Bool { hasSecretKey }
+    var canSignKey: Bool { hasSecretKey && isKeySigningMenuEnabled }
+    var showsSignKey: Bool { isKeySigningMenuEnabled }
+    var showsExportPrivateKey: Bool { hasSecretKey }
+    var showsBackupRestore: Bool { true }
+}
+
 struct KeyActionBatchResultPlanner {
     static func makeAlertDecision(
         successCount: Int,
@@ -107,9 +125,6 @@ struct KeyActionMenu: View {
 
     // Reserved feature: key certification/signing is kept in code but hidden from menu for now.
     private let isKeySigningMenuEnabled = false
-    // Reserved feature: backup & restore flow is kept in code but hidden from the menu for now.
-    private let isBackupRestoreMenuEnabled = false
-
     @State private var showingUploadSheet = false
     @State private var showingBackupSheet = false
     @State private var showingTrustSheet = false
@@ -119,6 +134,10 @@ struct KeyActionMenu: View {
     @State private var alertTitle: LocalizedStringKey = "operation_success"
     @State private var alertMessage = ""
     @State private var showingAlert = false
+
+    private var availability: KeyActionMenuAvailability {
+        KeyActionMenuAvailability(key: key, isKeySigningMenuEnabled: isKeySigningMenuEnabled)
+    }
 
     private enum PassphraseAction {
         case decrypt([URL])
@@ -137,21 +156,21 @@ struct KeyActionMenu: View {
                     Label("action_decrypt", systemImage: "lock.open.fill")
                         .font(.system(size: 14))
                 }
-                .disabled(!key.isSecret)
+                .disabled(!availability.canDecrypt)
                 Button(action: signDetachedFromPicker) {
                     Label("action_sign_detached", systemImage: "signature")
                         .font(.system(size: 14))
                 }
-                .disabled(!key.isSecret)
-                if isKeySigningMenuEnabled {
+                .disabled(!availability.canSignDetached)
+                if availability.showsSignKey {
                     Button(action: {
-                        guard key.isSecret else { return }
+                        guard availability.canSignKey else { return }
                         showingSigningSheet = true
                     }) {
                         Label("action_sign_key", systemImage: "signature")
                             .font(.system(size: 14))
                     }
-                    .disabled(!key.isSecret)
+                    .disabled(!availability.canSignKey)
                 }
                 Button(action: verifyFromPicker) {
                     Label("action_verify_signature", systemImage: "checkmark.seal.fill")
@@ -164,13 +183,13 @@ struct KeyActionMenu: View {
                         .font(.system(size: 14))
                 }
                 Button(action: {
-                    guard key.isSecret else { return }
+                    guard availability.canEdit else { return }
                     showingEditSheet = true
                 }) {
                     Label("action_edit", systemImage: "pencil")
                         .font(.system(size: 14))
                 }
-                .disabled(!key.isSecret)
+                .disabled(!availability.canEdit)
             }
 
             Divider()
@@ -182,7 +201,7 @@ struct KeyActionMenu: View {
                     Label("upload_to_keyserver_title", systemImage: "cloud.fill")
                         .font(.system(size: 14))
                 }
-                if isBackupRestoreMenuEnabled {
+                if availability.showsBackupRestore {
                     Button(action: {
                         showingBackupSheet = true
                     }) {
@@ -199,7 +218,7 @@ struct KeyActionMenu: View {
                     Label("action_export_public_key", systemImage: "square.and.arrow.up")
                         .font(.system(size: 14))
                 }
-                if key.isSecret {
+                if availability.showsExportPrivateKey {
                     Button(action: exportPrivateKey) {
                         Label("action_export_private_key", systemImage: "key.fill")
                             .font(.system(size: 14))
