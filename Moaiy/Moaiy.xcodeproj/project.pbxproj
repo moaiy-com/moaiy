@@ -12,8 +12,6 @@
 		0B0F6B672F753E5C00668924 /* Tutorial.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0F6B662F753E5C00668924 /* Tutorial.swift */; };
 		0B2A177D2F74F09F003D3CB1 /* gpg.bundle in Resources */ = {isa = PBXBuildFile; fileRef = 0B2A177C2F74F09F003D3CB1 /* gpg.bundle */; };
 		0B77CCFA2F753FEF00C15184 /* HowToView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B77CCF82F753FEF00C15184 /* HowToView.swift */; };
-		0BBB2BC42F7E54C800282FA8 /* moaiy_icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 0BBB2BC32F7E54C800282FA8 /* moaiy_icon.icon */; };
-		0BBB2BC52F7E54C800282FA8 /* moaiy_icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 0BBB2BC32F7E54C800282FA8 /* moaiy_icon.icon */; };
 		0BE22B582F6FC4CC009DDCB2 /* KeyEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BE22B552F6FC4CC009DDCB2 /* KeyEditSheet.swift */; };
 		0BE22B592F6FC4CC009DDCB2 /* KeySigningSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BE22B562F6FC4CC009DDCB2 /* KeySigningSheet.swift */; };
 		0BE22B5A2F6FC4CC009DDCB2 /* TrustManagementSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BE22B572F6FC4CC009DDCB2 /* TrustManagementSheet.swift */; };
@@ -67,7 +65,6 @@
 		0B2A177C2F74F09F003D3CB1 /* gpg.bundle */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.plug-in"; path = gpg.bundle; sourceTree = "<group>"; };
 		0B77CCF82F753FEF00C15184 /* HowToView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HowToView.swift; sourceTree = "<group>"; };
 		0B96E14D2F71021E009629C1 /* MoaiyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MoaiyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		0BBB2BC32F7E54C800282FA8 /* moaiy_icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = moaiy_icon.icon; sourceTree = "<group>"; };
 		0BE22B552F6FC4CC009DDCB2 /* KeyEditSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyEditSheet.swift; sourceTree = "<group>"; };
 		0BE22B562F6FC4CC009DDCB2 /* KeySigningSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeySigningSheet.swift; sourceTree = "<group>"; };
 		0BE22B572F6FC4CC009DDCB2 /* TrustManagementSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustManagementSheet.swift; sourceTree = "<group>"; };
@@ -144,7 +141,6 @@
 		D00000000001 = {
 			isa = PBXGroup;
 			children = (
-				0BBB2BC32F7E54C800282FA8 /* moaiy_icon.icon */,
 				0BEF4DF32F6D8D630053CE56 /* ViewModels */,
 				D00000000002 /* . */,
 				0B96E14E2F71021E009629C1 /* MoaiyTests */,
@@ -456,7 +452,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0BBB2BC42F7E54C800282FA8 /* moaiy_icon.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -466,7 +461,6 @@
 			files = (
 				B0000000000E /* Assets.xcassets in Resources */,
 				B0000000000F /* Localizable.xcstrings in Resources */,
-				0BBB2BC52F7E54C800282FA8 /* moaiy_icon.icon in Resources */,
 				B00000000010 /* PrivacyInfo.xcprivacy in Resources */,
 				0B2A177D2F74F09F003D3CB1 /* gpg.bundle in Resources */,
 				B00000000014 /* ScopeOne-Regular.ttf in Resources */,
