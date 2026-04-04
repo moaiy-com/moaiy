@@ -21,7 +21,11 @@ class ExpirationReminderService {
         set {
             UserDefaults.standard.set(newValue, forKey: "expirationReminderEnabled")
             if newValue {
-                Task { await scheduleReminders() }
+                Task {
+                    let authorized = await ensureNotificationPermissionIfNeeded()
+                    guard authorized else { return }
+                    await scheduleReminders()
+                }
             } else {
                 Task { await cancelAllReminders() }
             }
@@ -56,7 +60,6 @@ class ExpirationReminderService {
 
         Task {
             await checkExpiredKeys()
-            await requestNotificationPermission()
         }
     }
 
@@ -158,7 +161,7 @@ class ExpirationReminderService {
 
     // MARK: - Private Methods
 
-    private func requestNotificationPermission() async {
+    private func requestNotificationPermission() async -> Bool {
         do {
             let options: UNAuthorizationOptions = [.alert, .sound, .badge]
             let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: options)
@@ -168,8 +171,25 @@ class ExpirationReminderService {
             } else {
                 logger.warning("Notification permission denied")
             }
+            return granted
         } catch {
             logger.error("Failed to request notification permission: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func ensureNotificationPermissionIfNeeded() async -> Bool {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional:
+            return true
+        case .notDetermined:
+            return await requestNotificationPermission()
+        case .denied:
+            logger.warning("Notification permission denied")
+            return false
+        @unknown default:
+            return false
         }
     }
 

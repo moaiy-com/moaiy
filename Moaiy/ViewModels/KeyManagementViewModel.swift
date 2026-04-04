@@ -7,7 +7,6 @@
 
 import Foundation
 import os.log
-import AppKit
 
 @MainActor
 @Observable
@@ -20,8 +19,8 @@ final class KeyManagementViewModel {
     var keys: [GPGKey] = []
     var isLoading = false
     var errorMessage: String?
+    var errorContext: UserFacingErrorContext = .general
     var searchText = ""
-    var showSystemKeyringMigrationPrompt = false
     var isSystemKeyringMigrationRunning = false
 
     // Filter options
@@ -38,7 +37,6 @@ final class KeyManagementViewModel {
     private var retryCount = 0
     private let maxRetries = Constants.GPG.maxRetries
     private var retryTask: Task<Void, Never>?
-    private let migrationHandledKey = Constants.StorageKeys.systemKeyringMigrationHandled
 
     // Expiration reminder service
     let expirationReminder = ExpirationReminderService()
@@ -122,12 +120,12 @@ final class KeyManagementViewModel {
 
             guard gpgService.isReady else {
                 logger.error("GPGService readiness timed out")
+                errorContext = .general
                 errorMessage = String(localized: "error_gpg_not_found")
                 return
             }
 
             await loadKeys()
-            await evaluateSystemKeyringMigrationPromptIfNeeded()
         }
     }
     
@@ -136,10 +134,11 @@ final class KeyManagementViewModel {
     /// Load all keys from GPG with auto-retry
     func loadKeys() async {
         logger.info("Loading keys...")
-        logger.info("GPGService.isReady = \(self.gpgService.isReady)")
+        logger.info("GPGService ready state: \(self.gpgService.isReady)")
 
         isLoading = true
         errorMessage = nil
+        errorContext = .general
 
         do {
             // Load both public and secret keys
@@ -173,9 +172,6 @@ final class KeyManagementViewModel {
 
             keys = allKeys.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
             logger.info("Total keys after merge: \(self.keys.count)")
-            for key in keys {
-                logger.info("Key: \(key.name) <\(key.email)> trust=\(key.trustLevel.displayName)")
-            }
             errorMessage = nil
             retryCount = 0 // Reset retry count on success
 
@@ -183,7 +179,7 @@ final class KeyManagementViewModel {
             expirationReminder.updateKeys(keys)
             await expirationReminder.scheduleReminders()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .keyList)
             logger.error("Failed to load keys: \(error.localizedDescription)")
 
             // Auto-retry with exponential backoff
@@ -224,7 +220,7 @@ final class KeyManagementViewModel {
             await loadKeys()
             return fingerprint
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .general)
             isLoading = false
             throw error
         }
@@ -255,7 +251,7 @@ final class KeyManagementViewModel {
             await loadKeys()
             return result
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .importKey)
             isLoading = false
             throw error
         }
@@ -275,7 +271,7 @@ final class KeyManagementViewModel {
             await loadKeys()
             return result
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .importKey)
             isLoading = false
             throw error
         }
@@ -283,7 +279,7 @@ final class KeyManagementViewModel {
     
     /// Export a public key
     func exportPublicKey(_ key: GPGKey) async throws -> Data {
-        logger.info("Exporting public key for: \(key.fingerprint)")
+        logger.info("Exporting public key")
 
         do {
             let data = try await gpgService.exportPublicKey(keyID: key.fingerprint, armor: true)
@@ -301,7 +297,7 @@ final class KeyManagementViewModel {
             throw GPGError.keyNotFound("Secret key for \(key.fingerprint)")
         }
 
-        logger.info("Exporting secret key for: \(key.fingerprint)")
+        logger.info("Exporting secret key")
 
         do {
             let data = try await gpgService.exportSecretKey(keyID: key.fingerprint, passphrase: passphrase, armor: true)
@@ -341,7 +337,7 @@ final class KeyManagementViewModel {
             }
             await loadKeys()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .keyEdit)
             isLoading = false
             throw error
         }
@@ -354,7 +350,7 @@ final class KeyManagementViewModel {
         do {
             return try await gpgService.checkTrust(keyID: key.fingerprint)
         } catch {
-            print("Failed to check trust: \(error)")
+            logger.error("Failed to check trust: \(error.localizedDescription)")
             return .unknown
         }
     }
@@ -368,7 +364,7 @@ final class KeyManagementViewModel {
             try await gpgService.setTrust(keyID: key.fingerprint, trustLevel: trustLevel)
             await loadKeys()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .trust)
             isLoading = false
             throw error
         }
@@ -398,7 +394,7 @@ final class KeyManagementViewModel {
             )
             await loadKeys()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .sign)
             isLoading = false
             throw error
         }
@@ -413,7 +409,7 @@ final class KeyManagementViewModel {
             try await gpgService.updateTrustDB()
             await loadKeys()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .trust)
             isLoading = false
             throw error
         }
@@ -434,7 +430,7 @@ final class KeyManagementViewModel {
             )
             await loadKeys()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .keyEdit)
             isLoading = false
             throw error
         }
@@ -465,7 +461,7 @@ final class KeyManagementViewModel {
             )
             await loadKeys()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .keyEdit)
             isLoading = false
             throw error
         }
@@ -498,7 +494,7 @@ final class KeyManagementViewModel {
             )
             await loadKeys()
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .keyEdit)
             isLoading = false
             throw error
         }
@@ -508,6 +504,7 @@ final class KeyManagementViewModel {
 
     func clearError() {
         errorMessage = nil
+        errorContext = .general
         retryCount = 0
     }
 
@@ -516,31 +513,19 @@ final class KeyManagementViewModel {
         await loadKeys()
     }
 
-    func dismissSystemKeyringMigrationPrompt() {
-        UserDefaults.standard.set(true, forKey: migrationHandledKey)
-        showSystemKeyringMigrationPrompt = false
-    }
-
-    func migrateFromSystemKeyring() async {
-        guard !isSystemKeyringMigrationRunning else { return }
-
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.directoryURL = gpgService.systemGPGHomeURL.deletingLastPathComponent()
-        panel.message = String(localized: "migration_keyring_picker_message")
-        panel.prompt = String(localized: "action_import_key")
-
-        if panel.runModal() != .OK {
-            return
+    func migrateKeysFromExternalKeyring(at sourceURL: URL) async throws -> KeyMigrationResult {
+        guard !isSystemKeyringMigrationRunning else {
+            throw GPGError.operationCancelled
         }
-        guard let sourceURL = panel.url else { return }
 
         isSystemKeyringMigrationRunning = true
         errorMessage = nil
 
         let hasSecurityScope = sourceURL.startAccessingSecurityScopedResource()
+        guard hasSecurityScope || FileManager.default.isReadableFile(atPath: sourceURL.path) else {
+            isSystemKeyringMigrationRunning = false
+            throw GPGError.fileAccessDenied(sourceURL.path)
+        }
         defer {
             if hasSecurityScope {
                 sourceURL.stopAccessingSecurityScopedResource()
@@ -548,15 +533,15 @@ final class KeyManagementViewModel {
         }
 
         do {
-            _ = try await gpgService.migrateKeys(fromExternalGPGHome: sourceURL)
-            UserDefaults.standard.set(true, forKey: migrationHandledKey)
-            showSystemKeyringMigrationPrompt = false
+            let result = try await gpgService.migrateKeys(fromExternalGPGHome: sourceURL)
             await loadKeys()
+            isSystemKeyringMigrationRunning = false
+            return result
         } catch {
-            errorMessage = error.localizedDescription
+            setError(error, context: .importKey)
+            isSystemKeyringMigrationRunning = false
+            throw error
         }
-
-        isSystemKeyringMigrationRunning = false
     }
 
     // MARK: - Search History
@@ -582,6 +567,11 @@ final class KeyManagementViewModel {
         searchHistory = []
     }
 
+    private func setError(_ error: Error, context: UserFacingErrorContext) {
+        errorContext = context
+        errorMessage = UserFacingErrorMapper.message(for: error, context: context)
+    }
+
     private func isValidEmail(_ email: String) -> Bool {
         let emailPattern = #"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"#
         return email.range(of: emailPattern, options: .regularExpression) != nil
@@ -603,24 +593,6 @@ final class KeyManagementViewModel {
         filterAlgorithm != nil ||
         !showExpiredKeys ||
         !searchText.isEmpty
-    }
-
-    private func evaluateSystemKeyringMigrationPromptIfNeeded() async {
-        guard !UserDefaults.standard.bool(forKey: migrationHandledKey) else { return }
-        guard !gpgService.isUsingExternalGPGHome else { return }
-        guard keys.isEmpty else { return }
-        guard gpgService.systemGPGHomeLikelyExists() else { return }
-
-        do {
-            let snapshot = try await gpgService.inspectKeyring(at: gpgService.systemGPGHomeURL)
-            if snapshot.totalKeyCount > 0 {
-                showSystemKeyringMigrationPrompt = true
-            }
-        } catch {
-            // Sandbox may block direct ~/.gnupg probing. Still offer migration prompt via picker.
-            logger.warning("System keyring probe failed: \(error.localizedDescription)")
-            showSystemKeyringMigrationPrompt = true
-        }
     }
 }
 

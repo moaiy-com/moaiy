@@ -9,14 +9,46 @@ import SwiftUI
 
 struct KeyActionFilePlanner {
     static func encryptedOutputURL(for inputURL: URL) -> URL {
-        inputURL.appendingPathExtension("gpg")
+        inputURL.appendingPathExtension(Constants.File.defaultEncryptedExtension)
     }
 
     static func decryptedOutputURL(for inputURL: URL) -> URL {
-        if inputURL.pathExtension.isEmpty {
+        let ext = inputURL.pathExtension.lowercased()
+        if Constants.File.encryptedExtensions.contains(ext) {
+            return inputURL.deletingPathExtension()
+        }
+        if ext.isEmpty {
             return inputURL.appendingPathExtension("decrypted")
         }
         return inputURL.deletingPathExtension()
+    }
+
+    static func detachedSignatureOutputURL(for inputURL: URL) -> URL {
+        inputURL.appendingPathExtension("sig")
+    }
+
+    static func nonConflictingURL(for desiredURL: URL, fileManager: FileManager = .default) -> URL {
+        guard fileManager.fileExists(atPath: desiredURL.path) else {
+            return desiredURL
+        }
+
+        let ext = desiredURL.pathExtension
+        let baseName = ext.isEmpty
+            ? desiredURL.lastPathComponent
+            : String(desiredURL.lastPathComponent.dropLast(ext.count + 1))
+        let directory = desiredURL.deletingLastPathComponent()
+
+        var index = 1
+        while true {
+            let candidateName = ext.isEmpty
+                ? "\(baseName) (\(index))"
+                : "\(baseName) (\(index)).\(ext)"
+            let candidateURL = directory.appendingPathComponent(candidateName)
+            if !fileManager.fileExists(atPath: candidateURL.path) {
+                return candidateURL
+            }
+            index += 1
+        }
     }
 
     static func defaultPublicFileName(for keyName: String) -> String {
@@ -36,6 +68,24 @@ enum KeyActionAlertDecision: Equatable {
     case none
     case success(String)
     case error(String)
+}
+
+struct KeyActionMenuAvailability {
+    let hasSecretKey: Bool
+    let isKeySigningMenuEnabled: Bool
+
+    init(key: GPGKey, isKeySigningMenuEnabled: Bool) {
+        self.hasSecretKey = key.isSecret
+        self.isKeySigningMenuEnabled = isKeySigningMenuEnabled
+    }
+
+    var canDecrypt: Bool { hasSecretKey }
+    var canSignDetached: Bool { hasSecretKey }
+    var canEdit: Bool { hasSecretKey }
+    var canSignKey: Bool { hasSecretKey && isKeySigningMenuEnabled }
+    var showsSignKey: Bool { isKeySigningMenuEnabled }
+    var showsExportPrivateKey: Bool { hasSecretKey }
+    var showsBackupRestore: Bool { true }
 }
 
 struct KeyActionBatchResultPlanner {
@@ -73,6 +123,8 @@ struct KeyActionMenu: View {
     var onDelete: (() -> Void)?
     @Environment(KeyManagementViewModel.self) private var viewModel
 
+    // Reserved feature: key certification/signing is kept in code but hidden from menu for now.
+    private let isKeySigningMenuEnabled = false
     @State private var showingUploadSheet = false
     @State private var showingBackupSheet = false
     @State private var showingTrustSheet = false
@@ -83,8 +135,13 @@ struct KeyActionMenu: View {
     @State private var alertMessage = ""
     @State private var showingAlert = false
 
+    private var availability: KeyActionMenuAvailability {
+        KeyActionMenuAvailability(key: key, isKeySigningMenuEnabled: isKeySigningMenuEnabled)
+    }
+
     private enum PassphraseAction {
         case decrypt([URL])
+        case signDetached([URL])
         case exportSecret(URL)
     }
 
@@ -99,11 +156,24 @@ struct KeyActionMenu: View {
                     Label("action_decrypt", systemImage: "lock.open.fill")
                         .font(.system(size: 14))
                 }
-                .disabled(!key.isSecret)
-                Button(action: {
-                    showingSigningSheet = true
-                }) {
-                    Label("action_sign_key", systemImage: "signature")
+                .disabled(!availability.canDecrypt)
+                Button(action: signDetachedFromPicker) {
+                    Label("action_sign_detached", systemImage: "signature")
+                        .font(.system(size: 14))
+                }
+                .disabled(!availability.canSignDetached)
+                if availability.showsSignKey {
+                    Button(action: {
+                        guard availability.canSignKey else { return }
+                        showingSigningSheet = true
+                    }) {
+                        Label("action_sign_key", systemImage: "signature")
+                            .font(.system(size: 14))
+                    }
+                    .disabled(!availability.canSignKey)
+                }
+                Button(action: verifyFromPicker) {
+                    Label("action_verify_signature", systemImage: "checkmark.seal.fill")
                         .font(.system(size: 14))
                 }
                 Button(action: {
@@ -113,11 +183,13 @@ struct KeyActionMenu: View {
                         .font(.system(size: 14))
                 }
                 Button(action: {
+                    guard availability.canEdit else { return }
                     showingEditSheet = true
                 }) {
                     Label("action_edit", systemImage: "pencil")
                         .font(.system(size: 14))
                 }
+                .disabled(!availability.canEdit)
             }
 
             Divider()
@@ -129,11 +201,13 @@ struct KeyActionMenu: View {
                     Label("upload_to_keyserver_title", systemImage: "cloud.fill")
                         .font(.system(size: 14))
                 }
-                Button(action: {
-                    showingBackupSheet = true
-                }) {
-                    Label("backup_title", systemImage: "externaldrive.fill")
-                        .font(.system(size: 14))
+                if availability.showsBackupRestore {
+                    Button(action: {
+                        showingBackupSheet = true
+                    }) {
+                        Label("backup_title", systemImage: "externaldrive.fill")
+                            .font(.system(size: 14))
+                    }
                 }
             }
 
@@ -144,7 +218,7 @@ struct KeyActionMenu: View {
                     Label("action_export_public_key", systemImage: "square.and.arrow.up")
                         .font(.system(size: 14))
                 }
-                if key.isSecret {
+                if availability.showsExportPrivateKey {
                     Button(action: exportPrivateKey) {
                         Label("action_export_private_key", systemImage: "key.fill")
                             .font(.system(size: 14))
@@ -256,6 +330,38 @@ struct KeyActionMenu: View {
         pendingPassphraseAction = .decrypt(selectedURLs)
     }
 
+    private func signDetachedFromPicker() {
+        guard key.isSecret else { return }
+
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.message = String(localized: "sign_detached_file_picker_message")
+
+        guard panel.runModal() == .OK else { return }
+        let selectedURLs = panel.urls
+        guard !selectedURLs.isEmpty else { return }
+
+        pendingPassphraseAction = .signDetached(selectedURLs)
+    }
+
+    private func verifyFromPicker() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.message = String(localized: "verify_file_picker_message")
+
+        guard panel.runModal() == .OK else { return }
+        let selectedURLs = panel.urls
+        guard !selectedURLs.isEmpty else { return }
+
+        Task {
+            await verifyFiles(selectedURLs)
+        }
+    }
+
     private func exportPublicKey() {
         guard let outputURL = presentExportPanel(defaultFileName: defaultPublicFileName) else { return }
 
@@ -275,6 +381,8 @@ struct KeyActionMenu: View {
         switch action {
         case .decrypt(let urls):
             await decryptFiles(urls, passphrase: passphrase)
+        case .signDetached(let urls):
+            await signFilesDetached(urls, passphrase: passphrase)
         case .exportSecret(let outputURL):
             await exportPrivateKey(to: outputURL, passphrase: passphrase)
         }
@@ -295,21 +403,22 @@ struct KeyActionMenu: View {
                 ) else {
                     continue
                 }
+                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: outputURL)
 
                 let hasSourceAccess = url.startAccessingSecurityScopedResource()
-                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
+                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
                 defer {
                     if hasSourceAccess {
                         url.stopAccessingSecurityScopedResource()
                     }
                     if hasOutputAccess {
-                        outputURL.stopAccessingSecurityScopedResource()
+                        plannedOutputURL.stopAccessingSecurityScopedResource()
                     }
                 }
 
-                try await GPGService.shared.encryptFile(
+                _ = try await GPGService.shared.encryptFile(
                     sourceURL: url,
-                    destinationURL: outputURL,
+                    destinationURL: plannedOutputURL,
                     recipients: [key.fingerprint]
                 )
                 encryptedFileCount += 1
@@ -325,7 +434,9 @@ struct KeyActionMenu: View {
             successCount: encryptedFileCount,
             failureCount: failedFileCount,
             successMessage: String(localized: "operation_success_encrypt"),
-            firstError: firstError
+            firstError: firstError,
+            errorContext: .encrypt,
+            failureTitleKey: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .encrypt))
         )
     }
 
@@ -344,21 +455,22 @@ struct KeyActionMenu: View {
                 ) else {
                     continue
                 }
+                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: outputURL)
 
                 let hasSourceAccess = url.startAccessingSecurityScopedResource()
-                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
+                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
                 defer {
                     if hasSourceAccess {
                         url.stopAccessingSecurityScopedResource()
                     }
                     if hasOutputAccess {
-                        outputURL.stopAccessingSecurityScopedResource()
+                        plannedOutputURL.stopAccessingSecurityScopedResource()
                     }
                 }
 
-                try await GPGService.shared.decryptFile(
+                _ = try await GPGService.shared.decryptFile(
                     sourceURL: url,
-                    destinationURL: outputURL,
+                    destinationURL: plannedOutputURL,
                     passphrase: passphrase
                 )
                 decryptedFileCount += 1
@@ -374,8 +486,129 @@ struct KeyActionMenu: View {
             successCount: decryptedFileCount,
             failureCount: failedFileCount,
             successMessage: String(localized: "operation_success_decrypt"),
-            firstError: firstError
+            firstError: firstError,
+            errorContext: .decrypt,
+            failureTitleKey: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt))
         )
+    }
+
+    @MainActor
+    private func signFilesDetached(_ urls: [URL], passphrase: String) async {
+        var signedFileCount = 0
+        var failedFileCount = 0
+        var firstError: Error?
+
+        for url in urls {
+            do {
+                let defaultOutputURL = KeyActionFilePlanner.detachedSignatureOutputURL(for: url)
+                guard let outputURL = presentFileOperationSavePanel(
+                    defaultFileName: defaultOutputURL.lastPathComponent,
+                    preferredDirectory: url.deletingLastPathComponent()
+                ) else {
+                    continue
+                }
+                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: outputURL)
+
+                let hasSourceAccess = url.startAccessingSecurityScopedResource()
+                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
+                defer {
+                    if hasSourceAccess {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                    if hasOutputAccess {
+                        plannedOutputURL.stopAccessingSecurityScopedResource()
+                    }
+                }
+
+                _ = try await GPGService.shared.signFileDetached(
+                    sourceURL: url,
+                    destinationURL: plannedOutputURL,
+                    keyID: key.fingerprint,
+                    passphrase: passphrase
+                )
+                signedFileCount += 1
+            } catch {
+                failedFileCount += 1
+                if firstError == nil {
+                    firstError = error
+                }
+            }
+        }
+
+        showBatchOperationResult(
+            successCount: signedFileCount,
+            failureCount: failedFileCount,
+            successMessage: String(localized: "operation_success_sign_detached"),
+            firstError: firstError,
+            errorContext: .sign,
+            failureTitleKey: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .sign))
+        )
+    }
+
+    @MainActor
+    private func verifyFiles(_ urls: [URL]) async {
+        var verifiedFileCount = 0
+        var failedFileCount = 0
+        var firstErrorMessage: String?
+        var processedPaths = Set<String>()
+        let selectedPathSet = Set(urls.map(\.path))
+
+        let orderedURLs = urls.sorted { lhs, rhs in
+            lhs.lastPathComponent.localizedCaseInsensitiveCompare(rhs.lastPathComponent) == .orderedAscending
+        }
+
+        for url in orderedURLs {
+            if processedPaths.contains(url.path) {
+                continue
+            }
+
+            let fileExtension = url.pathExtension.lowercased()
+            if fileExtension == "sig" || fileExtension == "asc" {
+                let signedFileURL = url.deletingPathExtension()
+                if selectedPathSet.contains(signedFileURL.path) {
+                    processedPaths.insert(signedFileURL.path)
+                }
+            } else {
+                let signatureURLs = [
+                    url.appendingPathExtension("sig"),
+                    url.appendingPathExtension("asc")
+                ]
+                for signatureURL in signatureURLs where selectedPathSet.contains(signatureURL.path) {
+                    processedPaths.insert(signatureURL.path)
+                }
+            }
+
+            processedPaths.insert(url.path)
+
+            do {
+                _ = try await GPGService.shared.verifySignatureFile(at: url)
+                verifiedFileCount += 1
+            } catch {
+                failedFileCount += 1
+                if firstErrorMessage == nil {
+                    firstErrorMessage = UserFacingErrorMapper.message(for: error, context: .verify)
+                }
+            }
+        }
+
+        let decision = KeyActionBatchResultPlanner.makeAlertDecision(
+            successCount: verifiedFileCount,
+            failureCount: failedFileCount,
+            successMessage: String(localized: "operation_success_verify"),
+            firstErrorMessage: firstErrorMessage
+        )
+
+        switch decision {
+        case .none:
+            return
+        case .success(let message):
+            showSuccess(message: message)
+        case .error(let message):
+            showError(
+                title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .verify)),
+                message: message
+            )
+        }
     }
 
     @MainActor
@@ -385,7 +618,10 @@ struct KeyActionMenu: View {
             try writeDataSafely(keyData, to: outputURL)
             showSuccess(message: String(localized: "action_export_public_key"))
         } catch {
-            showError(message: error.localizedDescription)
+            showError(
+                title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .exportKey)),
+                message: UserFacingErrorMapper.message(for: error, context: .exportKey)
+            )
         }
     }
 
@@ -396,7 +632,10 @@ struct KeyActionMenu: View {
             try writeDataSafely(keyData, to: outputURL)
             showSuccess(message: String(localized: "action_export_private_key"))
         } catch {
-            showError(message: error.localizedDescription)
+            showError(
+                title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .exportKey)),
+                message: UserFacingErrorMapper.message(for: error, context: .exportKey)
+            )
         }
     }
 
@@ -443,13 +682,17 @@ struct KeyActionMenu: View {
         successCount: Int,
         failureCount: Int,
         successMessage: String,
-        firstError: Error?
+        firstError: Error?,
+        errorContext: UserFacingErrorContext,
+        failureTitleKey: LocalizedStringKey
     ) {
         let decision = KeyActionBatchResultPlanner.makeAlertDecision(
             successCount: successCount,
             failureCount: failureCount,
             successMessage: successMessage,
-            firstErrorMessage: firstError?.localizedDescription
+            firstErrorMessage: firstError.map {
+                UserFacingErrorMapper.message(for: $0, context: errorContext)
+            }
         )
 
         switch decision {
@@ -458,12 +701,12 @@ struct KeyActionMenu: View {
         case .success(let message):
             showSuccess(message: message)
         case .error(let message):
-            showError(message: message)
+            showError(title: failureTitleKey, message: message)
         }
     }
 
-    private func showError(message: String) {
-        alertTitle = "error_occurred"
+    private func showError(title: LocalizedStringKey, message: String) {
+        alertTitle = title
         alertMessage = message
         showingAlert = true
     }

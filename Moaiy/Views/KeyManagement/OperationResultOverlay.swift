@@ -19,15 +19,15 @@ struct OperationResultOverlay: View {
     }
     
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: MoaiyUI.Spacing.md) {
             headerView
             resultsListView
             footerView
         }
+        .padding(MoaiyUI.Spacing.lg)
+        .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 380, idealWidth: 460, maxWidth: 620, maxHeight: 640)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.2), radius: 10, y: 5)
+        .moaiyCardStyle(cornerRadius: MoaiyUI.Radius.lg)
         .onAppear {
             withAnimation(.spring(response: 0.3)) {
                 isAnimating = true
@@ -40,19 +40,19 @@ struct OperationResultOverlay: View {
             if summary.allSucceeded {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.moaiySuccess)
                 Text("operation_all_succeeded")
                     .font(.headline)
             } else if summary.allFailed {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.moaiyError)
                 Text("operation_all_failed")
                     .font(.headline)
             } else {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.title2)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.moaiyWarning)
                 Text("operation_partial_success")
                     .font(.headline)
             }
@@ -61,14 +61,14 @@ struct OperationResultOverlay: View {
             
             Text("\(summary.successCount)/\(results.count)")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
         }
-        .padding()
+        .padding(MoaiyUI.Spacing.md)
     }
     
     private var resultsListView: some View {
         ScrollView {
-            LazyVStack(spacing: 8) {
+            LazyVStack(spacing: MoaiyUI.Spacing.sm) {
                 ForEach(results) { result in
                     ResultRowView(
                         result: result,
@@ -76,7 +76,7 @@ struct OperationResultOverlay: View {
                     )
                 }
             }
-            .padding()
+            .padding(MoaiyUI.Spacing.sm)
         }
         .frame(maxHeight: 300)
     }
@@ -100,9 +100,10 @@ struct OperationResultOverlay: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .tint(Color.moaiyAccentV2)
             .keyboardShortcut(.escape, modifiers: [])
         }
-        .padding()
+        .padding(MoaiyUI.Spacing.md)
     }
 }
 
@@ -111,21 +112,22 @@ struct ResultRowView: View {
     let onOpenInFinder: ((URL) -> Void)?
     
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: MoaiyUI.Spacing.md) {
             Image(systemName: result.operation.iconName)
                 .font(.title3)
-                .foregroundStyle(result.success ? result.operation.iconColor : .red)
+                .foregroundStyle(result.success ? result.operation.iconColor : Color.moaiyError)
                 .frame(width: 24)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(result.fileName)
                     .font(.subheadline)
+                    .foregroundStyle(Color.moaiyTextPrimary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 
                 Text(result.displayMessage)
                     .font(.caption)
-                    .foregroundStyle(result.success ? Color.secondary : Color.red)
+                    .foregroundStyle(result.success ? Color.moaiyTextSecondary : Color.moaiyError)
                     .lineLimit(2)
             }
             
@@ -141,10 +143,10 @@ struct ResultRowView: View {
                 .help("open_in_finder")
             }
         }
-        .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(result.success ? Color.green.opacity(0.05) : Color.red.opacity(0.05))
+        .padding(MoaiyUI.Spacing.sm)
+        .moaiyBannerStyle(
+            tint: result.success ? Color.moaiySuccess : Color.moaiyError,
+            cornerRadius: MoaiyUI.Radius.sm
         )
     }
 }

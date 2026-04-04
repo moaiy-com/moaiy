@@ -11,7 +11,6 @@ struct KeyManagementView: View {
     @State private var viewModel: KeyManagementViewModel
     @State private var showingCreateKey = false
     @State private var showingImportKey = false
-    @State private var showingFilters = false
     @State private var keyToDelete: GPGKey?
 
     init(viewModel: KeyManagementViewModel? = nil) {
@@ -35,32 +34,35 @@ struct KeyManagementView: View {
                 KeyListView(viewModel: viewModel, keyToDelete: $keyToDelete)
             }
         }
-        .navigationTitle("main_window_title")
+        .navigationTitle("app_name_moaiy")
+        .background(Color.moaiySurfaceBackground.ignoresSafeArea())
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { showingCreateKey = true }) {
                     Label("action_create_key", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: MoaiyUI.Radius.md))
+                .tint(Color.moaiyAccentV2)
                 .keyboardShortcut("n", modifiers: .command)
             }
             ToolbarItem(placement: .automatic) {
                 Button(action: { Task { await viewModel.refresh() } }) {
                     Label("action_refresh", systemImage: "arrow.clockwise")
                 }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: MoaiyUI.Radius.md))
+                .tint(Color.moaiyAccentV2)
                 .keyboardShortcut("r", modifiers: .command)
             }
             ToolbarItem(placement: .automatic) {
                 Button(action: { showingImportKey = true }) {
                     Label("action_import_key", systemImage: "square.and.arrow.down")
                 }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: MoaiyUI.Radius.md))
+                .tint(Color.moaiyAccentV2)
                 .keyboardShortcut("i", modifiers: .command)
-            }
-            ToolbarItem(placement: .automatic) {
-                Button(action: { showingFilters = true }) {
-                    Label("action_filters", systemImage: "line.3.horizontal.decrease.circle")
-                }
-                .badge(viewModel.hasActiveFilters ? "!" : nil)
             }
         }
         .searchable(text: $viewModel.searchText, prompt: "prompt_search_keys")
@@ -74,9 +76,6 @@ struct KeyManagementView: View {
         .sheet(isPresented: $showingImportKey) {
             ImportKeySheet()
                 .environment(viewModel)
-        }
-        .sheet(isPresented: $showingFilters) {
-            FilterSheet(viewModel: viewModel)
         }
         .confirmationDialog(
             "confirm_delete_key_title",
@@ -112,19 +111,17 @@ struct KeyManagementView: View {
                 )
             }
         }
-        .alert("migration_system_keyring_title", isPresented: $viewModel.showSystemKeyringMigrationPrompt) {
-            Button("action_import_key") {
-                Task {
-                    await viewModel.migrateFromSystemKeyring()
+        .alert(
+            LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: viewModel.errorContext)),
+            isPresented: Binding(
+                get: { viewModel.errorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.clearError()
+                    }
                 }
-            }
-            Button("action_not_now", role: .cancel) {
-                viewModel.dismissSystemKeyringMigrationPrompt()
-            }
-        } message: {
-            Text("migration_system_keyring_message")
-        }
-        .alert("error_occurred", isPresented: .constant(viewModel.errorMessage != nil)) {
+            )
+        ) {
             Button("action_retry") {
                 Task { await viewModel.refresh() }
             }
@@ -136,23 +133,21 @@ struct KeyManagementView: View {
                 Text(error)
             }
         }
-        .overlay {
-            if viewModel.isSystemKeyringMigrationRunning {
-                ZStack {
-                    Color.black.opacity(0.15)
-                        .ignoresSafeArea()
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 6) {
+                Image("BrandLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 72.8)
+                    .accessibilityHidden(true)
 
-                    VStack(spacing: 12) {
-                        ProgressView()
-                            .controlSize(.large)
-                        Text("migration_keyring_in_progress")
-                            .font(.headline)
-                    }
-                    .padding(24)
-                    .background(.regularMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
+                Text("brand_tagline_drag_and_drop")
+                    .font(.custom("ScopeOne-Regular", size: 13))
+                    .foregroundStyle(Color(red: 196.0 / 255.0, green: 196.0 / 255.0, blue: 196.0 / 255.0))
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(Color.moaiySurfaceBackground.opacity(0.9))
         }
     }
 }
@@ -166,15 +161,16 @@ struct EmptyKeysView: View {
         VStack(spacing: 20) {
             Image(systemName: "key.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
             
             Text("empty_keys_title")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .foregroundStyle(Color.moaiyTextPrimary)
             
             Text("empty_keys_description")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 400)
             
@@ -182,9 +178,12 @@ struct EmptyKeysView: View {
                 Label("action_create_first_key", systemImage: "plus.circle.fill")
             }
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.roundedRectangle(radius: MoaiyUI.Radius.md))
+            .tint(Color.moaiyAccentV2)
             .controlSize(.large)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.moaiySurfaceBackground)
     }
 }
 
@@ -200,8 +199,11 @@ struct KeyListView: View {
             .environment(viewModel)
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
         }
         .listStyle(.inset)
+        .scrollContentBackground(.hidden)
+        .background(Color.moaiySurfaceBackground)
         .refreshable {
             await viewModel.refresh()
         }

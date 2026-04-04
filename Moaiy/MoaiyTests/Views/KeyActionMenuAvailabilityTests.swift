@@ -1,0 +1,99 @@
+//
+//  KeyActionMenuAvailabilityTests.swift
+//  MoaiyTests
+//
+//  Unit tests for key action menu visibility and enablement rules.
+//
+
+import Foundation
+import Testing
+@testable import Moaiy
+
+@Suite("Key Action Menu Availability Tests")
+struct KeyActionMenuAvailabilityTests {
+
+    @Test("Backup/Restore menu stays visible for public key")
+    func backupMenuVisible_forPublicKey() {
+        let availability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: false),
+            isKeySigningMenuEnabled: false
+        )
+
+        #expect(availability.showsBackupRestore)
+    }
+
+    @Test("Backup/Restore menu stays visible for secret key")
+    func backupMenuVisible_forSecretKey() {
+        let availability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: true),
+            isKeySigningMenuEnabled: false
+        )
+
+        #expect(availability.showsBackupRestore)
+    }
+
+    @Test("Private export hidden when key has no secret material")
+    func privateExportHidden_forPublicKey() {
+        let availability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: false),
+            isKeySigningMenuEnabled: false
+        )
+
+        #expect(!availability.showsExportPrivateKey)
+    }
+
+    @Test("Private export shown when key has secret material")
+    func privateExportShown_forSecretKey() {
+        let availability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: true),
+            isKeySigningMenuEnabled: false
+        )
+
+        #expect(availability.showsExportPrivateKey)
+    }
+
+    @Test("Secret-only actions disabled for public key")
+    func secretActionsDisabled_forPublicKey() {
+        let availability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: false),
+            isKeySigningMenuEnabled: true
+        )
+
+        #expect(!availability.canDecrypt)
+        #expect(!availability.canSignDetached)
+        #expect(!availability.canEdit)
+        #expect(!availability.canSignKey)
+    }
+
+    @Test("Key signing visibility follows feature flag")
+    func keySigningVisibility_followsFeatureFlag() {
+        let disabledAvailability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: true),
+            isKeySigningMenuEnabled: false
+        )
+        #expect(!disabledAvailability.showsSignKey)
+
+        let enabledAvailability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: true),
+            isKeySigningMenuEnabled: true
+        )
+        #expect(enabledAvailability.showsSignKey)
+        #expect(enabledAvailability.canSignKey)
+    }
+
+    private func makeKey(isSecret: Bool) -> GPGKey {
+        GPGKey(
+            id: isSecret ? "secret-key-id" : "public-key-id",
+            keyID: isSecret ? "SECRET123" : "PUBLIC123",
+            fingerprint: isSecret ? "SECRET-FINGERPRINT" : "PUBLIC-FINGERPRINT",
+            name: isSecret ? "Secret Key" : "Public Key",
+            email: "test@moaiy.app",
+            algorithm: "RSA",
+            keyLength: 4096,
+            isSecret: isSecret,
+            createdAt: nil,
+            expiresAt: nil,
+            trustLevel: .unknown
+        )
+    }
+}

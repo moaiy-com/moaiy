@@ -25,16 +25,17 @@ struct BackupManagerView: View {
     @State private var backupHistory: [BackupRecord] = []
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: MoaiyUI.Spacing.lg) {
             // Header
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("backup_title")
                         .font(.title2)
                         .fontWeight(.semibold)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                     Text("backup_subtitle")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
 
                 Spacer()
@@ -42,7 +43,7 @@ struct BackupManagerView: View {
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -70,14 +71,13 @@ struct BackupManagerView: View {
                             if includeSecretKeys {
                                 HStack(spacing: 8) {
                                     Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundStyle(.orange)
+                                        .foregroundStyle(Color.moaiyWarning)
                                     Text("backup_secret_warning")
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(Color.moaiyTextSecondary)
                                 }
-                                .padding(8)
-                                .background(Color.orange.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .padding(MoaiyUI.Spacing.sm)
+                                .moaiyBannerStyle(tint: Color.moaiyWarning, cornerRadius: MoaiyUI.Radius.sm)
                             }
                         }
 
@@ -92,12 +92,12 @@ struct BackupManagerView: View {
                             }
                         }
                         .buttonStyle(.borderedProminent)
+                        .tint(Color.moaiyAccentV2)
                         .controlSize(.large)
                         .disabled(isCreatingBackup || viewModel.keys.isEmpty)
                     }
-                    .padding()
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(MoaiyUI.Spacing.lg)
+                    .moaiyCardStyle()
 
                     // Restore from backup
                     VStack(alignment: .leading, spacing: 12) {
@@ -106,7 +106,7 @@ struct BackupManagerView: View {
 
                         Text("backup_restore_description")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
 
                         Button(action: restoreFromBackup) {
                             if isRestoring {
@@ -122,9 +122,8 @@ struct BackupManagerView: View {
                         .controlSize(.large)
                         .disabled(isRestoring)
                     }
-                    .padding()
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(MoaiyUI.Spacing.lg)
+                    .moaiyCardStyle()
 
                     // Backup history
                     if !backupHistory.isEmpty {
@@ -141,7 +140,7 @@ struct BackupManagerView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .font(.caption)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Color.moaiyError)
                             }
 
                             ForEach(backupHistory) { record in
@@ -152,35 +151,35 @@ struct BackupManagerView: View {
                                 }
                             }
                         }
-                        .padding()
-                        .background(Color(nsColor: .controlBackgroundColor))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(MoaiyUI.Spacing.lg)
+                        .moaiyCardStyle()
                     }
 
                     // Info section
                     VStack(alignment: .leading, spacing: 8) {
                         Label("backup_info_1", systemImage: "info.circle.fill")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
 
                         Label("backup_info_2", systemImage: "lock.shield.fill")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
 
                         Label("backup_info_3", systemImage: "clock.fill")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
                     }
-                    .padding()
+                    .padding(MoaiyUI.Spacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.blue.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .moaiyBannerStyle(tint: Color.moaiyInfo)
                 }
                 .padding(24)
             }
         }
+        .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 540, idealWidth: 640, maxWidth: 780, minHeight: 560, idealHeight: 720, maxHeight: 920)
         .onAppear {
+            SecureTempStorage.cleanupStaleDirectories()
             loadBackupHistory()
         }
         .sheet(isPresented: $showingSecretKeyPassphraseSheet) {
@@ -208,7 +207,7 @@ struct BackupManagerView: View {
         } message: {
             Text(restoreSuccessMessage)
         }
-        .alert("error_occurred", isPresented: $showError) {
+        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .backup)), isPresented: $showError) {
             Button("action_ok") { }
         } message: {
             if let error = errorMessage {
@@ -254,7 +253,7 @@ struct BackupManagerView: View {
                 // Record backup
                 let record = BackupRecord(
                     date: Date(),
-                    location: url,
+                    backupFileName: url.lastPathComponent,
                     keyCount: viewModel.keys.count,
                     includeSecretKeys: includeSecretKeys,
                     exportedPublicKeyCount: summary.exportedPublicKeyCount,
@@ -267,7 +266,7 @@ struct BackupManagerView: View {
 
                 showBackupSuccess = true
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingErrorMapper.message(for: error, context: .backup)
                 showError = true
             }
             isCreatingBackup = false
@@ -277,9 +276,7 @@ struct BackupManagerView: View {
 
     private func createBackupArchive(at url: URL, secretKeyPassphrase: String?) async throws -> BackupExportSummary {
         // Create temporary directory for backup contents
-        let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MoaiyBackup_\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let tempDir = try SecureTempStorage.makeOperationDirectory(prefix: "backup")
 
         defer {
             try? FileManager.default.removeItem(at: tempDir)
@@ -310,7 +307,7 @@ struct BackupManagerView: View {
                 } catch {
                     failedSecretKeyFingerprints.append(key.fingerprint)
                     if firstSecretKeyExportError == nil {
-                        firstSecretKeyExportError = error.localizedDescription
+                        firstSecretKeyExportError = UserFacingErrorMapper.message(for: error, context: .exportKey)
                     }
                 }
             }
@@ -396,7 +393,7 @@ struct BackupManagerView: View {
                     throw GPGError.importFailed("\(summary.successfulFiles)/\(summary.totalFiles) - \(failed)")
                 }
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingErrorMapper.message(for: error, context: .backup)
                 showError = true
             }
             isRestoring = false
@@ -405,9 +402,7 @@ struct BackupManagerView: View {
 
     private func restoreFromBackupArchive(at url: URL) async throws -> RestoreSummary {
         // Create temporary directory for extraction
-        let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MoaiyRestore_\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let tempDir = try SecureTempStorage.makeOperationDirectory(prefix: "restore")
 
         defer {
             try? FileManager.default.removeItem(at: tempDir)
@@ -486,22 +481,22 @@ struct BackupManagerView: View {
 
     private func loadBackupHistory() {
         // Load from UserDefaults
-        if let data = UserDefaults.standard.data(forKey: "backupHistory"),
+        if let data = UserDefaults.standard.data(forKey: Constants.StorageKeys.backupHistory),
            let records = try? JSONDecoder().decode([BackupRecord].self, from: data) {
             backupHistory = records
         }
 
-        if let date = UserDefaults.standard.object(forKey: "lastBackupDate") as? Date {
+        if let date = UserDefaults.standard.object(forKey: Constants.StorageKeys.lastBackupDate) as? Date {
             lastBackupDate = date
         }
     }
 
     private func saveBackupHistory() {
         if let data = try? JSONEncoder().encode(backupHistory) {
-            UserDefaults.standard.set(data, forKey: "backupHistory")
+            UserDefaults.standard.set(data, forKey: Constants.StorageKeys.backupHistory)
         }
 
-        UserDefaults.standard.set(lastBackupDate, forKey: "lastBackupDate")
+        UserDefaults.standard.set(lastBackupDate, forKey: Constants.StorageKeys.lastBackupDate)
     }
 }
 
@@ -536,7 +531,7 @@ struct BackupExportSummary {
 struct BackupRecord: Identifiable, Codable {
     let id: UUID
     let date: Date
-    let location: URL
+    let backupFileName: String?
     let keyCount: Int
     let includeSecretKeys: Bool
     let exportedPublicKeyCount: Int?
@@ -545,7 +540,7 @@ struct BackupRecord: Identifiable, Codable {
 
     init(
         date: Date,
-        location: URL,
+        backupFileName: String?,
         keyCount: Int,
         includeSecretKeys: Bool,
         exportedPublicKeyCount: Int? = nil,
@@ -554,12 +549,54 @@ struct BackupRecord: Identifiable, Codable {
     ) {
         self.id = UUID()
         self.date = date
-        self.location = location
+        self.backupFileName = backupFileName
         self.keyCount = keyCount
         self.includeSecretKeys = includeSecretKeys
         self.exportedPublicKeyCount = exportedPublicKeyCount
         self.exportedSecretKeyCount = exportedSecretKeyCount
         self.failedSecretKeyCount = failedSecretKeyCount
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case date
+        case backupFileName
+        case location
+        case keyCount
+        case includeSecretKeys
+        case exportedPublicKeyCount
+        case exportedSecretKeyCount
+        case failedSecretKeyCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        date = try container.decode(Date.self, forKey: .date)
+        if let fileName = try container.decodeIfPresent(String.self, forKey: .backupFileName) {
+            backupFileName = fileName
+        } else if let legacyLocation = try container.decodeIfPresent(URL.self, forKey: .location) {
+            backupFileName = legacyLocation.lastPathComponent
+        } else {
+            backupFileName = nil
+        }
+        keyCount = try container.decode(Int.self, forKey: .keyCount)
+        includeSecretKeys = try container.decode(Bool.self, forKey: .includeSecretKeys)
+        exportedPublicKeyCount = try container.decodeIfPresent(Int.self, forKey: .exportedPublicKeyCount)
+        exportedSecretKeyCount = try container.decodeIfPresent(Int.self, forKey: .exportedSecretKeyCount)
+        failedSecretKeyCount = try container.decodeIfPresent(Int.self, forKey: .failedSecretKeyCount)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(date, forKey: .date)
+        try container.encodeIfPresent(backupFileName, forKey: .backupFileName)
+        try container.encode(keyCount, forKey: .keyCount)
+        try container.encode(includeSecretKeys, forKey: .includeSecretKeys)
+        try container.encodeIfPresent(exportedPublicKeyCount, forKey: .exportedPublicKeyCount)
+        try container.encodeIfPresent(exportedSecretKeyCount, forKey: .exportedSecretKeyCount)
+        try container.encodeIfPresent(failedSecretKeyCount, forKey: .failedSecretKeyCount)
     }
 }
 
@@ -607,14 +644,15 @@ struct BackupStatusCard: View {
     let secretKeys: Int
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: MoaiyUI.Spacing.lg) {
             Image(systemName: "externaldrive.fill.badge.icloud")
                 .font(.system(size: 40))
-                .foregroundStyle(Color.moaiyAccent)
+                .foregroundStyle(Color.moaiyAccentV2)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("backup_status_title")
                     .font(.headline)
+                    .foregroundStyle(Color.moaiyTextPrimary)
 
                 if let date = lastBackupDate {
                     Text(
@@ -625,11 +663,11 @@ struct BackupStatusCard: View {
                         )
                     )
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 } else {
                     Text("backup_status_never")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color.moaiyWarning)
                 }
             }
 
@@ -642,7 +680,7 @@ struct BackupStatusCard: View {
                         .fontWeight(.bold)
                     Text("backup_keys_total")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
 
                 HStack(spacing: 4) {
@@ -651,13 +689,12 @@ struct BackupStatusCard: View {
                         .fontWeight(.semibold)
                     Text("backup_keys_secret")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
             }
         }
-        .padding()
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(MoaiyUI.Spacing.lg)
+        .moaiyCardStyle()
     }
 }
 
@@ -670,27 +707,34 @@ struct BackupHistoryRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "doc.fill")
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.moaiyInfo)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(record.date.formatted(date: .abbreviated, time: .shortened))
                     .font(.subheadline)
                     .fontWeight(.medium)
 
+                if let backupFileName = record.backupFileName, !backupFileName.isEmpty {
+                    Text(backupFileName)
+                        .font(.caption2)
+                        .foregroundStyle(Color.moaiyTextSecondary.opacity(0.8))
+                        .lineLimit(1)
+                }
+
                 Text(backupDetailText)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
             }
 
             Spacer()
 
             Button(action: onDelete) {
                 Image(systemName: "trash")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.moaiyError)
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, MoaiyUI.Spacing.sm)
     }
 
     private var backupDetailText: String {

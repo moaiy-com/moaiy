@@ -9,36 +9,51 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct KeyDropZoneView: View {
+    var hintTextKey: LocalizedStringKey = "drop_zone_hint"
     var onDrop: (([URL]) -> Void)?
+    var onTap: (() -> Void)?
     @State private var isTargeted = false
     @State private var isProcessing = false
     
     var body: some View {
-        RoundedRectangle(cornerRadius: 8)
-            .stroke(
-                isTargeted ? Color.accentColor : Color.gray.opacity(0.3),
-                style: StrokeStyle(lineWidth: 2, dash: [4, 4])
+        RoundedRectangle(cornerRadius: MoaiyUI.Radius.md, style: .continuous)
+            .fill(isTargeted ? Color.moaiyAccentV2.opacity(0.08) : Color.moaiySurfaceSecondary.opacity(0.55))
+            .overlay(
+                RoundedRectangle(cornerRadius: MoaiyUI.Radius.md, style: .continuous)
+                    .stroke(
+                        isTargeted ? Color.moaiyFocusRing : Color.moaiyBorderPrimary.opacity(0.85),
+                        style: StrokeStyle(lineWidth: 2, dash: [4, 4])
+                    )
             )
-            .frame(height: 60)
+            .frame(height: 52)
             .overlay {
                 if isProcessing {
                     ProgressView()
                         .scaleEffect(0.8)
+                        .tint(Color.moaiyAccentV2)
                 } else {
-                    VStack(spacing: 6) {
+                    HStack(spacing: MoaiyUI.Spacing.sm) {
                         Image(systemName: "arrow.down.doc.on.clip")
-                            .font(.title3)
-                            .foregroundStyle(isTargeted ? Color.accentColor : .secondary)
-                        Text("drop_zone_hint")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(isTargeted ? Color.moaiyAccentV2 : Color.moaiyTextSecondary)
+                        Text(hintTextKey)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(isTargeted ? Color.moaiyTextPrimary : Color.moaiyTextSecondary)
+                            .lineLimit(1)
                     }
+                    .padding(.horizontal, MoaiyUI.Spacing.md)
                 }
             }
             .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
                 handleFileDrop(providers: providers)
                 return true
             }
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .onTapGesture {
+                guard !isProcessing else { return }
+                onTap?()
+            }
+            .animation(.easeOut(duration: MoaiyUI.animationFast), value: isTargeted)
     }
     
     private func handleFileDrop(providers: [NSItemProvider]) {

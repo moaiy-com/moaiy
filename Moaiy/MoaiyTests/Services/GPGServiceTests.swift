@@ -137,6 +137,23 @@ struct GPGServiceTests {
         // The exact behavior depends on the helper implementation
         #expect(keys.count >= 0, "Parsing should complete without error")
     }
+
+    @Test("parseKeyList keeps primary fingerprint when subkeys exist")
+    func parseKeyList_keepsPrimaryFingerprintWhenSubkeysExist() {
+        let output = """
+        sec:u:4096:1:AAAABBBBCCCCDDDD:1609459200::::u:::scESC:
+        fpr:::::::::1111222233334444555566667777888899990000:
+        uid:u::::1609459200::::::Primary User <primary@example.com>:
+        ssb:u:4096:1:DDDDEEEEFFFF0000:1609459200:::::::e:
+        fpr:::::::::9999000088887777666655554444333322221111:
+        """
+
+        let keys = parseKeyListOutput(output, secretOnly: true)
+
+        #expect(keys.count == 1)
+        #expect(keys.first?.fingerprint == "1111222233334444555566667777888899990000")
+        #expect(keys.first?.keyID == "AAAABBBBCCCCDDDD")
+    }
     
     // MARK: - Import Result Parsing Tests
     
@@ -262,6 +279,62 @@ struct GPGServiceTests {
 
         #expect(detected == .notGPG)
     }
+
+    @Test("GPG file detector treats .moy extension as encrypted fallback")
+    func detectFileType_moyExtensionFallsBackToEncrypted() async throws {
+        let detector = GPGFileTypeDetector()
+        let fileManager = FileManager.default
+        let tempDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("moaiy-detector-test-\(UUID().uuidString)", isDirectory: true)
+
+        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: tempDirectory) }
+
+        let encryptedLikeURL = tempDirectory.appendingPathComponent("sample.moy")
+        try Data("not-a-valid-openpgp-packet".utf8).write(to: encryptedLikeURL)
+
+        let detected = await detector.detectFileType(at: encryptedLikeURL)
+
+        #expect(detected == .encrypted)
+    }
+
+    @Test("GPG file detector does not classify PNG as signature")
+    func detectFileType_pngStaysNotGPG() async throws {
+        let detector = GPGFileTypeDetector()
+        let fileManager = FileManager.default
+        let tempDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("moaiy-detector-test-\(UUID().uuidString)", isDirectory: true)
+
+        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: tempDirectory) }
+
+        let pngURL = tempDirectory.appendingPathComponent("moaiy_icon.png")
+        let pngHeader: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        try Data(pngHeader).write(to: pngURL)
+
+        let detected = await detector.detectFileType(at: pngURL)
+
+        #expect(detected == .notGPG)
+    }
+
+    @Test("Secure temp cleanup removes stale directories only")
+    func secureTempCleanup_removesStaleDirectoriesOnly() throws {
+        let fileManager = FileManager.default
+        let staleDirectory = try SecureTempStorage.makeOperationDirectory(prefix: "stale")
+        let freshDirectory = try SecureTempStorage.makeOperationDirectory(prefix: "fresh")
+        defer {
+            try? fileManager.removeItem(at: staleDirectory)
+            try? fileManager.removeItem(at: freshDirectory)
+        }
+
+        let oldDate = Date().addingTimeInterval(-7200)
+        try fileManager.setAttributes([.modificationDate: oldDate], ofItemAtPath: staleDirectory.path)
+
+        SecureTempStorage.cleanupStaleDirectories(olderThan: 3600)
+
+        #expect(fileManager.fileExists(atPath: staleDirectory.path) == false)
+        #expect(fileManager.fileExists(atPath: freshDirectory.path) == true)
+    }
 }
 
 // MARK: - Helper Functions for Testing
@@ -270,6 +343,7 @@ struct GPGServiceTests {
 private func parseKeyListOutput(_ output: String, secretOnly: Bool) -> [GPGKey] {
     var keys: [GPGKey] = []
     var currentKey: GPGKeyBuilder?
+    var isAwaitingPrimaryFingerprint = false
     
     for line in output.components(separatedBy: "\n") {
         let fields = line.components(separatedBy: ":")
@@ -284,7 +358,8 @@ private func parseKeyListOutput(_ output: String, secretOnly: Bool) -> [GPGKey] 
                 keys.append(key)
             }
             currentKey = GPGKeyBuilder()
-            currentKey?.isSecret = secretOnly
+            currentKey?.isSecret = (recordType == "sec") || secretOnly
+            isAwaitingPrimaryFingerprint = true
             if fields.count >= 10 {
                 currentKey?.keyID = fields[4]
                 currentKey?.createdAt = parseTimestampString(fields[5])
@@ -298,9 +373,12 @@ private func parseKeyListOutput(_ output: String, secretOnly: Bool) -> [GPGKey] 
             }
             
         case "fpr":
-            if fields.count >= 10 {
+            if isAwaitingPrimaryFingerprint, fields.count >= 10 {
                 currentKey?.fingerprint = fields[9]
+                isAwaitingPrimaryFingerprint = false
             }
+        case "sub", "ssb":
+            isAwaitingPrimaryFingerprint = false
             
         case "uid":
             if fields.count >= 10 {

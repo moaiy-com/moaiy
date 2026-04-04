@@ -38,16 +38,17 @@ struct KeyEditSheet: View {
     @State private var successMessage: String?
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: MoaiyUI.Spacing.lg) {
             // Header
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("edit_key_title")
                         .font(.title2)
                         .fontWeight(.semibold)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                     Text(key.email)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
 
                 Spacer()
@@ -55,7 +56,7 @@ struct KeyEditSheet: View {
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -94,6 +95,7 @@ struct KeyEditSheet: View {
             }
             .frame(maxHeight: .infinity, alignment: .top)
         }
+        .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 520, idealWidth: 620, maxWidth: 760, minHeight: 500, idealHeight: 620, maxHeight: 860)
         .alert("edit_success_title", isPresented: $showSuccess) {
             Button("action_ok") { dismiss() }
@@ -119,25 +121,40 @@ struct ExpirationEditView: View {
     @State private var showError = false
     @State private var errorMessage: String?
 
-    enum ExpirationOption: String, CaseIterable {
-        case never = "Never"
-        case oneYear = "1 Year"
-        case twoYears = "2 Years"
-        case fiveYears = "5 Years"
-        case custom = "Custom Date"
+    enum ExpirationOption: CaseIterable {
+        case never
+        case oneYear
+        case twoYears
+        case fiveYears
+        case custom
+
+        var titleKey: LocalizedStringKey {
+            switch self {
+            case .never:
+                return "edit_expiration_never"
+            case .oneYear:
+                return "edit_expiration_one_year"
+            case .twoYears:
+                return "edit_expiration_two_years"
+            case .fiveYears:
+                return "edit_expiration_five_years"
+            case .custom:
+                return "edit_expiration_custom_date"
+            }
+        }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text("edit_expiration_description")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
 
             // Current expiration
             if let expiresAt = key.expiresAt {
                 HStack {
                     Image(systemName: "clock.fill")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Color.moaiyInfo)
                     Text("edit_current_expiration")
                         .font(.subheadline)
                     Spacer()
@@ -145,9 +162,8 @@ struct ExpirationEditView: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 }
-                .padding()
-                .background(Color.blue.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .padding(MoaiyUI.Spacing.md)
+                .moaiyBannerStyle(tint: Color.moaiyInfo)
             }
 
             // Expiration options
@@ -159,18 +175,18 @@ struct ExpirationEditView: View {
                     Button(action: { expirationOption = option }) {
                         HStack {
                             Image(systemName: expirationOption == option ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(expirationOption == option ? Color.moaiyAccent : .secondary)
+                                .foregroundStyle(expirationOption == option ? Color.moaiyAccentV2 : Color.moaiyTextSecondary)
 
-                            Text(option.rawValue)
+                            Text(option.titleKey)
                                 .font(.subheadline)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(Color.moaiyTextPrimary)
 
                             Spacer()
 
                             if option == .custom {
                                 Text(customDate.formatted(date: .abbreviated, time: .omitted))
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.moaiyTextSecondary)
                             }
                         }
                         .padding(.vertical, 4)
@@ -210,11 +226,12 @@ struct ExpirationEditView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .tint(Color.moaiyAccentV2)
             .controlSize(.large)
             .disabled(isUpdating)
         }
-        .padding(24)
-        .alert("error_occurred", isPresented: $showError) {
+        .padding(MoaiyUI.Spacing.xxl)
+        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .keyEdit)), isPresented: $showError) {
             Button("action_ok") { }
         } message: {
             if let error = errorMessage {
@@ -250,7 +267,7 @@ struct ExpirationEditView: View {
                 passphrase = ""
                 onSuccess(String(localized: "edit_expiration_success"))
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingErrorMapper.message(for: error, context: .keyEdit)
                 showError = true
             }
             isUpdating = false
@@ -276,7 +293,7 @@ struct UserIDsEditView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text("edit_userids_description")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
 
             // Current user IDs
             VStack(alignment: .leading, spacing: 8) {
@@ -290,7 +307,7 @@ struct UserIDsEditView: View {
                             .fontWeight(.semibold)
                         Text(key.email)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
                     }
 
                     Spacer()
@@ -299,13 +316,12 @@ struct UserIDsEditView: View {
                         .font(.caption)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.moaiyAccent.opacity(0.2))
-                        .foregroundStyle(Color.moaiyAccent)
+                        .background(Color.moaiyAccentV2.opacity(0.16))
+                        .foregroundStyle(Color.moaiyAccentV2)
                         .clipShape(Capsule())
                 }
-                .padding()
-                .background(Color(nsColor: .controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .padding(MoaiyUI.Spacing.md)
+                .moaiyCardStyle(cornerRadius: MoaiyUI.Radius.md)
             }
 
             // Add new user ID
@@ -331,6 +347,7 @@ struct UserIDsEditView: View {
                     }
                 }
                 .buttonStyle(.bordered)
+                .tint(Color.moaiyAccentV2)
                 .disabled(newUserName.isEmpty || newUserEmail.isEmpty || isAdding)
             }
 
@@ -339,18 +356,17 @@ struct UserIDsEditView: View {
             // Info text
             HStack(spacing: 12) {
                 Image(systemName: "info.circle.fill")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.moaiyInfo)
 
                 Text("edit_userid_info")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
             }
-            .padding()
-            .background(Color.blue.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(MoaiyUI.Spacing.md)
+            .moaiyBannerStyle(tint: Color.moaiyInfo)
         }
-        .padding(24)
-        .alert("error_occurred", isPresented: $showError) {
+        .padding(MoaiyUI.Spacing.xxl)
+        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .keyEdit)), isPresented: $showError) {
             Button("action_ok") { }
         } message: {
             if let error = errorMessage {
@@ -375,7 +391,7 @@ struct UserIDsEditView: View {
                 passphrase = ""
                 onSuccess(String(localized: "edit_userid_success"))
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingErrorMapper.message(for: error, context: .keyEdit)
                 showError = true
             }
             isAdding = false
@@ -401,7 +417,7 @@ struct PassphraseEditView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text("edit_passphrase_description")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.moaiyTextSecondary)
 
             // Current passphrase
             VStack(alignment: .leading, spacing: 8) {
@@ -426,7 +442,7 @@ struct PassphraseEditView: View {
                 if !newPassphrase.isEmpty && newPassphrase != confirmPassphrase {
                     Text("edit_passphrase_mismatch")
                         .font(.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.moaiyError)
                 }
             }
 
@@ -444,11 +460,12 @@ struct PassphraseEditView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .tint(Color.moaiyAccentV2)
             .controlSize(.large)
             .disabled(currentPassphrase.isEmpty || newPassphrase.isEmpty || newPassphrase != confirmPassphrase || isUpdating)
         }
-        .padding(24)
-        .alert("error_occurred", isPresented: $showError) {
+        .padding(MoaiyUI.Spacing.xxl)
+        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .keyEdit)), isPresented: $showError) {
             Button("action_ok") { }
         } message: {
             if let error = errorMessage {
@@ -472,7 +489,7 @@ struct PassphraseEditView: View {
                 confirmPassphrase = ""
                 onSuccess(String(localized: "edit_passphrase_success"))
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingErrorMapper.message(for: error, context: .keyEdit)
                 showError = true
             }
             isUpdating = false

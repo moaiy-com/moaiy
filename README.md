@@ -1,8 +1,10 @@
 # Moaiy
 
-> Guard Your Secrets Like Moai
+> Protect what matters with drag and drop.
 
-Moaiy is an open-source macOS app for OpenPGP (GPG) key management and encryption workflows, designed with a native SwiftUI experience.
+Moaiy helps you protect your important information through simple, easy actions.
+
+Moaiy is an open-source macOS app for encryption and recovery workflows, designed with a native SwiftUI experience.
 
 **[中文版 (Chinese Version)](./README_CN.md)**
 
@@ -42,6 +44,23 @@ xcodebuild -project Moaiy/Moaiy.xcodeproj \
            -destination 'platform=macOS' \
            build
 ```
+
+## Package DMG
+
+Use one command to build and package a timestamped DMG:
+
+```bash
+./scripts/package_dmg.sh
+```
+
+Useful options:
+
+```bash
+./scripts/package_dmg.sh --configuration Release
+./scripts/package_dmg.sh --skip-build --open
+```
+
+This script is intended to be run in your local terminal. Running it locally avoids repeated sandbox escalation prompts in AI sessions.
 
 ## Run Tests
 
@@ -87,6 +106,10 @@ moaiy/
 - [Technical Architecture](./doc/technical-architecture.md)
 - [Xcode Integration Guide](./doc/xcode-integration-guide.md)
 - [Bundled GPG Summary](./doc/bundled-gpg-summary.md)
+- [v0.5.0 Minimal Release Checklist](./doc/v0.5.0-minimal-release-checklist.md)
+- [v0.5.0 Core Flow Validation](./doc/v0.5.0-core-flow-validation.md)
+- [v0.5.0 Release Blockers](./doc/v0.5.0-release-blockers.md)
+- [Changelog](./CHANGELOG.md)
 
 ## Localization
 

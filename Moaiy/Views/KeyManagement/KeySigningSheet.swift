@@ -20,18 +20,20 @@ struct KeySigningSheet: View {
     @State private var showError = false
     @State private var errorMessage: String?
     @State private var showSuccess = false
+    @State private var successMessageKey: LocalizedStringKey = "sign_success_message"
     
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: MoaiyUI.Spacing.xxl) {
             // Header
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("sign_key_title")
                         .font(.title2)
                         .fontWeight(.semibold)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                     Text("sign_key_subtitle")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
                 
                 Spacer()
@@ -39,7 +41,7 @@ struct KeySigningSheet: View {
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -55,21 +57,20 @@ struct KeySigningSheet: View {
                 if viewModel.secretKeys.isEmpty {
                     HStack {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Color.moaiyWarning)
                         Text("sign_no_secret_keys")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
                     }
-                    .padding()
-                    .background(Color.orange.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .padding(MoaiyUI.Spacing.md)
+                    .moaiyBannerStyle(tint: Color.moaiyWarning)
                 } else {
                     Picker("", selection: $selectedSignerKey) {
                         Text("sign_default_key").tag(nil as GPGKey?)
                         ForEach(viewModel.secretKeys) { key in
                             HStack {
                                 Text(key.name)
-                                Text("<\(key.email)>").foregroundStyle(.secondary)
+                                Text("<\(key.email)>").foregroundStyle(Color.moaiyTextSecondary)
                             }
                             .tag(key as GPGKey?)
                         }
@@ -104,15 +105,18 @@ struct KeySigningSheet: View {
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 8)
-                                .background(selectedTrustLevel == level ? Color.moaiyAccent.opacity(0.2) : Color.clear)
+                                .background(selectedTrustLevel == level ? Color.moaiyAccentV2.opacity(0.14) : Color.clear)
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .stroke(selectedTrustLevel == level ? Color.moaiyAccent : Color.secondary.opacity(0.3), lineWidth: selectedTrustLevel == level ? 2 : 1)
+                                        .stroke(
+                                            selectedTrustLevel == level ? Color.moaiyAccentV2 : Color.moaiyBorderPrimary.opacity(0.8),
+                                            lineWidth: selectedTrustLevel == level ? 2 : 1
+                                        )
                                 )
                             }
                             .buttonStyle(.plain)
-                            .foregroundStyle(selectedTrustLevel == level ? Color.moaiyAccent : .primary)
+                            .foregroundStyle(selectedTrustLevel == level ? Color.moaiyAccentV2 : Color.moaiyTextPrimary)
                         }
                     }
                 }
@@ -121,15 +125,14 @@ struct KeySigningSheet: View {
             // Info text
             HStack(spacing: 12) {
                 Image(systemName: "info.circle.fill")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.moaiyInfo)
                 
                 Text("sign_info_text")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
             }
-            .padding()
-            .background(Color.blue.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(MoaiyUI.Spacing.md)
+            .moaiyBannerStyle(tint: Color.moaiyInfo)
             
             Spacer()
             
@@ -150,11 +153,13 @@ struct KeySigningSheet: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Color.moaiyAccentV2)
                 .disabled(isSigning || viewModel.secretKeys.isEmpty)
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(24)
+        .padding(MoaiyUI.Spacing.xxl)
+        .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 500, idealWidth: 580, maxWidth: 720, minHeight: 560, idealHeight: 660)
         .onAppear {
             selectedSignerKey = viewModel.secretKeys.first
@@ -162,9 +167,9 @@ struct KeySigningSheet: View {
         .alert("sign_success_title", isPresented: $showSuccess) {
             Button("action_ok") { dismiss() }
         } message: {
-            Text("sign_success_message")
+            Text(successMessageKey)
         }
-        .alert("error_occurred", isPresented: $showError) {
+        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .sign)), isPresented: $showError) {
             Button("action_ok") { }
         } message: {
             if let error = errorMessage {
@@ -184,9 +189,10 @@ struct KeySigningSheet: View {
                     passphrase: passphrase,
                     trustLevel: setTrustAfterSigning ? selectedTrustLevel : nil
                 )
+                successMessageKey = setTrustAfterSigning ? "sign_success_message" : "sign_success_message_no_trust_update"
                 showSuccess = true
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingErrorMapper.message(for: error, context: .sign)
                 showError = true
             }
             isSigning = false
@@ -209,12 +215,12 @@ struct KeyInfoCard: View {
     let key: GPGKey
     
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: MoaiyUI.Spacing.lg) {
             Image(systemName: "key.fill")
                 .font(.title)
-                .foregroundStyle(Color.moaiyAccent)
+                .foregroundStyle(Color.moaiyAccentV2)
                 .frame(width: 48, height: 48)
-                .background(Color.moaiyAccent.opacity(0.1))
+                .background(Color.moaiyAccentV2.opacity(0.14))
                 .clipShape(Circle())
             
             VStack(alignment: .leading, spacing: 4) {
@@ -223,11 +229,11 @@ struct KeyInfoCard: View {
                 
                 Text(key.email)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
                 
                 Text(key.fingerprint.formattedFingerprint())
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.moaiyTextSecondary.opacity(0.8))
                     .lineLimit(1)
             }
             
@@ -244,21 +250,20 @@ struct KeyInfoCard: View {
                 
                 Text(key.displayKeyType)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
             }
         }
-        .padding()
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(MoaiyUI.Spacing.md)
+        .moaiyCardStyle()
     }
     
     private var trustColor: Color {
         switch key.trustLevel {
-        case .ultimate: return .green
-        case .full: return .blue
-        case .marginal: return .orange
-        case .none: return .red
-        case .unknown: return .secondary
+        case .ultimate: return Color.moaiySuccess
+        case .full: return Color.moaiyInfo
+        case .marginal: return Color.moaiyWarning
+        case .none: return Color.moaiyError
+        case .unknown: return Color.moaiyTextSecondary
         }
     }
 }

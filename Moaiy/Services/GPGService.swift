@@ -8,13 +8,29 @@
 import Foundation
 import os.log
 
+private final class PipeAccumulator {
+    private let lock = NSLock()
+    private var buffer = Data()
+
+    func append(_ data: Data) {
+        guard !data.isEmpty else { return }
+        lock.lock()
+        buffer.append(data)
+        lock.unlock()
+    }
+
+    var data: Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return buffer
+    }
+}
+
 // MARK: - GPG Process Actor
 
 /// Actor for executing GPG commands off the main thread
 actor GPGProcessExecutor {
-    
-    private let logger = Logger(subsystem: "com.moaiy.app", category: "GPGProcess")
-    
+
     /// Execute a GPG command
     func execute(
         executableURL: URL,
@@ -52,6 +68,26 @@ actor GPGProcessExecutor {
             process.standardInput = stdinPipe
         }
         
+        let stdoutAccumulator = PipeAccumulator()
+        let stderrAccumulator = PipeAccumulator()
+
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                return
+            }
+            stdoutAccumulator.append(chunk)
+        }
+        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                return
+            }
+            stderrAccumulator.append(chunk)
+        }
+
         // Execute with timeout
         try process.run()
         
@@ -70,12 +106,41 @@ actor GPGProcessExecutor {
         
         if process.isRunning {
             process.terminate()
-            throw GPGError.executionFailed("Operation timed out after \(Int(timeout)) seconds")
+
+            let terminateDeadline = Date().addingTimeInterval(1.0)
+            while process.isRunning && Date() < terminateDeadline {
+                try await Task.sleep(nanoseconds: 50_000_000)
+            }
+
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            let timeoutStderr = String(data: stderrAccumulator.data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let timeoutStdout = String(data: stdoutAccumulator.data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let timeoutMessage: String?
+            if let timeoutStderr, !timeoutStderr.isEmpty {
+                timeoutMessage = timeoutStderr
+            } else if let timeoutStdout, !timeoutStdout.isEmpty {
+                timeoutMessage = timeoutStdout
+            } else {
+                timeoutMessage = nil
+            }
+            let fallbackMessage = "Operation timed out after \(Int(timeout)) seconds"
+            throw GPGError.executionFailed(timeoutMessage?.isEmpty == false ? timeoutMessage! : fallbackMessage)
         }
-        
-        // Read output
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+
+        stdoutPipe.fileHandleForReading.readabilityHandler = nil
+        stderrPipe.fileHandleForReading.readabilityHandler = nil
+
+        // Capture any trailing bytes after readability handlers are removed.
+        let stdoutTail = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderrTail = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        stdoutAccumulator.append(stdoutTail)
+        stderrAccumulator.append(stderrTail)
+
+        let stdoutData = stdoutAccumulator.data
+        let stderrData = stderrAccumulator.data
         
         let stdout = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let stderr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -172,6 +237,7 @@ final class GPGService {
     private func setupGPG() {
         Task {
             do {
+                SecureTempStorage.cleanupStaleDirectories()
                 try findGPGExecutable()
                 logger.info("Found GPG at: \(self.gpgPath)")
                 try setupGPGHome()
@@ -297,10 +363,14 @@ final class GPGService {
         defaults.set(true, forKey: useExternalGPGHomeKey)
 
         let accessGranted = url.startAccessingSecurityScopedResource()
-        if accessGranted {
-            stopScopedExternalGPGHomeAccess()
-            scopedExternalGPGHomeURL = url
+        guard accessGranted else {
+            defaults.set(false, forKey: useExternalGPGHomeKey)
+            defaults.removeObject(forKey: externalGPGHomeBookmarkKey)
+            throw GPGError.fileAccessDenied(url.path)
         }
+
+        stopScopedExternalGPGHomeAccess()
+        scopedExternalGPGHomeURL = url
 
         gpgHome = url
         isUsingExternalGPGHome = true
@@ -445,15 +515,16 @@ final class GPGService {
         }
 
         let accessGranted = url.startAccessingSecurityScopedResource()
-        if accessGranted {
-            stopScopedExternalGPGHomeAccess()
-            scopedExternalGPGHomeURL = url
-        } else if !FileManager.default.fileExists(atPath: url.path) {
-            logger.warning("External GPG home unavailable, falling back to app-managed keyring")
+        guard accessGranted else {
+            logger.warning("External GPG home security-scope access denied, falling back to app-managed keyring")
             defaults.set(false, forKey: useExternalGPGHomeKey)
             defaults.removeObject(forKey: externalGPGHomeBookmarkKey)
+            stopScopedExternalGPGHomeAccess()
             return nil
         }
+
+        stopScopedExternalGPGHomeAccess()
+        scopedExternalGPGHomeURL = url
 
         try ensureGPGHomeDirectoryExists(at: url)
         return url
@@ -620,8 +691,18 @@ final class GPGService {
     /// - Parameter fileURL: URL of the key file
     /// - Returns: Import results
     func importKey(from fileURL: URL) async throws -> KeyImportResult {
+        try await ensureGPGAgentRunningIfNeeded()
+
         let result = try await executeGPG(
-            arguments: ["--import", "--status-fd", "1", fileURL.path]
+            arguments: [
+                "--batch",
+                "--yes",
+                "--pinentry-mode", "loopback",
+                "--passphrase", "",
+                "--import",
+                "--status-fd", "1",
+                fileURL.path
+            ]
         )
         try ensureSuccess(result, as: GPGError.importFailed)
         
@@ -640,6 +721,7 @@ final class GPGService {
     func importFromKeyserver(query: String, keyserver: String = "keys.openpgp.org") async throws -> KeyImportResult {
         let queryKind = try parseKeyserverImportQuery(query)
         let beforeFingerprints = Set(try await listKeys(secretOnly: false).map(\.fingerprint))
+        let resolvedKeyserver = normalizedGPGKeyserver(keyserver)
 
         let arguments: [String]
         switch queryKind {
@@ -647,7 +729,7 @@ final class GPGService {
             arguments = [
                 "--batch",
                 "--yes",
-                "--keyserver", keyserver,
+                "--keyserver", resolvedKeyserver,
                 "--status-fd", "1",
                 "--recv-keys",
                 value
@@ -657,7 +739,7 @@ final class GPGService {
                 "--batch",
                 "--yes",
                 "--status-fd", "1",
-                "--keyserver", keyserver,
+                "--keyserver", resolvedKeyserver,
                 "--auto-key-locate", "keyserver",
                 "--locate-keys",
                 value
@@ -775,13 +857,17 @@ final class GPGService {
         try await ensureGPGAgentRunningIfNeeded()
 
         let expiration = formatExpirationDate(expiresAt)
-        var arguments = ["--batch", "--yes", "--quick-set-expire", keyID, expiration]
-        var input: String?
-
-        if let passphrase, !passphrase.isEmpty {
-            arguments.insert(contentsOf: ["--pinentry-mode", "loopback", "--passphrase-fd", "0"], at: 0)
-            input = passphrase + "\n"
-        }
+        let arguments = [
+            "--batch",
+            "--yes",
+            "--no-tty",
+            "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0",
+            "--quick-set-expire",
+            keyID,
+            expiration
+        ]
+        let input = (passphrase ?? "") + "\n"
 
         let result = try await executeGPG(arguments: arguments, input: input)
         if result.exitCode != 0 {
@@ -809,13 +895,17 @@ final class GPGService {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let userID = "\(sanitizedName) <\(sanitizedEmail)>"
 
-        var arguments = ["--batch", "--yes", "--quick-add-uid", keyID, userID]
-        var input: String?
-
-        if let passphrase, !passphrase.isEmpty {
-            arguments.insert(contentsOf: ["--pinentry-mode", "loopback", "--passphrase-fd", "0"], at: 0)
-            input = passphrase + "\n"
-        }
+        let arguments = [
+            "--batch",
+            "--yes",
+            "--no-tty",
+            "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0",
+            "--quick-add-uid",
+            keyID,
+            userID
+        ]
+        let input = (passphrase ?? "") + "\n"
 
         let result = try await executeGPG(arguments: arguments, input: input)
         if result.exitCode != 0 {
@@ -863,22 +953,41 @@ final class GPGService {
     ///   - keyID: Key ID or fingerprint to ///   - keyserver: Keyserver URL (default: keys.openpgp.org)
     /// - Throws: GPGError if upload fails
     func uploadToKeyserver(keyID: String, keyserver: String = "keys.openpgp.org") async throws {
+        let normalizedKeyID = normalizeKeyReference(keyID) ??
+            keyID.replacingOccurrences(of: " ", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedKeyserver = normalizedGPGKeyserver(keyserver)
         let arguments = [
             "--send-keys",
-            "--keyserver", keyserver,
+            "--keyserver", resolvedKeyserver,
             "--batch",
             "--yes",
-            keyID
+            normalizedKeyID
         ]
         
         let result = try await executeGPG(
             arguments: arguments,
             timeout: 60.0  // 60 second timeout for network operations
         )
-        
-        guard result.exitCode == 0 else {
-            let errorMsg = result.stderr ?? "Upload failed with exit code \(result.exitCode)"
-            throw GPGError.keyserverUploadFailed(errorMsg)
+
+        if result.exitCode == 0 {
+            return
+        }
+
+        let gpgErrorMessage = result.stderr ?? result.stdout ?? "Upload failed with exit code \(result.exitCode)"
+
+        // Fallback path for bundled builds where keyserver helpers (like dirmngr) are unavailable.
+        do {
+            let armoredKeyData = try await exportPublicKey(keyID: normalizedKeyID, armor: true)
+            guard let armoredKey = String(data: armoredKeyData, encoding: .utf8), !armoredKey.isEmpty else {
+                throw GPGError.exportFailed("No key data exported")
+            }
+
+            try await uploadPublicKeyDirectly(armoredKey: armoredKey, keyserver: keyserver)
+            return
+        } catch {
+            let fallbackMessage = error.localizedDescription
+            throw GPGError.keyserverUploadFailed("\(gpgErrorMessage)\n\(fallbackMessage)")
         }
     }
     
@@ -888,9 +997,10 @@ final class GPGService {
     ///   - keyserver: Keyserver URL (default: keys.openpgp.org)
     /// - Returns: True if key was found
     func searchKeyserver(keyID: String, keyserver: String = "keys.openpgp.org") async throws -> Bool {
+        let resolvedKeyserver = normalizedGPGKeyserver(keyserver)
         let arguments = [
             "--search-keys",
-            "--keyserver", keyserver,
+            "--keyserver", resolvedKeyserver,
             keyID
         ]
         
@@ -916,7 +1026,13 @@ final class GPGService {
     ///   - signingKey: Key ID to sign with (required if sign is true)
     /// - Returns: Encrypted text
     func encrypt(text: String, recipients: [String], sign: Bool = false, signingKey: String? = nil) async throws -> String {
-        var arguments = ["--encrypt", "--armor", "--batch", "--trust-model", "always"]
+        var arguments = [
+            "--encrypt",
+            "--armor",
+            "--batch",
+            "--trust-model", "always",
+            "--cipher-algo", Constants.GPG.defaultCipherAlgorithm
+        ]
         
         // Add recipients
         for recipient in recipients {
@@ -978,21 +1094,24 @@ final class GPGService {
     ///   - destinationURL: Destination file URL
     ///   - recipients: Array of key IDs to encrypt for
     ///   - armor: If true, output ASCII armor format
-    func encryptFile(sourceURL: URL, destinationURL: URL, recipients: [String], armor: Bool = false) async throws {
+    func encryptFile(sourceURL: URL, destinationURL: URL, recipients: [String], armor: Bool = false) async throws -> URL {
         let fileManager = FileManager.default
-        let stagingDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("moaiy-gpg-file-op-\(UUID().uuidString)", isDirectory: true)
+        let stagingDirectory = try secureOperationDirectory(prefix: "file-op")
         let stagedSourceURL = stagingDirectory.appendingPathComponent("input")
         let stagedOutputURL = stagingDirectory.appendingPathComponent("output")
-
-        try fileManager.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
         defer {
             try? fileManager.removeItem(at: stagingDirectory)
         }
 
         try fileManager.copyItem(at: sourceURL, to: stagedSourceURL)
 
-        var arguments = ["--encrypt", "--batch", "--yes", "--trust-model", "always"]
+        var arguments = [
+            "--encrypt",
+            "--batch",
+            "--yes",
+            "--trust-model", "always",
+            "--cipher-algo", Constants.GPG.defaultCipherAlgorithm
+        ]
         
         // Add recipients
         for recipient in recipients {
@@ -1014,10 +1133,9 @@ final class GPGService {
             throw GPGError.encryptionFailed("No output generated")
         }
 
-        if fileManager.fileExists(atPath: destinationURL.path) {
-            try fileManager.removeItem(at: destinationURL)
-        }
-        try fileManager.copyItem(at: stagedOutputURL, to: destinationURL)
+        let resolvedDestinationURL = makeNonConflictingDestinationURL(for: destinationURL)
+        try fileManager.copyItem(at: stagedOutputURL, to: resolvedDestinationURL)
+        return resolvedDestinationURL
     }
     
     /// Decrypt a file
@@ -1025,16 +1143,13 @@ final class GPGService {
     ///   - sourceURL: Source file URL
     ///   - destinationURL: Destination file URL
     ///   - passphrase: Passphrase for the private key
-    func decryptFile(sourceURL: URL, destinationURL: URL, passphrase: String) async throws {
+    func decryptFile(sourceURL: URL, destinationURL: URL, passphrase: String) async throws -> URL {
         try await ensureGPGAgentRunningIfNeeded()
 
         let fileManager = FileManager.default
-        let stagingDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("moaiy-gpg-file-op-\(UUID().uuidString)", isDirectory: true)
+        let stagingDirectory = try secureOperationDirectory(prefix: "file-op")
         let stagedSourceURL = stagingDirectory.appendingPathComponent("input")
         let stagedOutputURL = stagingDirectory.appendingPathComponent("output")
-
-        try fileManager.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
         defer {
             try? fileManager.removeItem(at: stagingDirectory)
         }
@@ -1062,10 +1177,62 @@ final class GPGService {
             throw GPGError.decryptionFailed("No output generated")
         }
 
-        if fileManager.fileExists(atPath: destinationURL.path) {
-            try fileManager.removeItem(at: destinationURL)
+        let resolvedDestinationURL = makeNonConflictingDestinationURL(for: destinationURL)
+        try fileManager.copyItem(at: stagedOutputURL, to: resolvedDestinationURL)
+        return resolvedDestinationURL
+    }
+
+    /// Create a detached signature for a file.
+    /// - Parameters:
+    ///   - sourceURL: Source file URL
+    ///   - destinationURL: Destination signature URL
+    ///   - keyID: Signing key fingerprint or key ID
+    ///   - passphrase: Passphrase for the signing key
+    /// - Returns: Final signature URL
+    func signFileDetached(
+        sourceURL: URL,
+        destinationURL: URL,
+        keyID: String,
+        passphrase: String
+    ) async throws -> URL {
+        try await ensureGPGAgentRunningIfNeeded()
+
+        let fileManager = FileManager.default
+        let stagingDirectory = try secureOperationDirectory(prefix: "file-sign")
+        let stagedSourceURL = stagingDirectory.appendingPathComponent("input")
+        let stagedOutputURL = stagingDirectory.appendingPathComponent("output.sig")
+        defer {
+            try? fileManager.removeItem(at: stagingDirectory)
         }
-        try fileManager.copyItem(at: stagedOutputURL, to: destinationURL)
+
+        try fileManager.copyItem(at: sourceURL, to: stagedSourceURL)
+
+        let result = try await executeGPG(
+            arguments: [
+                "--detach-sign",
+                "--batch",
+                "--yes",
+                "--no-tty",
+                "--pinentry-mode", "loopback",
+                "--passphrase-fd", "0",
+                "--local-user", keyID,
+                "--output", stagedOutputURL.path,
+                stagedSourceURL.path
+            ],
+            input: passphrase + "\n"
+        )
+
+        if result.exitCode != 0 {
+            throw GPGError.executionFailed(result.stderr ?? "Detached signing failed")
+        }
+
+        guard fileManager.fileExists(atPath: stagedOutputURL.path) else {
+            throw GPGError.executionFailed("No detached signature generated")
+        }
+
+        let resolvedDestinationURL = makeNonConflictingDestinationURL(for: destinationURL)
+        try fileManager.copyItem(at: stagedOutputURL, to: resolvedDestinationURL)
+        return resolvedDestinationURL
     }
 
     /// Verify if a file is a valid GPG file
@@ -1074,9 +1241,16 @@ final class GPGService {
     /// - Returns: True if file is a valid GPG file
     func verifyGPGFile(at fileURL: URL) async -> Bool {
         let fileManager = FileManager.default
-        let stagingDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("moaiy-gpg-verify-\(UUID().uuidString)", isDirectory: true)
-        let stagedInputURL = stagingDirectory.appendingPathComponent("input")
+        let stagedInputURL: URL
+        let stagingDirectory: URL
+
+        do {
+            stagingDirectory = try secureOperationDirectory(prefix: "verify")
+            stagedInputURL = stagingDirectory.appendingPathComponent("input")
+        } catch {
+            logger.debug("verifyGPGFile cannot create secure temp dir: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
 
         let accessGranted = fileURL.startAccessingSecurityScopedResource()
         defer {
@@ -1087,7 +1261,6 @@ final class GPGService {
         }
 
         do {
-            try fileManager.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
             try fileManager.copyItem(at: fileURL, to: stagedInputURL)
 
             let result = try await executeGPG(
@@ -1145,6 +1318,163 @@ final class GPGService {
         }
         
         return parseVerificationResult(output)
+    }
+
+    /// Verify a signed file or detached signature.
+    /// For detached signatures, this method auto-resolves the counterpart file:
+    /// - selecting `file` tries `file.sig` then `file.asc`
+    /// - selecting `file.sig` / `file.asc` tries `file`
+    /// - Parameter fileURL: Signed file URL or detached signature URL
+    /// - Returns: Verification result
+    func verifySignatureFile(at fileURL: URL) async throws -> VerificationResult {
+        let fileManager = FileManager.default
+        let fileExtension = fileURL.pathExtension.lowercased()
+
+        // Case 1: user selected a detached signature file (*.sig / *.asc)
+        if fileExtension == "sig" || fileExtension == "asc" {
+            let signedFileURL = fileURL.deletingPathExtension()
+            guard fileManager.fileExists(atPath: signedFileURL.path) else {
+                throw GPGError.executionFailed(String(localized: "verify_signature_error_missing_original"))
+            }
+            return try await verifyDetachedSignatureFile(
+                signatureURL: fileURL,
+                signedFileURL: signedFileURL
+            )
+        }
+
+        // Case 2: user selected the original file, and a sibling detached signature exists.
+        for signatureExtension in ["sig", "asc"] {
+            let siblingSignatureURL = fileURL.appendingPathExtension(signatureExtension)
+            if fileManager.fileExists(atPath: siblingSignatureURL.path) {
+                return try await verifyDetachedSignatureFile(
+                    signatureURL: siblingSignatureURL,
+                    signedFileURL: fileURL
+                )
+            }
+        }
+
+        // Case 3: inline/clearsigned content.
+        return try await verifyInlineSignedFile(fileURL: fileURL)
+    }
+
+    private func verifyInlineSignedFile(fileURL: URL) async throws -> VerificationResult {
+        let fileManager = FileManager.default
+        let stagingDirectory = try secureOperationDirectory(prefix: "verify-inline")
+        let stagedInputURL = stagingDirectory.appendingPathComponent("input")
+        defer {
+            try? fileManager.removeItem(at: stagingDirectory)
+        }
+
+        let accessGranted = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if accessGranted {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        try fileManager.copyItem(at: fileURL, to: stagedInputURL)
+
+        let result = try await executeGPG(
+            arguments: ["--verify", "--status-fd", "1", stagedInputURL.path]
+        )
+
+        let statusOutput = [result.stdout, result.stderr]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+        let verificationResult = parseVerificationResult(statusOutput)
+
+        guard result.exitCode == 0, verificationResult.isValid else {
+            let stderr = result.stderr?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let failureMessage = friendlyVerificationFailureMessage(
+                statusOutput: statusOutput,
+                stderr: stderr
+            )
+            throw GPGError.executionFailed(failureMessage)
+        }
+
+        return verificationResult
+    }
+
+    private func verifyDetachedSignatureFile(
+        signatureURL: URL,
+        signedFileURL: URL
+    ) async throws -> VerificationResult {
+        let fileManager = FileManager.default
+        let stagingDirectory = try secureOperationDirectory(prefix: "verify-detached")
+        let stagedSignatureURL = stagingDirectory.appendingPathComponent("signature.sig")
+        let stagedSignedFileURL = stagingDirectory.appendingPathComponent("signed")
+        defer {
+            try? fileManager.removeItem(at: stagingDirectory)
+        }
+
+        let signatureAccessGranted = signatureURL.startAccessingSecurityScopedResource()
+        let signedFileAccessGranted = signedFileURL.startAccessingSecurityScopedResource()
+        defer {
+            if signatureAccessGranted {
+                signatureURL.stopAccessingSecurityScopedResource()
+            }
+            if signedFileAccessGranted {
+                signedFileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        try fileManager.copyItem(at: signatureURL, to: stagedSignatureURL)
+        try fileManager.copyItem(at: signedFileURL, to: stagedSignedFileURL)
+
+        let result = try await executeGPG(
+            arguments: [
+                "--verify",
+                "--status-fd", "1",
+                stagedSignatureURL.path,
+                stagedSignedFileURL.path
+            ]
+        )
+
+        let statusOutput = [result.stdout, result.stderr]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+        let verificationResult = parseVerificationResult(statusOutput)
+
+        guard result.exitCode == 0, verificationResult.isValid else {
+            let stderr = result.stderr?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let failureMessage = friendlyVerificationFailureMessage(
+                statusOutput: statusOutput,
+                stderr: stderr
+            )
+            throw GPGError.executionFailed(failureMessage)
+        }
+
+        return verificationResult
+    }
+
+    private func friendlyVerificationFailureMessage(statusOutput: String, stderr: String?) -> String {
+        let combinedOutput = [statusOutput, stderr ?? ""]
+            .joined(separator: "\n")
+            .lowercased()
+
+        if combinedOutput.contains("badsig")
+            || combinedOutput.contains("errsig")
+            || combinedOutput.contains("bad signature") {
+            return String(localized: "verify_signature_error_bad_signature")
+        }
+        if combinedOutput.contains("we couldn't verify this signature")
+            || combinedOutput.contains("please check the selected files and try again") {
+            return String(localized: "verify_signature_error_bad_signature")
+        }
+        if combinedOutput.contains("no_pubkey") || combinedOutput.contains("no public key") {
+            return String(localized: "verify_signature_error_missing_public_key")
+        }
+        if combinedOutput.contains("nodata")
+            || combinedOutput.contains("no signature found")
+            || combinedOutput.contains("no valid openpgp data found") {
+            return String(localized: "verify_signature_error_no_signature")
+        }
+        if combinedOutput.contains("can't open signed data")
+            || combinedOutput.contains("no such file or directory")
+            || combinedOutput.contains("should be the first file") {
+            return String(localized: "verify_signature_error_missing_original")
+        }
+        return String(localized: "verify_signature_error_bad_signature")
     }
     
     // MARK: - Trust Management
@@ -1330,6 +1660,37 @@ final class GPGService {
         }
     }
 
+    private func secureOperationDirectory(prefix: String) throws -> URL {
+        SecureTempStorage.cleanupStaleDirectories()
+        return try SecureTempStorage.makeOperationDirectory(prefix: prefix)
+    }
+
+    private func makeNonConflictingDestinationURL(for url: URL) -> URL {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: url.path) else { return url }
+
+        let ext = url.pathExtension
+        let baseName = ext.isEmpty
+            ? url.lastPathComponent
+            : String(url.lastPathComponent.dropLast(ext.count + 1))
+        let directory = url.deletingLastPathComponent()
+
+        var index = 1
+        while true {
+            let candidateName: String
+            if ext.isEmpty {
+                candidateName = "\(baseName) (\(index))"
+            } else {
+                candidateName = "\(baseName) (\(index)).\(ext)"
+            }
+            let candidateURL = directory.appendingPathComponent(candidateName)
+            if !fileManager.fileExists(atPath: candidateURL.path) {
+                return candidateURL
+            }
+            index += 1
+        }
+    }
+
     private func listKeys(at homeURL: URL, secretOnly: Bool) async throws -> [GPGKey] {
         let arguments = secretOnly
             ? ["--list-secret-keys", "--with-colons", "--fixed-list-mode"]
@@ -1353,9 +1714,7 @@ final class GPGService {
     }
 
     private func importArmorData(_ data: Data, fileName: String) async throws -> KeyImportResult {
-        let tempRoot = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("moaiy-migration-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        let tempRoot = try secureOperationDirectory(prefix: "migration")
         defer {
             try? FileManager.default.removeItem(at: tempRoot)
         }
@@ -1363,8 +1722,18 @@ final class GPGService {
         let armorFileURL = tempRoot.appendingPathComponent(fileName)
         try data.write(to: armorFileURL, options: .atomic)
 
+        try await ensureGPGAgentRunningIfNeeded()
+
         let result = try await executeGPG(
-            arguments: ["--import", "--status-fd", "1", armorFileURL.path]
+            arguments: [
+                "--batch",
+                "--yes",
+                "--pinentry-mode", "loopback",
+                "--passphrase", "",
+                "--import",
+                "--status-fd", "1",
+                armorFileURL.path
+            ]
         )
         try ensureSuccess(result, as: GPGError.importFailed)
 
@@ -1388,7 +1757,11 @@ final class GPGService {
         let stderr = result.stderr ?? ""
         let stdout = result.stdout ?? ""
         let combined = "\(stderr)\n\(stdout)".lowercased()
-        return combined.contains("bad passphrase") || combined.contains("bad_passphrase")
+        return combined.contains("bad passphrase")
+            || combined.contains("bad_passphrase")
+            || combined.contains("invalid passphrase")
+            || combined.contains("wrong passphrase")
+            || combined.contains("no passphrase given")
     }
 
     private enum KeyserverImportQueryKind {
@@ -1472,11 +1845,124 @@ final class GPGService {
 
         return nil
     }
+
+    private func normalizedGPGKeyserver(_ keyserver: String) -> String {
+        let trimmed = keyserver.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return "hkps://keys.openpgp.org"
+        }
+        if trimmed.contains("://") {
+            return trimmed
+        }
+        guard let host = normalizedKeyserverHost(trimmed) else {
+            return trimmed
+        }
+        if host == "pgp.mit.edu" {
+            return "hkp://\(host)"
+        }
+        return "hkps://\(host)"
+    }
+
+    private func normalizedKeyserverHost(_ keyserver: String) -> String? {
+        let trimmed = keyserver.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let url = URL(string: trimmed), let host = url.host {
+            return host.lowercased()
+        }
+
+        let withoutScheme = trimmed.replacingOccurrences(
+            of: #"^[a-zA-Z][a-zA-Z0-9+\-.]*://"#,
+            with: "",
+            options: .regularExpression
+        )
+        guard let hostPart = withoutScheme.split(separator: "/").first else {
+            return nil
+        }
+        return hostPart.split(separator: ":").first.map { String($0).lowercased() }
+    }
+
+    private func uploadPublicKeyDirectly(armoredKey: String, keyserver: String) async throws {
+        guard let host = normalizedKeyserverHost(keyserver) else {
+            throw GPGError.keyserverUploadFailed("Invalid keyserver")
+        }
+
+        if host == "keys.openpgp.org" {
+            try await uploadToOpenPGPServer(armoredKey: armoredKey)
+            return
+        }
+
+        var lastError: String?
+        for endpoint in hkpUploadEndpoints(forHost: host) {
+            do {
+                try await uploadToHKPEndpoint(armoredKey: armoredKey, endpoint: endpoint)
+                return
+            } catch {
+                lastError = error.localizedDescription
+            }
+        }
+
+        throw GPGError.keyserverUploadFailed(lastError ?? "Direct keyserver upload failed")
+    }
+
+    private func uploadToOpenPGPServer(armoredKey: String) async throws {
+        guard let url = URL(string: "https://keys.openpgp.org/vks/v1/upload") else {
+            throw GPGError.keyserverUploadFailed("Invalid OpenPGP server URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue("application/pgp-keys", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data(armoredKey.utf8)
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw GPGError.keyserverUploadFailed("OpenPGP server rejected upload (\(statusCode))")
+        }
+    }
+
+    private func hkpUploadEndpoints(forHost host: String) -> [URL] {
+        let candidates = [
+            "https://\(host)/pks/add",
+            "http://\(host)/pks/add",
+            "http://\(host):11371/pks/add"
+        ]
+        return candidates.compactMap(URL.init(string:))
+    }
+
+    private func uploadToHKPEndpoint(armoredKey: String, endpoint: URL) async throws {
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data("keytext=\(formURLEncode(armoredKey))".utf8)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let bodyPreview = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .prefix(160) ?? ""
+            throw GPGError.keyserverUploadFailed("HKP upload failed (\(statusCode)): \(bodyPreview)")
+        }
+    }
+
+    private func formURLEncode(_ value: String) -> String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._* ")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed)?
+            .replacingOccurrences(of: " ", with: "+") ?? value
+    }
     
     /// Parse key list output
     private func parseKeyList(_ output: String, secretOnly: Bool) -> [GPGKey] {
         var keys: [GPGKey] = []
         var currentKey: GPGKeyBuilder?
+        var isAwaitingPrimaryFingerprint = false
         
         for line in output.components(separatedBy: "\n") {
             let fields = line.components(separatedBy: ":")
@@ -1492,14 +1978,16 @@ final class GPGService {
                     keys.append(key)
                 }
                 currentKey = GPGKeyBuilder()
-                currentKey?.isSecret = secretOnly
+                currentKey?.isSecret = (recordType == "sec") || secretOnly
+                isAwaitingPrimaryFingerprint = true
                 if fields.count >= 10 {
                     currentKey?.keyID = fields[4]
                     currentKey?.createdAt = parseTimestamp(fields[5])
                     currentKey?.expiresAt = parseTimestamp(fields[6])
                     currentKey?.algorithm = fields[3]
                     currentKey?.keyLength = Int(fields[2]) ?? 0
-                    currentKey?.fingerprint = fields[4] // Will be overwritten by fpr record
+                    // Fallback to key ID if no primary `fpr` record is present.
+                    currentKey?.fingerprint = fields[4]
                     // Field 8 is ownertrust for pub records
                     if fields.count >= 9 {
                         currentKey?.trustLevel = TrustLevel(gpgCode: fields[8]) ?? .unknown
@@ -1507,9 +1995,13 @@ final class GPGService {
                 }
                 
             case "fpr":
-                if fields.count >= 10 {
+                if isAwaitingPrimaryFingerprint, fields.count >= 10 {
                     currentKey?.fingerprint = fields[9]
+                    isAwaitingPrimaryFingerprint = false
                 }
+            case "sub", "ssb":
+                // Ignore subkey fingerprints for key-level operations (edit uid/expiry).
+                isAwaitingPrimaryFingerprint = false
                 
             case "uid":
                 if fields.count >= 10 {
@@ -1547,6 +2039,14 @@ final class GPGService {
         guard let timestamp = Double(string), timestamp > 0 else { return nil }
         return Date(timeIntervalSince1970: timestamp)
     }
+
+    /// Remove control/newline characters before embedding user input in GPG batch payloads.
+    private func sanitizeBatchField(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
     
     /// Build key generation parameters
     private func buildKeyGenerationParams(
@@ -1555,6 +2055,9 @@ final class GPGService {
         keyType: KeyType,
         passphrase: String?
     ) -> String {
+        let sanitizedName = sanitizeBatchField(name)
+        let sanitizedEmail = sanitizeBatchField(email)
+
         // GPG batch mode handles spaces in Name-Real correctly when passed via stdin
         // No need to escape the name
         var params: String
@@ -1570,8 +2073,8 @@ final class GPGService {
             Subkey-Type: RSA
             Subkey-Length: \(keyType.subkeyLength)
             Subkey-Usage: encrypt
-            Name-Real: \(name)
-            Name-Email: \(email)
+            Name-Real: \(sanitizedName)
+            Name-Email: \(sanitizedEmail)
             Expire-Date: 0
 
             """
@@ -1586,8 +2089,8 @@ final class GPGService {
             Subkey-Type: ecdh
             Subkey-Curve: cv25519
             Subkey-Usage: encrypt
-            Name-Real: \(name)
-            Name-Email: \(email)
+            Name-Real: \(sanitizedName)
+            Name-Email: \(sanitizedEmail)
             Expire-Date: 0
 
             """
@@ -1619,9 +2122,15 @@ final class GPGService {
             }
             if line.contains("IMPORT_RES") {
                 let parts = line.components(separatedBy: " ")
-                if parts.count >= 3 {
-                    imported = Int(parts[1]) ?? 0
-                    unchanged = Int(parts[2]) ?? 0
+                if parts.count >= 7 {
+                    // GnuPG status format:
+                    // [GNUPG:] IMPORT_RES <count> <no_user_id> <imported> <imported_rsa> <unchanged> ...
+                    imported = Int(parts[4]) ?? 0
+                    unchanged = Int(parts[6]) ?? 0
+                } else if parts.count >= 4 {
+                    // Fallback for shortened/stubbed test-like output.
+                    imported = Int(parts[2]) ?? 0
+                    unchanged = Int(parts[3]) ?? 0
                 }
             }
         }

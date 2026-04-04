@@ -37,9 +37,7 @@ actor GPGFileTypeDetector {
     ]
 
     /// Filename extensions that are conventionally used for encrypted OpenPGP payloads.
-    private static let encryptedExtensions: Set<String> = [
-        "gpg", "pgp", "gpg2", "pgp2"
-    ]
+    private static let encryptedExtensions = Constants.File.encryptedExtensions
     
     // MARK: - OpenPGP Packet Tags
     
@@ -83,13 +81,15 @@ actor GPGFileTypeDetector {
                 return .encrypted
             }
 
-            // For key files, verify with GPG for accuracy.
+            // For key/signature files, verify with GPG for accuracy.
+            // This prevents false-positive signature detection on arbitrary
+            // binary files whose first byte happens to look like an OpenPGP packet tag.
             switch quickResult {
-            case .publicKey, .privateKey:
+            case .publicKey, .privateKey, .signature:
                 let verified = await verifyWithGPG(url: url)
                 logger.debug("GPG verification result: \(verified)")
                 return verified ? quickResult : .notGPG
-            case .signature, .notGPG, .unknown, .encrypted:
+            case .notGPG, .unknown, .encrypted:
                 return quickResult
             }
         }

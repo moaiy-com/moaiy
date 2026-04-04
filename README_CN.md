@@ -1,8 +1,10 @@
 # Moaiy
 
-> 像摩艾一样守护您的秘密
+> 通过拖放，保护你最重要的信息。
 
-Moaiy 是一个开源的 macOS 原生应用，专注于 OpenPGP（GPG）密钥管理与加解密工作流，使用 SwiftUI 构建。
+Moaiy 帮你通过简单、易操作的步骤保护重要信息。
+
+Moaiy 是一个开源的 macOS 原生应用，专注于信息保护与恢复工作流，使用 SwiftUI 构建。
 
 **[English Version](./README.md)**
 
@@ -42,6 +44,23 @@ xcodebuild -project Moaiy/Moaiy.xcodeproj \
            -destination 'platform=macOS' \
            build
 ```
+
+## DMG 打包
+
+使用一条命令完成构建并生成带时间戳的 DMG：
+
+```bash
+./scripts/package_dmg.sh
+```
+
+常用参数：
+
+```bash
+./scripts/package_dmg.sh --configuration Release
+./scripts/package_dmg.sh --skip-build --open
+```
+
+建议在你本机终端直接执行该脚本，这样可以避免在 AI 会话里反复触发沙盒提权。
 
 ## 运行测试
 
