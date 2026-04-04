@@ -847,13 +847,17 @@ final class GPGService {
         try await ensureGPGAgentRunningIfNeeded()
 
         let expiration = formatExpirationDate(expiresAt)
-        var arguments = ["--batch", "--yes", "--quick-set-expire", keyID, expiration]
-        var input: String?
-
-        if let passphrase, !passphrase.isEmpty {
-            arguments.insert(contentsOf: ["--pinentry-mode", "loopback", "--passphrase-fd", "0"], at: 0)
-            input = passphrase + "\n"
-        }
+        let arguments = [
+            "--batch",
+            "--yes",
+            "--no-tty",
+            "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0",
+            "--quick-set-expire",
+            keyID,
+            expiration
+        ]
+        let input = (passphrase ?? "") + "\n"
 
         let result = try await executeGPG(arguments: arguments, input: input)
         if result.exitCode != 0 {
@@ -881,13 +885,17 @@ final class GPGService {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let userID = "\(sanitizedName) <\(sanitizedEmail)>"
 
-        var arguments = ["--batch", "--yes", "--quick-add-uid", keyID, userID]
-        var input: String?
-
-        if let passphrase, !passphrase.isEmpty {
-            arguments.insert(contentsOf: ["--pinentry-mode", "loopback", "--passphrase-fd", "0"], at: 0)
-            input = passphrase + "\n"
-        }
+        let arguments = [
+            "--batch",
+            "--yes",
+            "--no-tty",
+            "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0",
+            "--quick-add-uid",
+            keyID,
+            userID
+        ]
+        let input = (passphrase ?? "") + "\n"
 
         let result = try await executeGPG(arguments: arguments, input: input)
         if result.exitCode != 0 {
@@ -1729,7 +1737,11 @@ final class GPGService {
         let stderr = result.stderr ?? ""
         let stdout = result.stdout ?? ""
         let combined = "\(stderr)\n\(stdout)".lowercased()
-        return combined.contains("bad passphrase") || combined.contains("bad_passphrase")
+        return combined.contains("bad passphrase")
+            || combined.contains("bad_passphrase")
+            || combined.contains("invalid passphrase")
+            || combined.contains("wrong passphrase")
+            || combined.contains("no passphrase given")
     }
 
     private enum KeyserverImportQueryKind {
@@ -1930,6 +1942,7 @@ final class GPGService {
     private func parseKeyList(_ output: String, secretOnly: Bool) -> [GPGKey] {
         var keys: [GPGKey] = []
         var currentKey: GPGKeyBuilder?
+        var isAwaitingPrimaryFingerprint = false
         
         for line in output.components(separatedBy: "\n") {
             let fields = line.components(separatedBy: ":")
@@ -1945,14 +1958,16 @@ final class GPGService {
                     keys.append(key)
                 }
                 currentKey = GPGKeyBuilder()
-                currentKey?.isSecret = secretOnly
+                currentKey?.isSecret = (recordType == "sec") || secretOnly
+                isAwaitingPrimaryFingerprint = true
                 if fields.count >= 10 {
                     currentKey?.keyID = fields[4]
                     currentKey?.createdAt = parseTimestamp(fields[5])
                     currentKey?.expiresAt = parseTimestamp(fields[6])
                     currentKey?.algorithm = fields[3]
                     currentKey?.keyLength = Int(fields[2]) ?? 0
-                    currentKey?.fingerprint = fields[4] // Will be overwritten by fpr record
+                    // Fallback to key ID if no primary `fpr` record is present.
+                    currentKey?.fingerprint = fields[4]
                     // Field 8 is ownertrust for pub records
                     if fields.count >= 9 {
                         currentKey?.trustLevel = TrustLevel(gpgCode: fields[8]) ?? .unknown
@@ -1960,9 +1975,13 @@ final class GPGService {
                 }
                 
             case "fpr":
-                if fields.count >= 10 {
+                if isAwaitingPrimaryFingerprint, fields.count >= 10 {
                     currentKey?.fingerprint = fields[9]
+                    isAwaitingPrimaryFingerprint = false
                 }
+            case "sub", "ssb":
+                // Ignore subkey fingerprints for key-level operations (edit uid/expiry).
+                isAwaitingPrimaryFingerprint = false
                 
             case "uid":
                 if fields.count >= 10 {

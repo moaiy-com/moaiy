@@ -202,7 +202,8 @@ enum UserFacingErrorMapper {
         }
         if lowercasedMessage.contains("bad passphrase")
             || lowercasedMessage.contains("invalid passphrase")
-            || lowercasedMessage.contains("wrong passphrase") {
+            || lowercasedMessage.contains("wrong passphrase")
+            || lowercasedMessage.contains("no passphrase given") {
             return String(localized: "error_invalid_passphrase")
         }
         if lowercasedMessage.contains("permission denied")

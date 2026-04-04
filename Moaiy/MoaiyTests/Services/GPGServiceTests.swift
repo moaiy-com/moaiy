@@ -137,6 +137,23 @@ struct GPGServiceTests {
         // The exact behavior depends on the helper implementation
         #expect(keys.count >= 0, "Parsing should complete without error")
     }
+
+    @Test("parseKeyList keeps primary fingerprint when subkeys exist")
+    func parseKeyList_keepsPrimaryFingerprintWhenSubkeysExist() {
+        let output = """
+        sec:u:4096:1:AAAABBBBCCCCDDDD:1609459200::::u:::scESC:
+        fpr:::::::::1111222233334444555566667777888899990000:
+        uid:u::::1609459200::::::Primary User <primary@example.com>:
+        ssb:u:4096:1:DDDDEEEEFFFF0000:1609459200:::::::e:
+        fpr:::::::::9999000088887777666655554444333322221111:
+        """
+
+        let keys = parseKeyListOutput(output, secretOnly: true)
+
+        #expect(keys.count == 1)
+        #expect(keys.first?.fingerprint == "1111222233334444555566667777888899990000")
+        #expect(keys.first?.keyID == "AAAABBBBCCCCDDDD")
+    }
     
     // MARK: - Import Result Parsing Tests
     
@@ -326,6 +343,7 @@ struct GPGServiceTests {
 private func parseKeyListOutput(_ output: String, secretOnly: Bool) -> [GPGKey] {
     var keys: [GPGKey] = []
     var currentKey: GPGKeyBuilder?
+    var isAwaitingPrimaryFingerprint = false
     
     for line in output.components(separatedBy: "\n") {
         let fields = line.components(separatedBy: ":")
@@ -340,7 +358,8 @@ private func parseKeyListOutput(_ output: String, secretOnly: Bool) -> [GPGKey] 
                 keys.append(key)
             }
             currentKey = GPGKeyBuilder()
-            currentKey?.isSecret = secretOnly
+            currentKey?.isSecret = (recordType == "sec") || secretOnly
+            isAwaitingPrimaryFingerprint = true
             if fields.count >= 10 {
                 currentKey?.keyID = fields[4]
                 currentKey?.createdAt = parseTimestampString(fields[5])
@@ -354,9 +373,12 @@ private func parseKeyListOutput(_ output: String, secretOnly: Bool) -> [GPGKey] 
             }
             
         case "fpr":
-            if fields.count >= 10 {
+            if isAwaitingPrimaryFingerprint, fields.count >= 10 {
                 currentKey?.fingerprint = fields[9]
+                isAwaitingPrimaryFingerprint = false
             }
+        case "sub", "ssb":
+            isAwaitingPrimaryFingerprint = false
             
         case "uid":
             if fields.count >= 10 {
