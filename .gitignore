@@ -23,6 +23,7 @@ xcuserdata/
 # Build
 build/
 Build/
+dist/
 *.build/
 Products/
 *.app
@@ -157,4 +158,3 @@ Moaiy/build_errors
 
 # GPG Bundle (large binary files)
 Moaiy/Resources/gpg.bundle/
-
