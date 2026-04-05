@@ -12,6 +12,18 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Release execution checklist for v0.5.0 (`doc/v0.5.0-minimal-release-checklist.md`)
 - Core flow validation list for v0.5.0 (`doc/v0.5.0-core-flow-validation.md`)
 
+## [0.5.1] - 2026-04-05
+
+### Changed
+
+- Hidden the `Backup/Restore` action-menu entry by default while keeping the full flow implementation behind a feature toggle.
+- Centered create-key loading/success states for consistent modal feedback alignment.
+- Moved the key-management footer brand logo/text note into a non-blocking background layer to prevent key-card content occlusion.
+
+### Fixed
+
+- Updated key action menu availability tests to verify backup menu is hidden by default and still restorable via flag.
+
 ## [0.5.0] - 2026-04-10
 
 ### Added

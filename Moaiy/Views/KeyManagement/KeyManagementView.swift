@@ -35,7 +35,10 @@ struct KeyManagementView: View {
             }
         }
         .navigationTitle("app_name_moaiy")
-        .background(Color.moaiySurfaceBackground.ignoresSafeArea())
+        .background {
+            Color.moaiySurfaceBackground.ignoresSafeArea()
+            brandBackgroundView
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { showingCreateKey = true }) {
@@ -133,7 +136,11 @@ struct KeyManagementView: View {
                 Text(error)
             }
         }
-        .safeAreaInset(edge: .bottom) {
+    }
+
+    private var brandBackgroundView: some View {
+        VStack {
+            Spacer(minLength: 0)
             VStack(spacing: 6) {
                 Image("BrandLogo")
                     .resizable()
@@ -146,9 +153,11 @@ struct KeyManagementView: View {
                     .foregroundStyle(Color(red: 196.0 / 255.0, green: 196.0 / 255.0, blue: 196.0 / 255.0))
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .background(Color.moaiySurfaceBackground.opacity(0.9))
+            .padding(.bottom, 8)
+            .opacity(0.92)
+            .accessibilityHidden(true)
         }
+        .allowsHitTesting(false)
     }
 }
 
@@ -203,7 +212,7 @@ struct KeyListView: View {
         }
         .listStyle(.inset)
         .scrollContentBackground(.hidden)
-        .background(Color.moaiySurfaceBackground)
+        .background(Color.clear)
         .refreshable {
             await viewModel.refresh()
         }
