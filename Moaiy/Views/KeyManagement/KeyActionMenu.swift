@@ -73,10 +73,16 @@ enum KeyActionAlertDecision: Equatable {
 struct KeyActionMenuAvailability {
     let hasSecretKey: Bool
     let isKeySigningMenuEnabled: Bool
+    let isBackupRestoreMenuEnabled: Bool
 
-    init(key: GPGKey, isKeySigningMenuEnabled: Bool) {
+    init(
+        key: GPGKey,
+        isKeySigningMenuEnabled: Bool,
+        isBackupRestoreMenuEnabled: Bool = false
+    ) {
         self.hasSecretKey = key.isSecret
         self.isKeySigningMenuEnabled = isKeySigningMenuEnabled
+        self.isBackupRestoreMenuEnabled = isBackupRestoreMenuEnabled
     }
 
     var canDecrypt: Bool { hasSecretKey }
@@ -85,7 +91,8 @@ struct KeyActionMenuAvailability {
     var canSignKey: Bool { hasSecretKey && isKeySigningMenuEnabled }
     var showsSignKey: Bool { isKeySigningMenuEnabled }
     var showsExportPrivateKey: Bool { hasSecretKey }
-    var showsBackupRestore: Bool { true }
+    // Reserved feature: keep backup/restore implementation, hide entry for now.
+    var showsBackupRestore: Bool { isBackupRestoreMenuEnabled }
 }
 
 struct KeyActionBatchResultPlanner {
@@ -125,6 +132,8 @@ struct KeyActionMenu: View {
 
     // Reserved feature: key certification/signing is kept in code but hidden from menu for now.
     private let isKeySigningMenuEnabled = false
+    // Reserved feature: backup/restore flow is retained, only menu entry is hidden.
+    private let isBackupRestoreMenuEnabled = false
     @State private var showingUploadSheet = false
     @State private var showingBackupSheet = false
     @State private var showingTrustSheet = false
@@ -136,7 +145,11 @@ struct KeyActionMenu: View {
     @State private var showingAlert = false
 
     private var availability: KeyActionMenuAvailability {
-        KeyActionMenuAvailability(key: key, isKeySigningMenuEnabled: isKeySigningMenuEnabled)
+        KeyActionMenuAvailability(
+            key: key,
+            isKeySigningMenuEnabled: isKeySigningMenuEnabled,
+            isBackupRestoreMenuEnabled: isBackupRestoreMenuEnabled
+        )
     }
 
     private enum PassphraseAction {
@@ -201,6 +214,8 @@ struct KeyActionMenu: View {
                     Label("upload_to_keyserver_title", systemImage: "cloud.fill")
                         .font(.system(size: 14))
                 }
+                // Keep this block in place so backup/restore can be re-enabled by toggling
+                // `isBackupRestoreMenuEnabled` without touching the flow implementation.
                 if availability.showsBackupRestore {
                     Button(action: {
                         showingBackupSheet = true

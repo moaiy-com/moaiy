@@ -39,7 +39,7 @@ struct CreateKeyView: View {
                 }
             }
             .padding(24)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: contentAlignment)
 
             if !isCreating && !showSuccess {
                 footerView
@@ -196,6 +196,10 @@ struct CreateKeyView: View {
             return true
         }
         return !password.isEmpty && password == confirmPassword
+    }
+
+    private var contentAlignment: Alignment {
+        (isCreating || showSuccess) ? .center : .topLeading
     }
 
     private func handleCreateButtonTapped() {

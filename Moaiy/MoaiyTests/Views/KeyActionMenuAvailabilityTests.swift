@@ -12,24 +12,41 @@ import Testing
 @Suite("Key Action Menu Availability Tests")
 struct KeyActionMenuAvailabilityTests {
 
-    @Test("Backup/Restore menu stays visible for public key")
-    func backupMenuVisible_forPublicKey() {
+    @Test("Backup/Restore menu stays hidden for public key by default")
+    func backupMenuHidden_forPublicKeyByDefault() {
         let availability = KeyActionMenuAvailability(
             key: makeKey(isSecret: false),
             isKeySigningMenuEnabled: false
         )
 
-        #expect(availability.showsBackupRestore)
+        #expect(!availability.showsBackupRestore)
     }
 
-    @Test("Backup/Restore menu stays visible for secret key")
-    func backupMenuVisible_forSecretKey() {
+    @Test("Backup/Restore menu stays hidden for secret key by default")
+    func backupMenuHidden_forSecretKeyByDefault() {
         let availability = KeyActionMenuAvailability(
             key: makeKey(isSecret: true),
             isKeySigningMenuEnabled: false
         )
 
-        #expect(availability.showsBackupRestore)
+        #expect(!availability.showsBackupRestore)
+    }
+
+    @Test("Backup/Restore menu visibility follows feature flag")
+    func backupMenuVisibility_followsFeatureFlag() {
+        let disabledAvailability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: true),
+            isKeySigningMenuEnabled: false,
+            isBackupRestoreMenuEnabled: false
+        )
+        #expect(!disabledAvailability.showsBackupRestore)
+
+        let enabledAvailability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: true),
+            isKeySigningMenuEnabled: false,
+            isBackupRestoreMenuEnabled: true
+        )
+        #expect(enabledAvailability.showsBackupRestore)
     }
 
     @Test("Private export hidden when key has no secret material")
