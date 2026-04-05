@@ -4,7 +4,7 @@
 
 Moaiy 帮你通过简单、易操作的步骤保护重要信息。
 
-Moaiy 是一个开源的 macOS 原生应用，专注于信息保护与恢复工作流，使用 SwiftUI 构建。
+Moaiy 是一个开源的 macOS 原生应用，专注于加密与恢复工作流，使用 SwiftUI 构建。
 
 **[English Version](./README.md)**
 
@@ -60,7 +60,7 @@ xcodebuild -project Moaiy/Moaiy.xcodeproj \
 ./scripts/package_dmg.sh --skip-build --open
 ```
 
-建议在你本机终端直接执行该脚本，这样可以避免在 AI 会话里反复触发沙盒提权。
+建议在本机终端直接执行该脚本，这样可避免在 AI 会话中反复触发沙盒提权提示。
 
 ## 运行测试
 
@@ -91,11 +91,11 @@ xcodebuild test -project Moaiy/Moaiy.xcodeproj \
 moaiy/
 ├── Moaiy/                  # 主 macOS 应用
 ├── MoaiySandboxTest/       # 沙盒验证项目
-├── scripts/                # 构建与打包脚本
+├── scripts/                # 构建与打包工具
 ├── doc/                    # 技术文档
 ├── CONTRIBUTING.md
 ├── DISCLAIMER.md
-├── README.md
+├── README_CN.md
 └── LICENSE
 ```
 
@@ -106,6 +106,10 @@ moaiy/
 - [技术架构](./doc/technical-architecture.md)
 - [Xcode 集成指南](./doc/xcode-integration-guide.md)
 - [内置 GPG 概览](./doc/bundled-gpg-summary.md)
+- [v0.5.0 最小发布清单](./doc/v0.5.0-minimal-release-checklist.md)
+- [v0.5.0 核心流程验证](./doc/v0.5.0-core-flow-validation.md)
+- [v0.5.0 发布阻塞项](./doc/v0.5.0-release-blockers.md)
+- [更新日志](./CHANGELOG.md)
 
 ## 本地化
 
@@ -114,7 +118,7 @@ moaiy/
 
 ## 安全
 
-如果发现安全问题，建议优先通过 GitHub Security Advisories 进行私下披露，而不是先公开提交 Issue。
+如果发现安全问题，请优先使用 [SECURITY.md](./SECURITY.md) 中说明的私下披露渠道，而不是公开提交 Issue。
 
 ## 许可证
 
@@ -122,4 +126,4 @@ MIT，详见 [LICENSE](./LICENSE)。
 
 ## 免责声明
 
-关于密钥管理、密钥泄漏、信息暴露与财产损失等责任边界，请查看英文版 [DISCLAIMER.md](./DISCLAIMER.md)。
+关于密钥管理、密钥泄漏、信息暴露与财产损失等风险边界，请查看 [DISCLAIMER.md](./DISCLAIMER.md)。

@@ -6,7 +6,7 @@ Moaiy helps you protect your important information through simple, easy actions.
 
 Moaiy is an open-source macOS app for encryption and recovery workflows, designed with a native SwiftUI experience.
 
-**[中文版 (Chinese Version)](./README_CN.md)**
+**[Chinese Version](./README_CN.md)**
 
 ## Features
 
