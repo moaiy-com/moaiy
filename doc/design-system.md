@@ -300,14 +300,14 @@ Same as Standard Card, with:
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  🔐 主要密钥                              [⋯]   │
+│  🔐 Primary Key                           [⋯]   │
 │  ─────────────────────────────────────────────  │
 │  👤 Alice (alice@example.com)                   │
-│  📅 2024年1月1日 · RSA-4096                     │
+│  📅 Jan 1, 2024 · RSA-4096                      │
 │  ─────────────────────────────────────────────  │
-│  Status: ✅ 有效 · 正常使用中                   │
+│  Status: ✅ Valid · Active use                  │
 │  ─────────────────────────────────────────────  │
-│  [🔒 加密] [📤 分享公钥] [💾 备份]              │
+│  [🔒 Encrypt] [📤 Share Public Key] [💾 Backup] │
 └─────────────────────────────────────────────────┘
 
 Specifications:
@@ -327,10 +327,10 @@ Specifications:
 │                                                 │
 │                                                 │
 │        📄                                       │
-│     拖拽文件到这里                               │
-│     或点击选择文件                               │
+│     Drag files here                              │
+│     or click to select files                     │
 │                                                 │
-│     支持: 任何文件类型                           │
+│     Supports: any file type                      │
 │                                                 │
 │                                                 │
 └─────────────────────────────────────────────────┘
@@ -352,7 +352,7 @@ States:
 #### Linear Progress
 ```
 ┌─────────────────────────────────────────────────┐
-│  正在加密...                                     │
+│  Encrypting...                                   │
 │  [████████████░░░░░░░░░░░░] 45%                │
 └─────────────────────────────────────────────────┘
 
@@ -373,10 +373,10 @@ Animation: Rotate indefinitely
 ### 7.7 Status Badges
 
 ```
-Success:  ✅ 有效     Background: #9AE6B4, Text: #276749
-Warning:  ⚠️ 即将过期  Background: #FEEBC8, Text: #C05621
-Error:    ❌ 已过期    Background: #FED7D7, Text: #C53030
-Info:     ℹ️ 新密钥    Background: #BEE3F8, Text: #2B6CB0
+Success:  ✅ Valid           Background: #9AE6B4, Text: #276749
+Warning:  ⚠️ Expiring Soon  Background: #FEEBC8, Text: #C05621
+Error:    ❌ Expired         Background: #FED7D7, Text: #C53030
+Info:     ℹ️ New Key         Background: #BEE3F8, Text: #2B6CB0
 
 Border Radius: Full (pill shape)
 Padding: 4px 10px
@@ -388,12 +388,12 @@ Font: Caption 1 (12pt Medium)
 #### Success Alert
 ```
 ┌─────────────────────────────────────────────────┐
-│  ✅ 加密完成！                                   │
+│  ✅ Encryption Complete                          │
 │  ─────────────────────────────────────────────  │
-│  文件已成功加密并保存到:                         │
-│  ~/Documents/加密文件/secret.txt.gpg            │
+│  File successfully encrypted and saved to:       │
+│  ~/Documents/Encrypted/secret.txt.gpg            │
 │                                                 │
-│  [打开文件夹] [完成]                            │
+│  [Open Folder] [Done]                            │
 └─────────────────────────────────────────────────┘
 
 Background: #F0FFF4
@@ -404,16 +404,16 @@ Icon: ✅ in #48BB78
 #### Error Alert
 ```
 ┌─────────────────────────────────────────────────┐
-│  ❌ 解密失败                                     │
+│  ❌ Decryption Failed                             │
 │  ─────────────────────────────────────────────  │
-│  问题分析:                                       │
-│  这个文件是用其他密钥加密的                      │
+│  Analysis:                                       │
+│  This file was encrypted for a different key     │
 │                                                 │
-│  建议操作:                                       │
-│  • 检查是否有对应的密钥                          │
-│  • 联系文件发送者                                │
+│  Suggested actions:                              │
+│  • Check whether you have the matching key       │
+│  • Contact the sender                            │
 │                                                 │
-│  [检查我的密钥] [联系支持]                       │
+│  [Check My Keys] [Contact Support]               │
 └─────────────────────────────────────────────────┘
 
 Background: #FFF5F5
@@ -425,7 +425,7 @@ Icon: ❌ in #FC8181
 
 ```
 ┌────────────────────────┐
-│  这是提示文本           │
+│  Tooltip text example    │
 │  ▼                     │
 └────────────────────────┘
 
@@ -442,19 +442,19 @@ Shadow: Level 2
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  🔐 需要输入密码                          [×]   │
+│  🔐 Password Required                     [×]   │
 ├─────────────────────────────────────────────────┤
 │                                                 │
-│  请输入您的密钥密码以继续操作:                   │
+│  Enter your key passphrase to continue:          │
 │                                                 │
-│  密码: [••••••••••••] [👁]                      │
+│  Passphrase: [••••••••••••] [👁]                │
 │                                                 │
-│  ☐ 记住密码（5分钟）                            │
+│  ☐ Remember passphrase (5 minutes)               │
 │                                                 │
-│  💡 这是您创建密钥时设置的密码                   │
+│  💡 This is the passphrase set during key setup  │
 │                                                 │
 ├─────────────────────────────────────────────────┤
-│                    [取消] [确认]                │
+│                    [Cancel] [Confirm]            │
 └─────────────────────────────────────────────────┘
 
 Width: 440px

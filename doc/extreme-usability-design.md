@@ -1,805 +1,206 @@
-# Moaiy 极致易用性设计方案
-
-> **项目**: Moaiy - 像摩艾一样守护您的秘密
-> 
-> 源自摩艾石像，象征神秘感、安全性、长久性
-
-## 设计理念
-
-### 核心原则
-**技术应该隐形，用户只关注"我要做什么"**
-
-### 目标
-- **零门槛**: 双击即用，无需任何技术背景
-- **开箱即用**: 完全自包含，无外部依赖
-- **智能化**: 自动处理复杂配置和错误
-- **安全性**: 使用最强加密算法，不妥协安全性
-
-## 用户痛点解决对比
-
-### 传统GPG的痛点 vs 我们的解决方案
-
-| 用户痛点 | 传统GPG | 新方案 | 改进程度 |
-|---------|---------|--------|---------|
-| **安装复杂** | 安装GPG、配置环境 | 双击即用 | ⭐⭐⭐⭐⭐ |
-| **操作复杂** | 需要记忆命令和参数 | 图形界面、拖拽操作 | ⭐⭐⭐⭐⭐ |
-| **术语难懂** | 公钥、私钥、签名等 | 日常语言、直观展示 | ⭐⭐⭐⭐⭐ |
-| **错误难解** | 晦涩的错误代码 | 友好提示、自动修复 | ⭐⭐⭐⭐⭐ |
-| **密钥管理** | 手动管理文件和目录 | 可视化列表、自动备份 | ⭐⭐⭐⭐⭐ |
-| **学习曲线** | 数周-数月 | 5分钟 | ⭐⭐⭐⭐⭐ |
-
-## 1. 零配置安装体验
-
-### 完全自包含架构
-
-#### 应用打包方案
-```
-GPGManager.app/
-├── Contents/
-│   ├── MacOS/
-│   │   └── GPGManager (主程序)
-│   ├── Resources/
-│   │   ├── gpg.bundle/          # 内置完整GPG工具链
-│   │   │   ├── bin/gpg
-│   │   │   ├── lib/libgcrypt.20.dylib
-│   │   │   ├── lib/libgpg-error.0.dylib
-│   │   │   └── share/gnupg/
-│   │   └── Assets.car           # UI资源
-│   ├── Frameworks/
-│   │   └── (SwiftUI等系统框架)
-│   └── Info.plist
-
-总体积：~30-40MB
-```
-
-**关键特性**:
-- ✅ 单一 .app 文件，无其他依赖
-- ✅ 内置完整 GPG 工具链（~15MB）
-- ✅ 首次启动自动初始化
-- ✅ 无需管理员权限
-
-### 首次启动体验
-
-#### 欢迎界面
-```
-┌─────────────────────────────────────┐
-│                                     │
-│     🗿 欢迎使用 Moaiy                │
-│                                     │
-│     像摩艾一样守护您的秘密           │
-│                                     │
-│     [开始使用]                       │
-│                                     │
-│     ✨ 正在初始化安全环境...         │
-│     [████████████] 100%             │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-#### 自动初始化过程（后台）
-```
-1. 解压内置GPG工具          ← 1秒
-2. 创建应用专属目录          ← 0.5秒
-3. 生成默认配置              ← 0.3秒
-4. 检查系统环境              ← 0.5秒
-5. 准备用户界面              ← 0.7秒
-
-总耗时：< 3秒
-用户操作：只需点击"开始使用"
-```
-
-## 2. 智能密钥管理
-
-### 自动密钥生成（零配置）
-
-#### 传统方式 vs 新方案对比
-
-**传统方式**（8个复杂步骤）:
-```bash
-1. 打开终端
-2. gpg --full-generate-key
-3. 选择密钥类型（RSA/ECC?）
-4. 选择密钥长度（2048/4096?）
-5. 设置过期时间
-6. 输入用户信息
-7. 输入密码
-8. 等待生成...
-```
-
-**新方案**（一键完成）:
-```
-┌─────────────────────────────────────┐
-│  🔑 为您创建第一个密钥               │
-│                                     │
-│  您的名字：[从系统自动读取]          │
-│  邮箱：   [从系统自动读取]           │
-│                                     │
-│  密码：   [自动生成强密码] 👁️        │
-│  确认：   [自动填充]                 │
-│                                     │
-│  💾 密码已自动保存到钥匙串           │
-│                                     │
-│  [立即创建] [自定义设置 ▼]          │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-#### 智能默认值
-
-**自动读取用户信息**:
-```swift
-class SmartDefaults {
-    func detectUserInfo() -> UserInfo {
-        let systemInfo = SystemInfoProvider.get()
-        return UserInfo(
-            name: systemInfo.fullName,      // 从系统读取
-            email: systemInfo.primaryEmail,  // 从邮件应用读取
-            timezone: systemInfo.timezone    // 从系统设置读取
-        )
-    }
-}
-```
-
-**自动生成强密码**:
-```swift
-func generateSecurePassword() -> String {
-    // 16位混合字符：大小写字母+数字+符号
-    // 确保可读性（避免相似字符）
-    return PasswordGenerator.generate(
-        length: 16,
-        includeSymbols: true,
-        excludeAmbiguous: true  // 排除 0/O, 1/l/I 等
-    )
-}
-```
-
-**智能密钥配置**:
-```swift
-func recommendKeyConfig(for purpose: UseCase) -> KeyConfig {
-    switch purpose {
-    case .personal:
-        return KeyConfig(
-            type: .rsa4096,              // 最佳兼容性
-            expiration: .never,           // 永不过期
-            usage: [.encrypt, .sign]      // 加密+签名
-        )
-    case .business:
-        return KeyConfig(
-            type: .rsa4096,
-            expiration: .years(2),        // 2年过期
-            usage: [.encrypt, .sign]
-        )
-    }
-}
-```
-
-### 密钥可视化展示
-
-#### 传统展示 vs 新方案
-
-**传统方式**:
-```
-pub   rsa4096 2024-01-01 [SC]
-      ABC123DEF456GHI789JKL012MNO345PQR678
-uid           [ultimate] Alice <alice@example.com>
-sub   rsa4096 2024-01-01 [E]
-```
-
-**新方案**:
-```
-┌─────────────────────────────────────┐
-│  🔑 我的密钥                         │
-├─────────────────────────────────────┤
-│  ┌─────────────────────────────────┐│
-│  │ 🔐 主要密钥                      ││
-│  │ 👤 Alice (alice@example.com)    ││
-│  │ 📅 创建于 2024年1月1日           ││
-│  │ 🛡️ 安全等级：极高                ││
-│  │                                 ││
-│  │ 状态：✅ 正常使用中               ││
-│  │                                 ││
-│  │ [加密文件] [分享公钥] [更多选项] ││
-│  └─────────────────────────────────┘│
-│                                     │
-│  💡 小贴士：                         │
-│  这个密钥可以用来加密您的文件和消息   │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**关键改进**:
-- 人类可读的展示方式
-- 清晰的状态指示
-- 操作按钮直接可见
-- 情境化帮助提示
-
-## 3. 极简加密体验
-
-### 文本加密（一键完成）
-
-#### 传统方式 vs 新方案
-
-**传统方式**:
-```bash
-$ echo "秘密消息" | gpg --encrypt --recipient alice@example.com --armor
------BEGIN PGP MESSAGE-----
-hQEMA7J... (长串乱码)
-```
-
-**新方案**:
-```
-┌─────────────────────────────────────┐
-│  🔒 快速加密                         │
-├─────────────────────────────────────┤
-│  输入要加密的内容：                  │
-│  ┌─────────────────────────────────┐│
-│  │ 我的助记词：                     ││
-│  │ abandon ability able about      ││
-│  │ above absent absorb abstract    ││
-│  │ ...                             ││
-│  └─────────────────────────────────┘│
-│                                     │
-│  [加密] [清空]                       │
-│                                     │
-│  加密结果：                          │
-│  ┌─────────────────────────────────┐│
-│  │ 🔐 已加密（点击查看）            ││
-│  │                                 ││
-│  │ [复制] [保存到文件] [解密测试]   ││
-│  └─────────────────────────────────┘│
-│                                     │
-│  ✅ 已自动复制到剪贴板               │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**智能特性**:
-- 自动选择用户的密钥
-- 自动复制结果到剪贴板
-- 提供"解密测试"确认可用性
-- 历史记录（可搜索）
-
-### 文件加密（拖拽完成）
-
-#### 传统方式 vs 新方案
-
-**传统方式**:
-```bash
-$ gpg --encrypt --recipient alice@example.com secret.txt
-# 生成 secret.txt.gpg
-```
-
-**新方案 - 第一步：选择文件**:
-```
-┌─────────────────────────────────────┐
-│  📂 文件加密                         │
-├─────────────────────────────────────┤
-│                                     │
-│  ┌─────────────────────────────────┐│
-│  │                                 ││
-│  │   📄 拖拽文件到这里              ││
-│  │   或 [点击选择文件]              ││
-│  │                                 ││
-│  │   支持任何类型的文件             ││
-│  │                                 ││
-│  └─────────────────────────────────┘│
-│                                     │
-│  最近加密：                          │
-│  📄 wallet-backup.txt (2分钟前)     │
-│  📄 seed-phrase.txt (昨天)          │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**新方案 - 第二步：确认加密**:
-```
-┌─────────────────────────────────────┐
-│  📂 加密文件                         │
-├─────────────────────────────────────┤
-│                                     │
-│  ✅ wallet-backup.txt               │
-│     大小：1.2 KB                    │
-│                                     │
-│  加密选项：                          │
-│  ◉ 使用我的密钥（推荐）              │
-│  ○ 同时加密给其他人                  │
-│                                     │
-│  [加密并保存] [仅加密]               │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**新方案 - 第三步：完成反馈**:
-```
-┌─────────────────────────────────────┐
-│  ✅ 加密完成！                       │
-├─────────────────────────────────────┤
-│                                     │
-│  原文件：wallet-backup.txt (1.2 KB) │
-│  加密后：wallet-backup.txt.gpg (1.5 KB)│
-│                                     │
-│  保存位置：~/Documents/加密文件/     │
-│                                     │
-│  [打开文件夹] [继续加密] [完成]      │
-│                                     │
-│  💡 建议：                           │
-│  原文件已保留，您可以手动删除        │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**智能特性**:
-- 拖拽文件到窗口自动开始加密
-- 自动创建加密文件目录
-- 智能命名（添加 .gpg 后缀）
-- 保留原文件（防止误操作）
-- 批量加密支持
-
-## 4. 智能解密体验
-
-### 自动识别解密
-
-#### 剪贴板检测
-```
-┌─────────────────────────────────────┐
-│  🔓 解密助手                         │
-├─────────────────────────────────────┤
-│                                     │
-│  检测到加密内容！                    │
-│                                     │
-│  来源：剪贴板                        │
-│  类型：PGP加密消息                   │
-│  接收者：alice@example.com           │
-│                                     │
-│  [立即解密] [取消]                   │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-#### 密码输入
-```
-┌─────────────────────────────────────┐
-│  🔓 解密中...                        │
-├─────────────────────────────────────┤
-│                                     │
-│  🔐 需要您的密码                     │
-│                                     │
-│  密码：[••••••••••••] 👁️             │
-│                                     │
-│  ☐ 记住密码（5分钟）                 │
-│                                     │
-│  [解密] [取消]                       │
-│                                     │
-│  💡 提示：                           │
-│  这是您创建密钥时设置的密码          │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-#### 解密成功
-```
-┌─────────────────────────────────────┐
-│  ✅ 解密成功！                       │
-├─────────────────────────────────────┤
-│                                     │
-│  解密内容：                          │
-│  ┌─────────────────────────────────┐│
-│  │ 我的助记词：                     ││
-│  │ abandon ability able about      ││
-│  │ above absent absorb abstract    ││
-│  │ ...                             ││
-│  └─────────────────────────────────┘│
-│                                     │
-│  [复制] [保存] [清空剪贴板]          │
-│                                     │
-│  ⚠️ 安全提示：                       │
-│  这可能是敏感信息，请妥善保管        │
-│  建议：查看后立即清空剪贴板          │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**智能特性**:
-- 自动检测剪贴板加密内容
-- 自动识别加密类型
-- 智能密码记忆（可配置时间）
-- 安全提示和自动清理
-
-## 5. 硬件密钥集成（Pro版）
-
-### 零配置硬件密钥设置
-
-#### 传统方式 vs 新方案
-
-**传统方式**（15+复杂步骤）:
-```bash
-1. 安装GPG
-2. 安装pcscd
-3. 配置PCSC
-4. gpg --card-edit
-5. admin
-6. generate
-7. 设置管理员PIN
-8. 设置用户PIN
-9. 选择密钥类型
-10. 输入用户信息
-... 更多步骤
-```
-
-**新方案 - 第一步：检测设备**:
-```
-┌─────────────────────────────────────┐
-│  🔌 硬件密钥管理（Pro功能）          │
-├─────────────────────────────────────┤
-│                                     │
-│  检测到硬件密钥！                    │
-│  ┌─────────────────────────────────┐│
-│  │ 🔑 YubiKey 5 NFC                ││
-│  │ 序列号：12345678                 ││
-│  │ 状态：未初始化                   ││
-│  │                                 ││
-│  │ [快速设置向导] [高级选项]        ││
-│  └─────────────────────────────────┘│
-│                                     │
-│  💡 什么是硬件密钥？                 │
-│  硬件密钥像一个USB保险箱，           │
-│  把您的密钥锁在里面，更加安全        │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**新方案 - 第二步：设置PIN码**:
-```
-步骤1：设置PIN码
-┌─────────────────────────────────────┐
-│  🔐 设置硬件密钥密码                 │
-├─────────────────────────────────────┤
-│                                     │
-│  管理员密码（用于管理）：            │
-│  [••••••••] 👁️                       │
-│  💡 建议使用强密码（已自动生成）      │
-│                                     │
-│  用户密码（用于日常使用）：          │
-│  [••••••••] 👁️                       │
-│                                     │
-│  ☐ 显示密码                          │
-│                                     │
-│  [下一步] [跳过（使用默认）]         │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**新方案 - 第三步：生成密钥**:
-```
-步骤2：生成密钥
-┌─────────────────────────────────────┐
-│  🔑 在硬件密钥中生成密钥             │
-├─────────────────────────────────────┤
-│                                     │
-│  密钥信息：                          │
-│  姓名：Alice (自动填充)              │
-│  邮箱：alice@example.com            │
-│                                     │
-│  密钥类型：                          │
-│  ◉ RSA-2048（推荐，兼容性好）        │
-│  ○ RSA-4096（更安全，较慢）          │
-│  ○ ECC（现代算法，最快）             │
-│                                     │
-│  💾 密码将自动保存到钥匙串           │
-│                                     │
-│  [生成密钥] [返回修改]               │
-│                                     │
-│  ⏱️ 预计需要1-2分钟                  │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**新方案 - 第四步：完成设置**:
-```
-步骤3：完成设置
-┌─────────────────────────────────────┐
-│  ✅ 硬件密钥设置完成！               │
-├─────────────────────────────────────┤
-│                                     │
-│  您的YubiKey已准备就绪：             │
-│                                     │
-│  ✅ 密钥已生成                       │
-│  ✅ PIN码已设置                      │
-│  ✅ 备份已创建                       │
-│                                     │
-│  下一步：                            │
-│  [测试加密] [查看教程] [完成]        │
-│                                     │
-│  💡 使用提示：                       │
-│  每次使用硬件密钥加密时，            │
-│  需要插入YubiKey并输入密码           │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**智能特性**:
-- 自动检测硬件密钥插入
-- 自动识别密钥品牌和型号
-- 智能默认设置（一键完成）
-- 自动创建备份
-
-## 6. 智能帮助系统
-
-### 情境化帮助（只在需要时出现）
-
-#### 示例1：首次加密
-```
-┌─────────────────────────────────────┐
-│  💡 第一次加密？                     │
-│                                     │
-│  加密就像把信放进保险箱：            │
-│  1. 只有您能打开保险箱（解密）        │
-│  2. 其他人无法查看内容               │
-│  3. 可以安全地存储或发送             │
-│                                     │
-│  [了解更多] [开始加密] [不再提示]    │
-└─────────────────────────────────────┘
-```
-
-#### 示例2：密码输入错误
-```
-┌─────────────────────────────────────┐
-│  ⚠️ 密码不正确                       │
-├─────────────────────────────────────┤
-│                                     │
-│  常见原因：                          │
-│  ✏️ 大小写错误（已自动重试）         │
-│  ⌨️ 键盘布局不同                     │
-│  📋 从其他地方复制的密码              │
-│                                     │
-│  [重试] [忘记密码？] [联系支持]      │
-│                                     │
-│  💡 提示：                           │
-│  您的密码在创建密钥时设置            │
-│  如果忘记了，可以查看备份            │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-### 渐进式功能展示
-
-#### 使用阶段不同，界面不同
-
-**首次使用**（简化界面）:
-- 只显示最基本的功能
-- 隐藏高级选项
-- 简洁的界面
-
-**使用3次后**:
-- 显示更多功能提示
-- 推荐快捷操作
-- 介绍高级功能
-
-**使用1周后**:
-- 完整功能展示
-- 自定义选项
-- 专业模式切换
-
-## 7. 数据安全与备份
-
-### 自动备份（永不丢失）
-
-#### 备份设置界面
-```
-┌─────────────────────────────────────┐
-│  💾 备份设置                         │
-├─────────────────────────────────────┤
-│                                     │
-│  自动备份：                          │
-│  ☑️ 每周自动备份密钥                 │
-│  ☑️ 重要操作后立即备份               │
-│  ☐ 备份到iCloud（Pro功能）           │
-│                                     │
-│  备份位置：                          │
-│  ~/Documents/GPG备份/               │
-│  [更改位置]                          │
-│                                     │
-│  最新备份：                          │
-│  2024-01-15 14:30 (2小时前)         │
-│  包含：2个密钥                       │
-│                                     │
-│  [立即备份] [恢复备份] [管理备份]    │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**备份策略**:
-1. **自动备份**（无需用户操作）
-2. **多版本保留**（保留最近10个版本）
-3. **加密存储**（备份文件本身也加密）
-4. **云端同步**（可选，Pro功能）
-
-## 8. 错误处理与自动修复
-
-### 智能错误诊断
-
-#### 传统错误 vs 新方案
-
-**传统方式**:
-```
-gpg: decryption failed: No secret key
-```
-
-**新方案**:
-```
-┌─────────────────────────────────────┐
-│  ⚠️ 解密失败                         │
-├─────────────────────────────────────┤
-│                                     │
-│  问题分析：                          │
-│  这个文件是用其他密钥加密的          │
-│                                     │
-│  可能的原因：                        │
-│  • 文件不是发给您的                  │
-│  • 您的密钥已更改                    │
-│  • 需要导入对应的密钥                │
-│                                     │
-│  建议操作：                          │
-│  [检查我的密钥] [导入密钥] [联系发送者]│
-│                                     │
-│  💡 需要帮助？                       │
-│  [查看解决方案] [联系技术支持]       │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-### 自动修复系统
-
-```swift
-class AutoRepair {
-    // 检测并修复常见问题
-    func diagnoseAndRepair() -> [RepairAction] {
-        var repairs: [RepairAction] = []
-        
-        // 检查GPG工具完整性
-        if !checkGPGIntegrity() {
-            repairs.append(.reinstallGPG)
-        }
-        
-        // 检查密钥权限
-        if !checkKeyPermissions() {
-            repairs.append(.fixPermissions)
-        }
-        
-        // 检查配置文件
-        if !checkConfigFile() {
-            repairs.append(.resetConfig)
-        }
-        
-        return repairs
-    }
-    
-    // 自动执行修复
-    func performRepairs(_ repairs: [RepairAction]) async throws {
-        for repair in repairs {
-            try await executeRepair(repair)
-        }
-    }
-}
-```
-
-## 9. 额外的易用性创新
-
-### 智能助手集成（菜单栏工具）
-
-```
-┌─────────────┐
-│ 🗿 Moaiy    │ ← 常驻菜单栏
-├─────────────┤
-│ 🔒 快速加密  │
-│ 🔓 快速解密  │
-│ 📋 剪贴板    │
-│ 🔑 我的密钥  │
-│ ⚙️ 设置     │
-└─────────────┘
-```
-
-**功能**:
-- 无需打开主应用
-- 一键加密剪贴板内容
-- 快速访问常用功能
-
-### 快捷键支持
-
-**全局快捷键**:
-- `⌘+Shift+E`: 加密选中文本
-- `⌘+Shift+D`: 解密选中文本
-- `⌘+Shift+K`: 打开密钥管理
-
-**应用内快捷键**:
-- `⌘+N`: 新建密钥
-- `⌘+O`: 打开文件加密
-- `⌘+,`: 打开设置
-
-### 系统集成
-
-**右键菜单扩展**:
-```
-文件右键 → 🔒 用GPG加密
-        → 🔓 用GPG解密
-        → 🔑 查看密钥信息
-```
-
-**Finder集成**:
-- 文件预览显示加密状态
-- 拖拽到应用图标自动加密
-
-## 10. 性能优化
-
-### 异步处理架构
-
-```swift
-// 所有耗时操作异步执行
-class GPGService {
-    // 异步加密
-    func encrypt(text: String, key: Key) async throws -> String {
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                do {
-                    let result = try self.performEncryption(text: text, key: key)
-                    continuation.resume(returning: result)
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
-        }
-    }
-    
-    // 进度回调
-    func encrypt(file: URL, key: Key, progress: @escaping (Double) -> Void) async throws -> URL {
-        // 实时进度更新
-        // 支持取消操作
-    }
-}
-```
-
-## 极致易用性指标
-
-### 目标指标
-
-| 指标 | 传统GPG | 新方案 | 改进 |
-|------|---------|--------|------|
-| **首次使用时间** | 30-60分钟 | < 30秒 | 100倍+ |
-| **加密一个文件** | 5-10分钟 | < 10秒 | 30倍+ |
-| **学习曲线** | 数周-数月 | 5分钟 | 100倍+ |
-| **错误恢复时间** | 30分钟+ | 即时自动 | 无限 |
-| **用户满意度** | 2/5 | 5/5 | 2.5倍 |
-
-### 成功标准
-
-1. **5分钟完成首次加密** ✅
-2. **零技术背景用户可独立使用** ✅
-3. **90%操作在一键完成** ✅
-4. **错误自动修复率 > 80%** ✅
-5. **用户满意度 > 4.5/5** ✅
-
-## 实施优先级
-
-### 第一阶段（核心易用性）
-1. ✅ 完全自包含打包
-2. ✅ 智能默认值系统
-3. ✅ 极简UI流程
-4. ✅ 自动错误处理
-
-### 第二阶段（体验优化）
-1. ✅ 文件拖拽加密
-2. ✅ 智能解密识别
-3. ✅ 自动备份系统
-4. ✅ 情境化帮助
-
-### 第三阶段（高级功能）
-1. ✅ 硬件密钥向导
-2. ✅ 云端同步
-3. ✅ 批量操作
-4. ✅ 系统集成
+# Moaiy Extreme Usability Design
+
+> Goal: Make secure encryption workflows approachable for non-technical users without reducing cryptographic safety.
+> Updated: 2026-04-05
+
+## 1. Design Thesis
+
+Security tooling fails when users must learn cryptography before they can protect data.
+Moaiy design choices are therefore driven by one principle:
+
+- The user focuses on intent.
+- The app handles technical complexity.
+
+### Core principles
+- Zero-friction onboarding
+- Safe defaults first
+- Plain-language UX
+- Progressive disclosure for advanced controls
+- Strong security boundaries with clear feedback
+
+## 2. Problem vs Solution
+
+| User Problem | Legacy GPG Experience | Moaiy Direction |
+| --- | --- | --- |
+| Setup overhead | Install/patch CLI + dependencies manually | Bundled runtime inside app |
+| Cognitive load | Command syntax and flags | Action-oriented UI labels |
+| Error recovery | Opaque stderr output | Human-readable diagnostics + next action |
+| Key management anxiety | Manual file/identity handling | Guided creation, import, trust, export flows |
+| New-user confidence | Steep learning curve | Fast “first success” path |
+
+## 3. Zero-Setup Experience
+
+### Product expectations
+- One app bundle, no external installers required for basic use.
+- First launch prepares runtime automatically.
+- No mandatory terminal interaction.
+
+### First-run UX
+1. Welcome panel explains value in plain language.
+2. Initialization runs in background with visible progress.
+3. User lands directly in key management with a clear first action.
+
+### Acceptance criteria
+- New user can reach key creation flow in under 30 seconds.
+- First-run errors are actionable and non-technical.
+
+## 4. Smart Key Management
+
+### Key creation
+- Provide safe defaults (algorithm, size, expiration recommendations).
+- Validate identity fields early.
+- Keep advanced options collapsible.
+
+### Key list and cards
+- Prioritize identity and status clarity.
+- Show concise trust/validity state.
+- Keep high-frequency actions one tap away.
+
+### Import/export
+- Support both file picker and drag-and-drop.
+- Show pre-flight checks before mutation.
+- Use clear completion messaging with destination hints.
+
+## 5. Minimal Encryption Flow
+
+### Text encryption
+- Single obvious entry point.
+- Recipient selection defaults to the current key context.
+- Copy/save actions available immediately after success.
+
+### File encryption
+- Drag-and-drop first.
+- Show source, destination, and overwrite policy before execution.
+- Preserve original by default; never silently delete user files.
+
+### Success state
+- Confirm what happened.
+- Provide next-step actions:
+  - open destination
+  - copy output path
+  - run another operation
+
+## 6. Assisted Decryption Flow
+
+### Detection and prompts
+- Detect encrypted payload format where possible.
+- Ask only for the minimum required input.
+- Explain passphrase request context.
+
+### Sensitive output handling
+- Provide controlled reveal/copy patterns.
+- Offer optional clipboard cleanup after copy.
+- Avoid retaining plaintext longer than needed.
+
+## 7. Hardware Key (Pro) UX Strategy
+
+### Goals
+- Treat hardware-key setup as a guided wizard.
+- Prefer “recommended” defaults for most users.
+- Keep advanced controls available but out of the critical path.
+
+### Setup flow
+1. Detect connected device and compatibility.
+2. Guide PIN/passphrase setup.
+3. Generate/import key material with explicit confirmations.
+4. Run post-setup validation and quick usage test.
+
+### Safety notes
+- Explain irreversible actions before commit.
+- Require explicit confirmation for destructive operations.
+
+## 8. Contextual Help System
+
+### Help behavior
+- Help appears when confidence is low or errors occur.
+- Keep guidance task-specific and short.
+- Include one direct recovery action per message.
+
+### Examples
+- Wrong passphrase: suggest keyboard layout and retry path.
+- Recipient mismatch: explain missing key and import options.
+- File permission issue: guide user to re-authorize path.
+
+## 9. Backup and Recovery UX
+
+### Baseline
+- Encourage regular encrypted backups.
+- Make backup status visible but non-intrusive.
+- Avoid fear-driven wording.
+
+### Recovery
+- Provide a predictable restore flow with validation summary.
+- Warn before overwrite or trust-state replacement.
+- Confirm completion with a diff-like summary where feasible.
+
+## 10. Error Handling and Auto-Repair
+
+### Error model
+- Classify errors into:
+  - user-actionable
+  - transient/retryable
+  - internal/bug-report candidates
+
+### UX contract
+- Every blocking error must include:
+  - what failed
+  - why (plain language)
+  - what to do next
+
+### Auto-repair boundaries
+- Auto-repair safe config/runtime issues only.
+- Never auto-modify key material without explicit user consent.
+
+## 11. Productivity Enhancements
+
+### Candidate features
+- Menu-bar quick actions
+- Keyboard shortcuts for common encrypt/decrypt actions
+- Finder-integrated handoff entry points (where policy-compliant)
+
+### Principle
+Speed features must not bypass security confirmation boundaries.
+
+## 12. Performance Model
+
+### Requirements
+- All long-running operations are async.
+- UI remains responsive during cryptographic operations.
+- Visible progress for operations above human perception threshold.
+
+### Engineering expectations
+- Background operation queueing
+- Cancellation support where safe
+- Deterministic operation-result reporting
+
+## 13. Measurable Usability Targets
+
+| Metric | Target |
+| --- | --- |
+| Time to first successful encryption | < 5 minutes for new user |
+| Time to repeat encryption | < 15 seconds |
+| Key operation error-recovery success | > 80% without external help |
+| User-reported clarity (internal testing) | > 4.5 / 5 |
+
+## 14. Rollout Priorities
+
+### Phase A (must-have)
+- First-run onboarding
+- Key creation/import/export baseline
+- Text/file encrypt/decrypt baseline
+- Friendly error messaging
+
+### Phase B (quality)
+- Contextual help
+- Backup/restore polish
+- Accessibility pass
+- Performance and responsiveness tuning
+
+### Phase C (advanced)
+- Hardware key guided setup
+- Expanded automation and integration surfaces
 
 ---
 
-**这个设计方案真正实现了"开箱即用"的目标，让加密技术真正走进普通用户的生活。**
-
-*最后更新: 2026-03-08*
+This document is intentionally product-facing but implementation-ready.
+Update it whenever core interaction flows, trust semantics, or safety boundaries change.
