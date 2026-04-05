@@ -102,6 +102,7 @@ RELEASE_SANDBOX_TEST.md
 GIT_SETUP_*.md
 FILE_CLEANUP_*.md
 OPEN_SOURCE_*.md
+AGENTS.md
 
 # Temporary files
 *.tmp
