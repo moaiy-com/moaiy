@@ -37,6 +37,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 concurrency:
   group: release-${{ github.event.inputs.version }}
   cancel-in-progress: false
@@ -83,16 +86,12 @@ jobs:
             exit 1
           fi
 
-          REQUIRED_STATE="$(
-            gh api repos/${{ github.repository }}/commits/$MAIN_SHA/status \
-              --jq '.statuses | map(select(.context=="build-and-test")) | .[0].state // ""'
-          )"
-
-          if [[ "$REQUIRED_STATE" != "success" ]]; then
-            echo "Required status check build-and-test is not success for $MAIN_SHA"
-            echo "Current state: ${REQUIRED_STATE:-missing}"
-            exit 1
-          fi
+          bash ./scripts/release/check_required_check.sh \
+            --repo "${{ github.repository }}" \
+            --commit "$MAIN_SHA" \
+            --check-name "build-and-test" \
+            --wait-seconds 180 \
+            --poll-interval 10
 
       - name: Release orchestration (gates + packaging + metadata + notes)
         id: release
@@ -140,7 +139,42 @@ jobs:
             git push origin "refs/tags/$TAG"
           fi
 
-      - name: Create or update GitHub release
+      - name: Ensure draft release exists
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_ADMIN_TOKEN != '' && secrets.RELEASE_ADMIN_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+
+          TAG="v${{ github.event.inputs.version }}"
+          REPO="${{ github.repository }}"
+          NOTES="${{ steps.release.outputs.release_notes_path }}"
+
+          if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "$REPO" \
+              --title "$TAG" \
+              --notes-file "$NOTES" \
+              --verify-tag \
+              --draft
+          fi
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_ADMIN_TOKEN != '' && secrets.RELEASE_ADMIN_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+
+          TAG="v${{ github.event.inputs.version }}"
+          REPO="${{ github.repository }}"
+
+          ARM64_DMG="${{ steps.release.outputs.arm64_dmg_path }}"
+          X64_DMG="${{ steps.release.outputs.x86_64_dmg_path }}"
+          CHECKSUMS="${{ steps.release.outputs.release_sha256_path }}"
+          MANIFEST="${{ steps.release.outputs.release_manifest_path }}"
+
+          gh release upload "$TAG" "$ARM64_DMG" "$X64_DMG" "$CHECKSUMS" "$MANIFEST" --repo "$REPO" --clobber
+
+      - name: Finalize release metadata
         env:
           GH_TOKEN: ${{ secrets.RELEASE_ADMIN_TOKEN != '' && secrets.RELEASE_ADMIN_TOKEN || github.token }}
         run: |
@@ -151,31 +185,26 @@ jobs:
           REPO="${{ github.repository }}"
 
           NOTES="${{ steps.release.outputs.release_notes_path }}"
-          MANIFEST="${{ steps.release.outputs.release_manifest_path }}"
-          CHECKSUMS="${{ steps.release.outputs.release_sha256_path }}"
-          ARM64_DMG="${{ steps.release.outputs.arm64_dmg_path }}"
-          X64_DMG="${{ steps.release.outputs.x86_64_dmg_path }}"
 
-          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ARM64_DMG" "$X64_DMG" "$CHECKSUMS" "$MANIFEST" --repo "$REPO" --clobber
-            if [[ "$MODE" == "draft" ]]; then
-              gh release edit "$TAG" --repo "$REPO" --title "$TAG" --notes-file "$NOTES" --draft
-            else
-              gh release edit "$TAG" --repo "$REPO" --title "$TAG" --notes-file "$NOTES" --draft=false
-            fi
+          if [[ "$MODE" == "draft" ]]; then
+            gh release edit "$TAG" --repo "$REPO" --title "$TAG" --notes-file "$NOTES" --draft
           else
-            if [[ "$MODE" == "draft" ]]; then
-              gh release create "$TAG" "$ARM64_DMG" "$X64_DMG" "$CHECKSUMS" "$MANIFEST" \
-                --repo "$REPO" \
-                --title "$TAG" \
-                --notes-file "$NOTES" \
-                --verify-tag \
-                --draft
-            else
-              gh release create "$TAG" "$ARM64_DMG" "$X64_DMG" "$CHECKSUMS" "$MANIFEST" \
-                --repo "$REPO" \
-                --title "$TAG" \
-                --notes-file "$NOTES" \
-                --verify-tag
-            fi
+            gh release edit "$TAG" --repo "$REPO" --title "$TAG" --notes-file "$NOTES" --draft=false
           fi
+
+      - name: Verify GitHub release state and asset digests
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_ADMIN_TOKEN != '' && secrets.RELEASE_ADMIN_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+
+          bash ./scripts/release/verify_github_release.sh \
+            --repo "${{ github.repository }}" \
+            --tag "v${{ github.event.inputs.version }}" \
+            --mode "${{ github.event.inputs.mode }}" \
+            --arm64-dmg-path "${{ steps.release.outputs.arm64_dmg_path }}" \
+            --x86-64-dmg-path "${{ steps.release.outputs.x86_64_dmg_path }}" \
+            --sha256-path "${{ steps.release.outputs.release_sha256_path }}" \
+            --manifest-path "${{ steps.release.outputs.release_manifest_path }}" \
+            --wait-seconds 180 \
+            --poll-interval 5
