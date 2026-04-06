@@ -5,6 +5,8 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "🗿 Moaiy GPG Bundler"
 echo "===================="
 echo ""
@@ -12,7 +14,7 @@ echo ""
 # Configuration
 GPG_VERSION="2.5.18"
 BREW_GPG_PATH="/opt/homebrew/opt/gnupg"
-OUTPUT_DIR="../Moaiy/Resources/gpg.bundle"
+OUTPUT_DIR="$SCRIPT_DIR/../Moaiy/Resources/gpg.bundle"
 
 # Check if GPG is installed via Homebrew
 if [ ! -d "$BREW_GPG_PATH" ]; then
@@ -60,7 +62,7 @@ done
 # Fix library paths
 echo "🔧 Fixing library paths..."
 cd "$OUTPUT_DIR"
-../fix_gpg_deps.sh 2>/dev/null || echo "   ℹ️  Run fix_gpg_deps.sh manually if needed"
+"$SCRIPT_DIR/fix_gpg_deps.sh" 2>/dev/null || echo "   ℹ️  Run scripts/fix_gpg_deps.sh manually if needed"
 
 # Create checksum
 echo "📝 Creating checksum..."

@@ -143,7 +143,7 @@ class SandboxTestRunner: ObservableObject {
                 return tryExecuteGPG(at: directPath)
             }
 
-            print("   ❌ To fix: Add gpg binary to Resources/ and run fix_gpg_deps.sh")
+            print("   ❌ To fix: Add gpg binary to Resources/ and run scripts/fix_gpg_deps.sh")
             return false
         }
         
