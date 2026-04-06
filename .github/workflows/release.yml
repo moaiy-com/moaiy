@@ -1,0 +1,181 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (X.Y.Z)"
+        required: true
+        type: string
+      mode:
+        description: "Release mode"
+        required: true
+        default: draft
+        type: choice
+        options:
+          - draft
+          - publish
+      signing:
+        description: "Signing strategy"
+        required: true
+        default: auto
+        type: choice
+        options:
+          - auto
+          - unsigned
+          - signed
+      gate:
+        description: "Validation gate level"
+        required: true
+        default: balanced
+        type: choice
+        options:
+          - balanced
+          - strict
+          - fast
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Validate input format
+        run: |
+          set -euo pipefail
+          VERSION="${{ github.event.inputs.version }}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must match X.Y.Z"
+            exit 1
+          fi
+
+      - name: Preflight main alignment and required check
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_ADMIN_TOKEN != '' && secrets.RELEASE_ADMIN_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin main --prune
+          MAIN_SHA="$(git rev-parse origin/main)"
+          HEAD_SHA="$(git rev-parse HEAD)"
+
+          echo "origin/main: $MAIN_SHA"
+          echo "HEAD       : $HEAD_SHA"
+
+          if [[ "$HEAD_SHA" != "$MAIN_SHA" ]]; then
+            echo "Release must run on the latest origin/main commit."
+            exit 1
+          fi
+
+          REQUIRED_STATE="$(
+            gh api repos/${{ github.repository }}/commits/$MAIN_SHA/status \
+              --jq '.statuses | map(select(.context=="build-and-test")) | .[0].state // ""'
+          )"
+
+          if [[ "$REQUIRED_STATE" != "success" ]]; then
+            echo "Required status check build-and-test is not success for $MAIN_SHA"
+            echo "Current state: ${REQUIRED_STATE:-missing}"
+            exit 1
+          fi
+
+      - name: Release orchestration (gates + packaging + metadata + notes)
+        id: release
+        run: |
+          set -euo pipefail
+          chmod +x ./scripts/package_dmg.sh
+          chmod +x ./scripts/release/*.sh
+
+          ./scripts/release/run_release.sh \
+            --version "${{ github.event.inputs.version }}" \
+            --mode "${{ github.event.inputs.mode }}" \
+            --signing "${{ github.event.inputs.signing }}" \
+            --gate "${{ github.event.inputs.gate }}" \
+            --allow-existing-tag \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Ensure and push release tag
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_ADMIN_TOKEN != '' && secrets.RELEASE_ADMIN_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+
+          TAG="v${{ github.event.inputs.version }}"
+          TARGET_SHA="${{ steps.release.outputs.target_commit }}"
+          TARGET_SHA="${TARGET_SHA:-$(git rev-parse HEAD)}"
+
+          LOCAL_TAG_SHA="$(git rev-parse -q --verify "refs/tags/$TAG" || true)"
+          if [[ -n "$LOCAL_TAG_SHA" && "$LOCAL_TAG_SHA" != "$TARGET_SHA" ]]; then
+            echo "Local tag $TAG points to $LOCAL_TAG_SHA, expected $TARGET_SHA"
+            exit 1
+          fi
+
+          if [[ -z "$LOCAL_TAG_SHA" ]]; then
+            git tag "$TAG" "$TARGET_SHA"
+          fi
+
+          REMOTE_TAG_SHA="$(git ls-remote --tags origin "refs/tags/$TAG" | awk '{print $1}' | head -n 1 || true)"
+          if [[ -n "$REMOTE_TAG_SHA" && "$REMOTE_TAG_SHA" != "$TARGET_SHA" ]]; then
+            echo "Remote tag $TAG points to $REMOTE_TAG_SHA, expected $TARGET_SHA"
+            exit 1
+          fi
+
+          if [[ -z "$REMOTE_TAG_SHA" ]]; then
+            git push origin "refs/tags/$TAG"
+          fi
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_ADMIN_TOKEN != '' && secrets.RELEASE_ADMIN_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+
+          TAG="v${{ github.event.inputs.version }}"
+          MODE="${{ github.event.inputs.mode }}"
+          REPO="${{ github.repository }}"
+
+          NOTES="${{ steps.release.outputs.release_notes_path }}"
+          MANIFEST="${{ steps.release.outputs.release_manifest_path }}"
+          CHECKSUMS="${{ steps.release.outputs.release_sha256_path }}"
+          ARM64_DMG="${{ steps.release.outputs.arm64_dmg_path }}"
+          X64_DMG="${{ steps.release.outputs.x86_64_dmg_path }}"
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ARM64_DMG" "$X64_DMG" "$CHECKSUMS" "$MANIFEST" --repo "$REPO" --clobber
+            if [[ "$MODE" == "draft" ]]; then
+              gh release edit "$TAG" --repo "$REPO" --title "$TAG" --notes-file "$NOTES" --draft
+            else
+              gh release edit "$TAG" --repo "$REPO" --title "$TAG" --notes-file "$NOTES" --draft=false
+            fi
+          else
+            if [[ "$MODE" == "draft" ]]; then
+              gh release create "$TAG" "$ARM64_DMG" "$X64_DMG" "$CHECKSUMS" "$MANIFEST" \
+                --repo "$REPO" \
+                --title "$TAG" \
+                --notes-file "$NOTES" \
+                --verify-tag \
+                --draft
+            else
+              gh release create "$TAG" "$ARM64_DMG" "$X64_DMG" "$CHECKSUMS" "$MANIFEST" \
+                --repo "$REPO" \
+                --title "$TAG" \
+                --notes-file "$NOTES" \
+                --verify-tag
+            fi
+          fi
