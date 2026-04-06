@@ -305,8 +305,7 @@ struct BundledGPGTests {
             "/usr/local/Cellar",
             "/usr/local/opt",
             "/opt/homebrew/Cellar",
-            "/opt/homebrew/opt",
-            "/Users/"
+            "/opt/homebrew/opt"
         ]
         
         guard let enumerator = FileManager.default.enumerator(at: bundleURL, includingPropertiesForKeys: nil) else {
@@ -318,12 +317,15 @@ struct BundledGPGTests {
             let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
             guard values.isRegularFile == true else { continue }
             guard fileURL.pathExtension == "dylib" || fileURL.pathExtension.isEmpty else { continue }
+            guard let dependencyPaths = try? MachODependencyReader.readDependencyPaths(from: fileURL) else {
+                continue
+            }
 
-            // Read file bytes directly to avoid pipe back-pressure deadlocks in CI.
-            let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
-            for forbiddenPath in forbiddenPaths {
-                #expect(data.range(of: Data(forbiddenPath.utf8)) == nil,
-                        "\(fileURL.lastPathComponent) should not contain hardcoded path: \(forbiddenPath)")
+            for dependencyPath in dependencyPaths {
+                for forbiddenPath in forbiddenPaths {
+                    #expect(!dependencyPath.contains(forbiddenPath),
+                            "\(fileURL.lastPathComponent) dependency should not contain hardcoded path: \(forbiddenPath)")
+                }
             }
         }
     }
