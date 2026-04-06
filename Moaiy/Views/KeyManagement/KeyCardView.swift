@@ -17,12 +17,19 @@ struct KeyCardView: View {
     @State private var showingPasswordSheet = false
     @State private var passwordSheetFileName = ""
     @State private var pendingDecryptRequests: [DecryptRequest] = []
+    @State private var pendingDetectedFiles: [DetectedFile] = []
+    @State private var showingUntrustedEncryptionConfirmation = false
     
     private let detector = GPGFileTypeDetector()
 
     private struct DecryptRequest {
         let sourceURL: URL
         let outputURL: URL
+    }
+
+    private struct DetectedFile {
+        let url: URL
+        let type: GPGFileType
     }
     
     var body: some View {
@@ -62,6 +69,23 @@ struct KeyCardView: View {
                     }
                 }
             )
+        }
+        .alert("encrypt_untrusted_recipient_title", isPresented: $showingUntrustedEncryptionConfirmation) {
+            Button("action_cancel", role: .cancel) {
+                pendingDetectedFiles = []
+                isProcessing = false
+            }
+            Button("action_confirm", role: .destructive) {
+                let files = pendingDetectedFiles
+                pendingDetectedFiles = []
+                Task { @MainActor in
+                    isProcessing = true
+                    await processDetectedFiles(files, allowUntrustedRecipients: true)
+                    completeBatchProcessing()
+                }
+            }
+        } message: {
+            Text("encrypt_untrusted_recipient_message")
         }
         .contextMenu {
             Button(action: {
@@ -224,30 +248,67 @@ struct KeyCardView: View {
             operationResults = []
             pendingDecryptRequests = []
             passwordSheetFileName = ""
-            
+
+            var detectedFiles: [DetectedFile] = []
             for url in urls {
                 let hasScopedAccess = url.startAccessingSecurityScopedResource()
                 let fileType = await detector.detectFileType(at: url)
                 if hasScopedAccess {
                     url.stopAccessingSecurityScopedResource()
                 }
-                await processFile(url: url, type: fileType)
+                detectedFiles.append(DetectedFile(url: url, type: fileType))
             }
-            
-            isProcessing = false
-            if !pendingDecryptRequests.isEmpty {
-                passwordSheetFileName = pendingDecryptRequests.first?.sourceURL.lastPathComponent ?? ""
-                showingPasswordSheet = true
+
+            if requiresUntrustedEncryptionConfirmation(for: detectedFiles) {
+                pendingDetectedFiles = detectedFiles
+                showingUntrustedEncryptionConfirmation = true
                 return
             }
-            if !operationResults.isEmpty {
-                showingResultOverlay = true
+
+            await processDetectedFiles(detectedFiles, allowUntrustedRecipients: false)
+            completeBatchProcessing()
+        }
+    }
+
+    @MainActor
+    private func processDetectedFiles(_ detectedFiles: [DetectedFile], allowUntrustedRecipients: Bool) async {
+        for detected in detectedFiles {
+            await processFile(
+                url: detected.url,
+                type: detected.type,
+                allowUntrustedRecipients: allowUntrustedRecipients
+            )
+        }
+    }
+
+    @MainActor
+    private func completeBatchProcessing() {
+        isProcessing = false
+        if !pendingDecryptRequests.isEmpty {
+            passwordSheetFileName = pendingDecryptRequests.first?.sourceURL.lastPathComponent ?? ""
+            showingPasswordSheet = true
+            return
+        }
+        if !operationResults.isEmpty {
+            showingResultOverlay = true
+        }
+    }
+
+    private func requiresUntrustedEncryptionConfirmation(for detectedFiles: [DetectedFile]) -> Bool {
+        guard !key.isTrusted else { return false }
+
+        return detectedFiles.contains { detected in
+            switch detected.type {
+            case .encrypted:
+                return false
+            case .notGPG, .publicKey, .privateKey, .signature, .unknown:
+                return true
             }
         }
     }
-    
+
     @MainActor
-    private func processFile(url: URL, type: GPGFileType) async {
+    private func processFile(url: URL, type: GPGFileType, allowUntrustedRecipients: Bool) async {
         do {
             switch type {
             case .encrypted:
@@ -277,7 +338,7 @@ struct KeyCardView: View {
                     )
                 )
                 return
-                
+
             case .notGPG:
                 let defaultOutputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
                 guard let outputURL = presentFileOperationSavePanel(
@@ -302,7 +363,8 @@ struct KeyCardView: View {
                 let finalOutputURL = try await GPGService.shared.encryptFile(
                     sourceURL: url,
                     destinationURL: plannedOutputURL,
-                    recipients: [key.fingerprint]
+                    recipients: [key.fingerprint],
+                    allowUntrustedRecipients: allowUntrustedRecipients
                 )
                 operationResults.append(
                     OperationResult.successEncrypt(fileURL: url, outputURL: finalOutputURL)
@@ -332,7 +394,8 @@ struct KeyCardView: View {
                 let finalOutputURL = try await GPGService.shared.encryptFile(
                     sourceURL: url,
                     destinationURL: plannedOutputURL,
-                    recipients: [key.fingerprint]
+                    recipients: [key.fingerprint],
+                    allowUntrustedRecipients: allowUntrustedRecipients
                 )
                 operationResults.append(
                     OperationResult.successEncrypt(fileURL: url, outputURL: finalOutputURL)

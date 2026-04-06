@@ -140,6 +140,8 @@ struct KeyActionMenu: View {
     @State private var showingSigningSheet = false
     @State private var showingEditSheet = false
     @State private var pendingPassphraseAction: PassphraseAction?
+    @State private var pendingUntrustedEncryptURLs: [URL] = []
+    @State private var showingUntrustedEncryptionConfirmation = false
     @State private var alertTitle: LocalizedStringKey = "operation_success"
     @State private var alertMessage = ""
     @State private var showingAlert = false
@@ -311,6 +313,20 @@ struct KeyActionMenu: View {
         } message: {
             Text(alertMessage)
         }
+        .alert("encrypt_untrusted_recipient_title", isPresented: $showingUntrustedEncryptionConfirmation) {
+            Button("action_cancel", role: .cancel) {
+                pendingUntrustedEncryptURLs = []
+            }
+            Button("action_confirm", role: .destructive) {
+                let urls = pendingUntrustedEncryptURLs
+                pendingUntrustedEncryptURLs = []
+                Task {
+                    await encryptFiles(urls, allowUntrustedRecipients: true)
+                }
+            }
+        } message: {
+            Text("encrypt_untrusted_recipient_message")
+        }
     }
 
     private func encryptFromPicker() {
@@ -323,6 +339,12 @@ struct KeyActionMenu: View {
         guard panel.runModal() == .OK else { return }
         let selectedURLs = panel.urls
         guard !selectedURLs.isEmpty else { return }
+
+        guard key.isTrusted else {
+            pendingUntrustedEncryptURLs = selectedURLs
+            showingUntrustedEncryptionConfirmation = true
+            return
+        }
 
         Task {
             await encryptFiles(selectedURLs)
@@ -404,7 +426,7 @@ struct KeyActionMenu: View {
     }
 
     @MainActor
-    private func encryptFiles(_ urls: [URL]) async {
+    private func encryptFiles(_ urls: [URL], allowUntrustedRecipients: Bool = false) async {
         var encryptedFileCount = 0
         var failedFileCount = 0
         var firstError: Error?
@@ -434,7 +456,8 @@ struct KeyActionMenu: View {
                 _ = try await GPGService.shared.encryptFile(
                     sourceURL: url,
                     destinationURL: plannedOutputURL,
-                    recipients: [key.fingerprint]
+                    recipients: [key.fingerprint],
+                    allowUntrustedRecipients: allowUntrustedRecipients
                 )
                 encryptedFileCount += 1
             } catch {
@@ -662,6 +685,7 @@ struct KeyActionMenu: View {
             }
         }
         try data.write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
     private func presentExportPanel(defaultFileName: String) -> URL? {
