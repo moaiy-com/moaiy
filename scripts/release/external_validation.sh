@@ -17,6 +17,9 @@ Options:
   --label <name>            Run label used in output filenames (default: external)
   --mode <full|smoke>       Validation mode (default: full)
   --arch <arch>             Optional macOS arch override (arm64 or x86_64)
+  --serial-tests <true|false>
+                            Force serialized test execution to avoid flaky shared-state races
+                            (default: true)
   --scheme <name>           Xcode scheme (default: MoaiyTests)
   --project <path>          Xcode project path (default: <repo>/Moaiy/Moaiy.xcodeproj)
   --derived-data <path>     DerivedData path (default: /tmp/moaiy-deriveddata-release)
@@ -36,6 +39,7 @@ VERSION=""
 LABEL="external"
 MODE="full"
 ARCH=""
+SERIAL_TESTS="true"
 DERIVED_DATA_PATH="/tmp/moaiy-deriveddata-release"
 RESULT_DIR="$ROOT_DIR/dist/validation"
 
@@ -55,6 +59,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --arch)
       ARCH="${2:-}"
+      shift 2
+      ;;
+    --serial-tests)
+      SERIAL_TESTS="${2:-}"
       shift 2
       ;;
     --scheme)
@@ -107,6 +115,11 @@ fi
 
 if [[ -n "$ARCH" && "$ARCH" != "arm64" && "$ARCH" != "x86_64" ]]; then
   echo "ERROR: --arch must be arm64 or x86_64"
+  exit 1
+fi
+
+if [[ "$SERIAL_TESTS" != "true" && "$SERIAL_TESTS" != "false" ]]; then
+  echo "ERROR: --serial-tests must be true or false"
   exit 1
 fi
 
@@ -175,6 +188,13 @@ CMD=(
   -resultBundlePath "$RESULT_BUNDLE"
 )
 
+if [[ "$SERIAL_TESTS" == "true" ]]; then
+  CMD+=(
+    -parallel-testing-enabled NO
+    -maximum-parallel-testing-workers 1
+  )
+fi
+
 for target in "${TEST_TARGETS[@]}"; do
   CMD+=("-only-testing:${target}")
 done
@@ -184,6 +204,7 @@ echo "  version: $VERSION"
 echo "  label: $LABEL"
 echo "  mode: $MODE"
 echo "  destination: $DESTINATION"
+echo "  serial tests: $SERIAL_TESTS"
 echo "  result bundle: $RESULT_BUNDLE"
 echo "  xcodebuild log: $XCODEBUILD_LOG_PATH"
 echo
@@ -226,6 +247,7 @@ EOF
 - Mode: \`$MODE\`
 - Result: \`Blocked\`
 - Blocker: \`RB-002\` (sandbox macro expansion issue)
+- Serial tests: \`$SERIAL_TESTS\`
 - xcodebuild exit code: \`$XCODEBUILD_STATUS\`
 - Destination: \`$DESTINATION\`
 - xcodebuild log: \`$XCODEBUILD_LOG_PATH\`
@@ -269,6 +291,7 @@ cat > "$SUMMARY_MD_PATH" <<EOF
 - Version: \`$VERSION\`
 - Label: \`$LABEL\`
 - Mode: \`$MODE\`
+- Serial tests: \`$SERIAL_TESTS\`
 - Result: \`$RESULT\`
 - Passed: \`$PASSED\`
 - Failed: \`$FAILED\`
