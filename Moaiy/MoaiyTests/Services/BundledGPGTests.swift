@@ -315,23 +315,14 @@ struct BundledGPGTests {
         }
         
         for case let fileURL as URL in enumerator {
+            let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
+            guard values.isRegularFile == true else { continue }
             guard fileURL.pathExtension == "dylib" || fileURL.pathExtension.isEmpty else { continue }
-            
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/strings")
-            process.arguments = [fileURL.path]
-            
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            
-            try process.run()
-            process.waitUntilExit()
-            
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
-            
+
+            // Read file bytes directly to avoid pipe back-pressure deadlocks in CI.
+            let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
             for forbiddenPath in forbiddenPaths {
-                #expect(!output.contains(forbiddenPath),
+                #expect(data.range(of: Data(forbiddenPath.utf8)) == nil,
                         "\(fileURL.lastPathComponent) should not contain hardcoded path: \(forbiddenPath)")
             }
         }
