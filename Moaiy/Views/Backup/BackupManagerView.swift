@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import CryptoKit
+import Darwin
 
 struct BackupManagerView: View {
     @Environment(KeyManagementViewModel.self) private var viewModel
@@ -286,12 +288,20 @@ struct BackupManagerView: View {
         var exportedSecretKeyCount = 0
         var failedSecretKeyFingerprints: [String] = []
         var firstSecretKeyExportError: String?
+        var manifestFiles: [BackupManifestFileEntry] = []
 
         // Export all public keys
         for key in viewModel.keys {
             let publicData = try await viewModel.exportPublicKey(key)
             let publicFile = tempDir.appendingPathComponent("\(key.fingerprint)_public.asc")
-            try publicData.write(to: publicFile)
+            try writeBackupPayload(publicData, to: publicFile)
+            manifestFiles.append(
+                BackupManifestFileEntry(
+                    fileName: publicFile.lastPathComponent,
+                    sha256: BackupIntegrityVerifier.sha256Hex(for: publicData),
+                    kind: .publicKey
+                )
+            )
             exportedPublicKeyCount += 1
 
             // Export secret keys if included
@@ -302,7 +312,14 @@ struct BackupManagerView: View {
                         passphrase: secretKeyPassphrase ?? ""
                     )
                     let secretFile = tempDir.appendingPathComponent("\(key.fingerprint)_secret.asc")
-                    try secretData.write(to: secretFile)
+                    try writeBackupPayload(secretData, to: secretFile)
+                    manifestFiles.append(
+                        BackupManifestFileEntry(
+                            fileName: secretFile.lastPathComponent,
+                            sha256: BackupIntegrityVerifier.sha256Hex(for: secretData),
+                            kind: .secretKey
+                        )
+                    )
                     exportedSecretKeyCount += 1
                 } catch {
                     failedSecretKeyFingerprints.append(key.fingerprint)
@@ -327,37 +344,41 @@ struct BackupManagerView: View {
 
         // Create manifest
         let manifest = BackupManifest(
-            version: "1.0",
+            version: Constants.Backup.currentVersion,
             created: Date(),
             keyCount: viewModel.keys.count,
             includeSecretKeys: includeSecretKeys,
             exportedPublicKeyCount: summary.exportedPublicKeyCount,
             exportedSecretKeyCount: summary.exportedSecretKeyCount,
             failedSecretKeyCount: summary.failedSecretKeyCount,
-            keys: viewModel.keys.map { BackupKeyInfo(
-                fingerprint: $0.fingerprint,
-                name: $0.name,
-                email: $0.email,
-                isSecret: $0.isSecret
-            )}
+            keys: viewModel.keys.map {
+                BackupKeyInfo(
+                    fingerprint: $0.fingerprint,
+                    name: $0.name,
+                    email: $0.email,
+                    isSecret: $0.isSecret
+                )
+            },
+            files: manifestFiles,
+            totalFiles: manifestFiles.count
         )
 
         let manifestData = try JSONEncoder().encode(manifest)
-        let manifestFile = tempDir.appendingPathComponent("manifest.json")
-        try manifestData.write(to: manifestFile)
+        let manifestFile = tempDir.appendingPathComponent(Constants.Backup.manifestFileName)
+        try writeBackupPayload(manifestData, to: manifestFile)
 
         // Create actual ZIP archive using system ditto command
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-        process.arguments = ["-c", "-k", "--sequesterRsrc", "--keepParent",
-                             tempDir.path, url.path]
-
-        try process.run()
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            throw BackupError.invalidBackupFormat
-        }
+        try await runDitto(
+            arguments: [
+                "-c",
+                "-k",
+                "--sequesterRsrc",
+                "--keepParent",
+                "--",
+                tempDir.path,
+                url.path
+            ]
+        )
 
         return summary
     }
@@ -386,7 +407,9 @@ struct BackupManagerView: View {
                 await viewModel.loadKeys()
 
                 if summary.failedFiles.isEmpty {
-                    restoreSuccessMessage = String(localized: "restore_success_message")
+                    restoreSuccessMessage = summary.usedLegacyRestrictedPath
+                        ? String(localized: "restore_success_message_legacy_restricted")
+                        : String(localized: "restore_success_message")
                     showRestoreSuccess = true
                 } else {
                     let failed = summary.failedFiles.joined(separator: ", ")
@@ -413,16 +436,15 @@ struct BackupManagerView: View {
 
         if url.pathExtension.lowercased() == "zip" {
             // Extract ZIP archive using system ditto command
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-            process.arguments = ["-x", "-k", url.path, tempDir.path]
-
-            try process.run()
-            process.waitUntilExit()
-
-            guard process.terminationStatus == 0 else {
-                throw BackupError.invalidBackupFormat
-            }
+            try await runDitto(
+                arguments: [
+                    "-x",
+                    "-k",
+                    "--",
+                    url.path,
+                    tempDir.path
+                ]
+            )
 
             // ditto extracts to a subdirectory with the archive name
             // Find the extracted directory
@@ -443,21 +465,26 @@ struct BackupManagerView: View {
         }
 
         // Read manifest
-        let manifestFile = backupDir.appendingPathComponent("manifest.json")
+        let manifestFile = backupDir.appendingPathComponent(Constants.Backup.manifestFileName)
         guard FileManager.default.fileExists(atPath: manifestFile.path) else {
             throw BackupError.manifestNotFound
         }
 
         let manifestData = try Data(contentsOf: manifestFile)
-        _ = try JSONDecoder().decode(BackupManifest.self, from: manifestData)
+        let manifest = try JSONDecoder().decode(BackupManifest.self, from: manifestData)
+        let validationResult: BackupValidationResult
+        do {
+            validationResult = try BackupIntegrityVerifier.validateImportableFiles(
+                in: backupDir,
+                manifest: manifest,
+                maxFileSizeBytes: Constants.Backup.maxImportFileSizeBytes
+            )
+        } catch {
+            throw BackupError.invalidBackupFormat
+        }
 
         // Import all keys
-        let files = try FileManager.default.contentsOfDirectory(
-            at: backupDir,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        )
-        let keyFiles = files.filter { $0.pathExtension == "asc" }
+        let keyFiles = validationResult.files
         var successfulFiles = 0
         var failedFiles: [String] = []
 
@@ -473,8 +500,88 @@ struct BackupManagerView: View {
         return RestoreSummary(
             totalFiles: keyFiles.count,
             successfulFiles: successfulFiles,
-            failedFiles: failedFiles
+            failedFiles: failedFiles,
+            usedLegacyRestrictedPath: validationResult.usedLegacyRestrictedPath
         )
+    }
+
+    private func writeBackupPayload(_ data: Data, to url: URL) throws {
+        try data.write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+
+    private func runDitto(arguments: [String], timeout: TimeInterval = Constants.GPG.defaultTimeout) async throws {
+        let result = try await runExternalProcess(
+            executableURL: URL(fileURLWithPath: "/usr/bin/ditto"),
+            arguments: arguments,
+            timeout: timeout
+        )
+
+        guard result.exitCode == 0 else {
+            throw BackupError.invalidBackupFormat
+        }
+    }
+
+    private func runExternalProcess(
+        executableURL: URL,
+        arguments: [String],
+        timeout: TimeInterval
+    ) async throws -> ExternalProcessResult {
+        let process = Process()
+        process.executableURL = executableURL
+        process.arguments = arguments
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        return try await withTaskCancellationHandler {
+            try process.run()
+
+            let deadline = Date().addingTimeInterval(timeout)
+            do {
+                while process.isRunning && Date() < deadline {
+                    try Task.checkCancellation()
+                    try await Task.sleep(nanoseconds: 100_000_000)
+                }
+            } catch is CancellationError {
+                Self.forceStopProcess(process)
+                throw GPGError.operationCancelled
+            }
+
+            if process.isRunning {
+                Self.forceStopProcess(process)
+                throw BackupError.invalidBackupFormat
+            }
+
+            let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            let stdout = String(data: stdoutData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let stderr = String(data: stderrData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            return ExternalProcessResult(
+                exitCode: Int(process.terminationStatus),
+                stdout: stdout,
+                stderr: stderr
+            )
+        } onCancel: {
+            Self.forceStopProcess(process)
+        }
+    }
+
+    nonisolated private static func forceStopProcess(_ process: Process) {
+        guard process.isRunning else { return }
+        process.terminate()
+
+        if process.isRunning {
+            let pid = process.processIdentifier
+            if pid > 0 {
+                kill(pid, SIGKILL)
+            }
+        }
     }
 
     // MARK: - Persistence
@@ -504,6 +611,13 @@ private struct RestoreSummary {
     let totalFiles: Int
     let successfulFiles: Int
     let failedFiles: [String]
+    let usedLegacyRestrictedPath: Bool
+}
+
+private struct ExternalProcessResult {
+    let exitCode: Int
+    let stdout: String?
+    let stderr: String?
 }
 
 struct BackupExportSummary {
@@ -609,6 +723,8 @@ struct BackupManifest: Codable {
     let exportedSecretKeyCount: Int?
     let failedSecretKeyCount: Int?
     let keys: [BackupKeyInfo]
+    let files: [BackupManifestFileEntry]?
+    let totalFiles: Int?
 }
 
 struct BackupKeyInfo: Codable {
@@ -616,6 +732,183 @@ struct BackupKeyInfo: Codable {
     let name: String
     let email: String
     let isSecret: Bool
+}
+
+enum BackupManifestFileKind: String, Codable {
+    case publicKey
+    case secretKey
+}
+
+struct BackupManifestFileEntry: Codable, Hashable {
+    let fileName: String
+    let sha256: String
+    let kind: BackupManifestFileKind
+}
+
+struct BackupValidationResult {
+    let files: [URL]
+    let usedLegacyRestrictedPath: Bool
+}
+
+enum BackupIntegrityError: Error, LocalizedError {
+    case invalidManifest
+    case fileSetMismatch
+    case fileHashMismatch
+    case unsafeFile
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidManifest, .fileSetMismatch, .fileHashMismatch, .unsafeFile:
+            return String(localized: "backup_error_invalid_format")
+        }
+    }
+}
+
+enum BackupIntegrityVerifier {
+    static func sha256Hex(for data: Data) -> String {
+        SHA256.hash(data: data)
+            .compactMap { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    static func validateImportableFiles(
+        in backupDir: URL,
+        manifest: BackupManifest,
+        maxFileSizeBytes: Int
+    ) throws -> BackupValidationResult {
+        let fileManager = FileManager.default
+        let allFiles = try fileManager.contentsOfDirectory(
+            at: backupDir,
+            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        )
+        let ascFiles = allFiles.filter { $0.pathExtension.lowercased() == "asc" }
+
+        if manifest.version == "1.1", let entries = manifest.files {
+            guard let totalFiles = manifest.totalFiles, totalFiles == entries.count else {
+                throw BackupIntegrityError.invalidManifest
+            }
+            guard Set(entries.map(\.fileName)).count == entries.count else {
+                throw BackupIntegrityError.invalidManifest
+            }
+
+            let allowedNames = Set(entries.map(\.fileName))
+            let discoveredNames = Set(ascFiles.map(\.lastPathComponent))
+            guard discoveredNames == allowedNames else {
+                throw BackupIntegrityError.fileSetMismatch
+            }
+
+            var orderedFiles: [URL] = []
+            for entry in entries {
+                guard isSafeFileName(entry.fileName),
+                      isWhitelistedManifestFileName(entry.fileName, kind: entry.kind) else {
+                    throw BackupIntegrityError.invalidManifest
+                }
+
+                let fileURL = backupDir.appendingPathComponent(entry.fileName)
+                try validateSafeRegularFile(fileURL, maxFileSizeBytes: maxFileSizeBytes)
+                let fileData = try Data(contentsOf: fileURL)
+                let digest = sha256Hex(for: fileData)
+                guard digest.caseInsensitiveCompare(entry.sha256) == .orderedSame else {
+                    throw BackupIntegrityError.fileHashMismatch
+                }
+                orderedFiles.append(fileURL)
+            }
+
+            return BackupValidationResult(
+                files: orderedFiles,
+                usedLegacyRestrictedPath: false
+            )
+        }
+
+        if manifest.version == "1.0" {
+            let allowedLegacyNames = Set(
+                manifest.keys.compactMap { key in
+                    normalizedFingerprintForFileName(key.fingerprint)
+                }.flatMap { fingerprint in
+                    [
+                        "\(fingerprint)_public.asc",
+                        "\(fingerprint)_secret.asc"
+                    ]
+                }.map { $0.lowercased() }
+            )
+
+            guard !allowedLegacyNames.isEmpty else {
+                throw BackupIntegrityError.invalidManifest
+            }
+
+            let discoveredNames = Set(ascFiles.map { $0.lastPathComponent.lowercased() })
+            guard discoveredNames.isSubset(of: allowedLegacyNames) else {
+                throw BackupIntegrityError.fileSetMismatch
+            }
+
+            let restrictedFiles = ascFiles
+                .filter { allowedLegacyNames.contains($0.lastPathComponent.lowercased()) }
+                .sorted { lhs, rhs in
+                    lhs.lastPathComponent.localizedCaseInsensitiveCompare(rhs.lastPathComponent) == .orderedAscending
+                }
+            guard !restrictedFiles.isEmpty else {
+                throw BackupIntegrityError.fileSetMismatch
+            }
+
+            for fileURL in restrictedFiles {
+                try validateSafeRegularFile(fileURL, maxFileSizeBytes: maxFileSizeBytes)
+            }
+
+            return BackupValidationResult(
+                files: restrictedFiles,
+                usedLegacyRestrictedPath: true
+            )
+        }
+
+        throw BackupIntegrityError.invalidManifest
+    }
+
+    private static func validateSafeRegularFile(_ url: URL, maxFileSizeBytes: Int) throws {
+        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+        guard values.isRegularFile == true else {
+            throw BackupIntegrityError.unsafeFile
+        }
+        guard values.isSymbolicLink != true else {
+            throw BackupIntegrityError.unsafeFile
+        }
+        if let fileSize = values.fileSize, fileSize > maxFileSizeBytes {
+            throw BackupIntegrityError.unsafeFile
+        }
+    }
+
+    private static func isSafeFileName(_ fileName: String) -> Bool {
+        guard !fileName.isEmpty else { return false }
+        return fileName == URL(fileURLWithPath: fileName).lastPathComponent
+    }
+
+    private static func isWhitelistedManifestFileName(_ fileName: String, kind: BackupManifestFileKind) -> Bool {
+        let suffix: String
+        switch kind {
+        case .publicKey:
+            suffix = "_public.asc"
+        case .secretKey:
+            suffix = "_secret.asc"
+        }
+
+        guard fileName.hasSuffix(suffix) else {
+            return false
+        }
+
+        let fingerprint = String(fileName.dropLast(suffix.count))
+        return normalizedFingerprintForFileName(fingerprint) != nil
+    }
+
+    private static func normalizedFingerprintForFileName(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (16...64).contains(trimmed.count) else {
+            return nil
+        }
+        guard trimmed.allSatisfy({ $0.isHexDigit }) else {
+            return nil
+        }
+        return trimmed.uppercased()
+    }
 }
 
 private enum BackupError: Error, LocalizedError {

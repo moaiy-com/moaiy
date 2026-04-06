@@ -7,6 +7,7 @@
 
 import Foundation
 import os.log
+import Darwin
 
 private final class PipeAccumulator {
     private let lock = NSLock()
@@ -31,6 +32,18 @@ private final class PipeAccumulator {
 /// Actor for executing GPG commands off the main thread
 actor GPGProcessExecutor {
 
+    nonisolated private static func forceStopProcess(_ process: Process) {
+        guard process.isRunning else { return }
+        process.terminate()
+
+        if process.isRunning {
+            let pid = process.processIdentifier
+            if pid > 0 {
+                kill(pid, SIGKILL)
+            }
+        }
+    }
+
     /// Execute a GPG command
     func execute(
         executableURL: URL,
@@ -38,13 +51,13 @@ actor GPGProcessExecutor {
         environment: [String: String],
         gpgHome: URL?,
         input: String?,
-        timeout: TimeInterval = Constants.GPG.defaultTimeout
+        timeout: TimeInterval = Constants.GPG.defaultTimeout,
+        onLaunch: (@Sendable (Int32) -> Void)? = nil
     ) async throws -> GPGExecutionResult {
-        
         let process = Process()
         process.executableURL = executableURL
         process.arguments = arguments
-        
+
         // Set environment
         var env = ProcessInfo.processInfo.environment
         if let gpgHome = gpgHome {
@@ -67,7 +80,7 @@ actor GPGProcessExecutor {
             stdinPipe = Pipe()
             process.standardInput = stdinPipe
         }
-        
+
         let stdoutAccumulator = PipeAccumulator()
         let stderrAccumulator = PipeAccumulator()
 
@@ -87,70 +100,83 @@ actor GPGProcessExecutor {
             }
             stderrAccumulator.append(chunk)
         }
-
-        // Execute with timeout
-        try process.run()
-        
-        // Write input if provided
-        if let input = input, let stdinPipe = stdinPipe {
-            let inputData = input.data(using: .utf8) ?? Data()
-            stdinPipe.fileHandleForWriting.write(inputData)
-            try? stdinPipe.fileHandleForWriting.close()
-        }
-        
-        // Wait for completion with timeout
-        let deadline = Date().addingTimeInterval(timeout)
-        while process.isRunning && Date() < deadline {
-            try await Task.sleep(nanoseconds: 100_000_000) // 100ms
-        }
-        
-        if process.isRunning {
-            process.terminate()
-
-            let terminateDeadline = Date().addingTimeInterval(1.0)
-            while process.isRunning && Date() < terminateDeadline {
-                try await Task.sleep(nanoseconds: 50_000_000)
-            }
-
+        defer {
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
             stderrPipe.fileHandleForReading.readabilityHandler = nil
-            let timeoutStderr = String(data: stderrAccumulator.data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let timeoutStdout = String(data: stdoutAccumulator.data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let timeoutMessage: String?
-            if let timeoutStderr, !timeoutStderr.isEmpty {
-                timeoutMessage = timeoutStderr
-            } else if let timeoutStdout, !timeoutStdout.isEmpty {
-                timeoutMessage = timeoutStdout
-            } else {
-                timeoutMessage = nil
-            }
-            let fallbackMessage = "Operation timed out after \(Int(timeout)) seconds"
-            throw GPGError.executionFailed(timeoutMessage?.isEmpty == false ? timeoutMessage! : fallbackMessage)
         }
 
-        stdoutPipe.fileHandleForReading.readabilityHandler = nil
-        stderrPipe.fileHandleForReading.readabilityHandler = nil
+        return try await withTaskCancellationHandler {
+            // Execute with timeout
+            try process.run()
+            onLaunch?(process.processIdentifier)
 
-        // Capture any trailing bytes after readability handlers are removed.
-        let stdoutTail = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrTail = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-        stdoutAccumulator.append(stdoutTail)
-        stderrAccumulator.append(stderrTail)
+            // Write input if provided
+            if let input = input, let stdinPipe = stdinPipe {
+                let inputData = input.data(using: .utf8) ?? Data()
+                stdinPipe.fileHandleForWriting.write(inputData)
+                try? stdinPipe.fileHandleForWriting.close()
+            }
 
-        let stdoutData = stdoutAccumulator.data
-        let stderrData = stderrAccumulator.data
-        
-        let stdout = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let stderr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        return GPGExecutionResult(
-            exitCode: Int(process.terminationStatus),
-            stdout: stdout?.isEmpty == false ? stdout : nil,
-            stderr: stderr?.isEmpty == false ? stderr : nil,
-            data: stdoutData.isEmpty ? nil : stdoutData
-        )
+            // Wait for completion with timeout
+            let deadline = Date().addingTimeInterval(timeout)
+            do {
+                while process.isRunning && Date() < deadline {
+                    try Task.checkCancellation()
+                    try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+                }
+            } catch is CancellationError {
+                Self.forceStopProcess(process)
+                throw GPGError.operationCancelled
+            }
+
+            if process.isRunning {
+                process.terminate()
+
+                let terminateDeadline = Date().addingTimeInterval(1.0)
+                while process.isRunning && Date() < terminateDeadline {
+                    try await Task.sleep(nanoseconds: 50_000_000)
+                }
+                if process.isRunning {
+                    Self.forceStopProcess(process)
+                }
+
+                let timeoutStderr = String(data: stderrAccumulator.data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let timeoutStdout = String(data: stdoutAccumulator.data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let timeoutMessage: String?
+                if let timeoutStderr, !timeoutStderr.isEmpty {
+                    timeoutMessage = timeoutStderr
+                } else if let timeoutStdout, !timeoutStdout.isEmpty {
+                    timeoutMessage = timeoutStdout
+                } else {
+                    timeoutMessage = nil
+                }
+                let fallbackMessage = String(localized: "error_operation_failed_generic")
+                throw GPGError.executionFailed(timeoutMessage?.isEmpty == false ? timeoutMessage! : fallbackMessage)
+            }
+
+            // Capture any trailing bytes after readability handlers are removed.
+            let stdoutTail = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            let stderrTail = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            stdoutAccumulator.append(stdoutTail)
+            stderrAccumulator.append(stderrTail)
+
+            let stdoutData = stdoutAccumulator.data
+            let stderrData = stderrAccumulator.data
+
+            let stdout = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let stderr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            return GPGExecutionResult(
+                exitCode: Int(process.terminationStatus),
+                stdout: stdout?.isEmpty == false ? stdout : nil,
+                stderr: stderr?.isEmpty == false ? stderr : nil,
+                data: stdoutData.isEmpty ? nil : stdoutData
+            )
+        } onCancel: {
+            Self.forceStopProcess(process)
+        }
     }
 }
 
@@ -634,6 +660,9 @@ final class GPGService {
     func generateKey(name: String, email: String, keyType: KeyType, passphrase: String? = nil) async throws -> String {
         try await ensureGPGAgentRunningIfNeeded()
 
+        let operationStartedAt = Date()
+        let beforeFingerprints = Set(try await listKeys(secretOnly: false).map(\.fingerprint))
+
         // Build key generation parameters
         let keyParams = buildKeyGenerationParams(
             name: name,
@@ -675,12 +704,18 @@ final class GPGService {
         }
 
         // If we get here, the key might have been created but output format is different
-        // Try to list the keys to find the new one
-        logger.warning("Could not find KEY_CREATED pattern, trying to find key by email")
+        // Try to identify new key by fingerprint delta and creation window.
+        logger.warning("Could not find KEY_CREATED pattern, trying fallback key lookup")
         let keys = try await listKeys(secretOnly: false)
-        if let newKey = keys.first(where: { $0.email == email }) {
+        let windowStart = operationStartedAt.addingTimeInterval(-120)
+        let newlyAddedKeys = keys.filter { !beforeFingerprints.contains($0.fingerprint) }
+        if let newKey = newestRecentlyCreatedKey(from: newlyAddedKeys, notBefore: windowStart) {
             logger.info("Found newly created key: \(newKey.fingerprint)")
             return newKey.fingerprint
+        }
+        if let emailFallback = newestEmailMatchedKey(from: keys, email: email, notBefore: windowStart) {
+            logger.info("Found key by creation window fallback: \(emailFallback.fingerprint)")
+            return emailFallback.fingerprint
         }
 
         logger.error("Could not find KEY_CREATED pattern in GPG output")
@@ -701,6 +736,7 @@ final class GPGService {
                 "--passphrase", "",
                 "--import",
                 "--status-fd", "1",
+                "--",
                 fileURL.path
             ]
         )
@@ -732,6 +768,7 @@ final class GPGService {
                 "--keyserver", resolvedKeyserver,
                 "--status-fd", "1",
                 "--recv-keys",
+                "--",
                 value
             ]
         case .email(let value):
@@ -785,7 +822,7 @@ final class GPGService {
     ///   - armor: If true, export in ASCII armor format
     /// - Returns: Exported key data
     func exportPublicKey(keyID: String, armor: Bool = true) async throws -> Data {
-        var arguments = ["--export", keyID]
+        var arguments = ["--export", "--", keyID]
         if armor {
             arguments.insert("--armor", at: 0)
         }
@@ -815,6 +852,7 @@ final class GPGService {
             "--pinentry-mode", "loopback",
             "--passphrase-fd", "0",
             "--export-secret-key",
+            "--",
             keyID
         ]
         if armor {
@@ -839,9 +877,9 @@ final class GPGService {
     ///   - keyID: Key ID or fingerprint
     ///   - secret: If true, delete secret key
     func deleteKey(keyID: String, secret: Bool = false) async throws {
-        var arguments = ["--batch", "--yes", "--delete-keys", keyID]
+        var arguments = ["--batch", "--yes", "--delete-keys", "--", keyID]
         if secret {
-            arguments = ["--batch", "--yes", "--delete-secret-keys", keyID]
+            arguments = ["--batch", "--yes", "--delete-secret-keys", "--", keyID]
         }
         
         let result = try await executeGPG(arguments: arguments)
@@ -864,6 +902,7 @@ final class GPGService {
             "--pinentry-mode", "loopback",
             "--passphrase-fd", "0",
             "--quick-set-expire",
+            "--",
             keyID,
             expiration
         ]
@@ -902,6 +941,7 @@ final class GPGService {
             "--pinentry-mode", "loopback",
             "--passphrase-fd", "0",
             "--quick-add-uid",
+            "--",
             keyID,
             userID
         ]
@@ -933,6 +973,7 @@ final class GPGService {
                 "--command-fd", "0",
                 "--status-fd", "1",
                 "--change-passphrase",
+                "--",
                 keyID
             ],
             input: input
@@ -962,6 +1003,7 @@ final class GPGService {
             "--keyserver", resolvedKeyserver,
             "--batch",
             "--yes",
+            "--",
             normalizedKeyID
         ]
         
@@ -1001,6 +1043,7 @@ final class GPGService {
         let arguments = [
             "--search-keys",
             "--keyserver", resolvedKeyserver,
+            "--",
             keyID
         ]
         
@@ -1025,15 +1068,24 @@ final class GPGService {
     ///   - sign: If true, also sign the message
     ///   - signingKey: Key ID to sign with (required if sign is true)
     /// - Returns: Encrypted text
-    func encrypt(text: String, recipients: [String], sign: Bool = false, signingKey: String? = nil) async throws -> String {
+    func encrypt(
+        text: String,
+        recipients: [String],
+        sign: Bool = false,
+        signingKey: String? = nil,
+        allowUntrustedRecipients: Bool = false
+    ) async throws -> String {
         var arguments = [
             "--encrypt",
             "--armor",
             "--batch",
-            "--trust-model", "always",
             "--cipher-algo", Constants.GPG.defaultCipherAlgorithm
         ]
-        
+
+        if allowUntrustedRecipients {
+            arguments.append(contentsOf: ["--trust-model", "always"])
+        }
+
         // Add recipients
         for recipient in recipients {
             arguments.append(contentsOf: ["--recipient", recipient])
@@ -1043,7 +1095,7 @@ final class GPGService {
         if sign, let signingKey = signingKey {
             arguments.append(contentsOf: ["--sign", "--local-user", signingKey])
         }
-        
+
         let result = try await executeGPG(arguments: arguments, input: text)
         
         // Check for GPG errors first
@@ -1094,7 +1146,13 @@ final class GPGService {
     ///   - destinationURL: Destination file URL
     ///   - recipients: Array of key IDs to encrypt for
     ///   - armor: If true, output ASCII armor format
-    func encryptFile(sourceURL: URL, destinationURL: URL, recipients: [String], armor: Bool = false) async throws -> URL {
+    func encryptFile(
+        sourceURL: URL,
+        destinationURL: URL,
+        recipients: [String],
+        armor: Bool = false,
+        allowUntrustedRecipients: Bool = false
+    ) async throws -> URL {
         let fileManager = FileManager.default
         let stagingDirectory = try secureOperationDirectory(prefix: "file-op")
         let stagedSourceURL = stagingDirectory.appendingPathComponent("input")
@@ -1109,10 +1167,13 @@ final class GPGService {
             "--encrypt",
             "--batch",
             "--yes",
-            "--trust-model", "always",
             "--cipher-algo", Constants.GPG.defaultCipherAlgorithm
         ]
-        
+
+        if allowUntrustedRecipients {
+            arguments.append(contentsOf: ["--trust-model", "always"])
+        }
+
         // Add recipients
         for recipient in recipients {
             arguments.append(contentsOf: ["--recipient", recipient])
@@ -1124,7 +1185,7 @@ final class GPGService {
         }
         
         // Add input/output
-        arguments.append(contentsOf: ["--output", stagedOutputURL.path, stagedSourceURL.path])
+        arguments.append(contentsOf: ["--output", stagedOutputURL.path, "--", stagedSourceURL.path])
         
         let result = try await executeGPG(arguments: arguments)
         try ensureSuccess(result, as: GPGError.encryptionFailed)
@@ -1164,6 +1225,7 @@ final class GPGService {
                 "--pinentry-mode", "loopback",
                 "--passphrase-fd", "0",
                 "--output", stagedOutputURL.path,
+                "--",
                 stagedSourceURL.path
             ],
             input: passphrase + "\n"
@@ -1217,6 +1279,7 @@ final class GPGService {
                 "--passphrase-fd", "0",
                 "--local-user", keyID,
                 "--output", stagedOutputURL.path,
+                "--",
                 stagedSourceURL.path
             ],
             input: passphrase + "\n"
@@ -1264,7 +1327,7 @@ final class GPGService {
             try fileManager.copyItem(at: fileURL, to: stagedInputURL)
 
             let result = try await executeGPG(
-                arguments: ["--list-packets", "--dry-run", stagedInputURL.path]
+                arguments: ["--list-packets", "--dry-run", "--", stagedInputURL.path]
             )
             return result.exitCode == 0
         } catch {
@@ -1375,7 +1438,7 @@ final class GPGService {
         try fileManager.copyItem(at: fileURL, to: stagedInputURL)
 
         let result = try await executeGPG(
-            arguments: ["--verify", "--status-fd", "1", stagedInputURL.path]
+            arguments: ["--verify", "--status-fd", "1", "--", stagedInputURL.path]
         )
 
         let statusOutput = [result.stdout, result.stderr]
@@ -1425,6 +1488,7 @@ final class GPGService {
             arguments: [
                 "--verify",
                 "--status-fd", "1",
+                "--",
                 stagedSignatureURL.path,
                 stagedSignedFileURL.path
             ]
@@ -1484,7 +1548,7 @@ final class GPGService {
     /// - Returns: Current trust level
     func checkTrust(keyID: String) async throws -> TrustLevel {
         let result = try await executeGPG(
-            arguments: ["--list-keys", "--with-colons", "--fixed-list-mode", keyID]
+            arguments: ["--list-keys", "--with-colons", "--fixed-list-mode", "--", keyID]
         )
         
         guard let output = result.stdout else {
@@ -1519,6 +1583,7 @@ final class GPGService {
                 "--yes",
                 "--no-tty",
                 "--quick-set-ownertrust",
+                "--",
                 keyID,
                 trustLevel.quickSetOwnerTrustValue
             ]
@@ -1561,7 +1626,7 @@ final class GPGService {
             arguments.append(contentsOf: ["--local-user", signerKeyID])
         }
         
-        arguments.append(contentsOf: ["--sign-key", keyID])
+        arguments.append(contentsOf: ["--sign-key", "--", keyID])
         
         var input = passphrase + "\n"
         if let trustLevel = trustLevel {
@@ -1580,7 +1645,7 @@ final class GPGService {
     /// - Returns: Detailed trust information
     func getTrustDetails(keyID: String) async throws -> KeyTrustDetails {
         let result = try await executeGPG(
-            arguments: ["--list-keys", "--with-colons", "--fixed-list-mode", "--with-fingerprint", keyID]
+            arguments: ["--list-keys", "--with-colons", "--fixed-list-mode", "--with-fingerprint", "--", keyID]
         )
         
         guard let output = result.stdout else {
@@ -1721,6 +1786,7 @@ final class GPGService {
 
         let armorFileURL = tempRoot.appendingPathComponent(fileName)
         try data.write(to: armorFileURL, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: armorFileURL.path)
 
         try await ensureGPGAgentRunningIfNeeded()
 
@@ -1732,6 +1798,7 @@ final class GPGService {
                 "--passphrase", "",
                 "--import",
                 "--status-fd", "1",
+                "--",
                 armorFileURL.path
             ]
         )
@@ -2047,6 +2114,13 @@ final class GPGService {
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    /// Remove line breaks to avoid malformed `gpg --batch --gen-key` payloads.
+    private func sanitizeBatchPassphrase(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: "\n", with: "")
+    }
     
     /// Build key generation parameters
     private func buildKeyGenerationParams(
@@ -2097,7 +2171,12 @@ final class GPGService {
         }
 
         if let passphrase = passphrase, !passphrase.isEmpty {
-            params += "Passphrase: \(passphrase)\n"
+            let sanitizedPassphrase = sanitizeBatchPassphrase(passphrase)
+            if sanitizedPassphrase.isEmpty {
+                params += "%no-protection\n"
+            } else {
+                params += "Passphrase: \(sanitizedPassphrase)\n"
+            }
         } else {
             params += "%no-protection\n"
         }
@@ -2105,6 +2184,28 @@ final class GPGService {
         params += "%commit\n%echo Key generation complete\n"
 
         return params
+    }
+
+    private func newestRecentlyCreatedKey(from keys: [GPGKey], notBefore date: Date) -> GPGKey? {
+        keys
+            .filter { ($0.createdAt ?? .distantPast) >= date }
+            .sorted { lhs, rhs in
+                (lhs.createdAt ?? .distantPast) > (rhs.createdAt ?? .distantPast)
+            }
+            .first
+    }
+
+    private func newestEmailMatchedKey(from keys: [GPGKey], email: String, notBefore date: Date) -> GPGKey? {
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return keys
+            .filter { key in
+                key.email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalizedEmail
+                && (key.createdAt ?? .distantPast) >= date
+            }
+            .sorted { lhs, rhs in
+                (lhs.createdAt ?? .distantPast) > (rhs.createdAt ?? .distantPast)
+            }
+            .first
     }
     
     /// Parse import result

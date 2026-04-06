@@ -5751,6 +5751,23 @@
         }
       }
     },
+    "restore_success_message_legacy_restricted" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keys were restored from a legacy backup with additional safety restrictions."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥已从旧版备份恢复，并已启用额外安全限制。"
+          }
+        }
+      }
+    },
     "restore_success_title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7906,6 +7923,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法加载密钥"
+          }
+        }
+      }
+    },
+    "encrypt_untrusted_recipient_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recipient Is Not Fully Trusted"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接收者未完全受信任"
+          }
+        }
+      }
+    },
+    "encrypt_untrusted_recipient_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This key is below full trust. Continue encryption anyway?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该密钥信任级别低于完全信任，仍要继续加密吗？"
           }
         }
       }

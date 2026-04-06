@@ -497,7 +497,8 @@ struct ExportKeySheet: View {
                     url.stopAccessingSecurityScopedResource()
                 }
 
-                try keyData.write(to: url)
+                try keyData.write(to: url, options: .atomic)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
 
                 isExporting = false
                 dismiss()

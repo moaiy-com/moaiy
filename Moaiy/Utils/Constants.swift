@@ -127,7 +127,10 @@ enum Constants {
         static let manifestFileName = "manifest.json"
         
         /// Backup version
-        static let currentVersion = "1.0"
+        static let currentVersion = "1.1"
+
+        /// Maximum accepted backup key file size during restore (10 MB)
+        static let maxImportFileSizeBytes = 10 * 1024 * 1024
     }
 }
 
