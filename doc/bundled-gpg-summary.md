@@ -95,7 +95,7 @@ A new feature branch `feature/bundled-gpg` has been created to implement the bun
 
 ### Immediate Actions (This Week)
 1. **Start Phase 1** - GPG Bundle Preparation
-   - Enhance `fix_gpg_deps.sh` script
+   - Enhance `scripts/fix_gpg_deps.sh` script
    - Support both Intel and Apple Silicon
    - Add error handling
    - Generate manifest
@@ -159,7 +159,7 @@ moaiy/
 │   │   └── GPGFileTypeDetector.swift      # New file
 │   └── Resources/
 │       └── gpg.bundle/                     # To be created
-└── fix_gpg_deps.sh                        # Existing, to be enhanced
+└── scripts/fix_gpg_deps.sh                        # Existing, to be enhanced
 ```
 
 ---

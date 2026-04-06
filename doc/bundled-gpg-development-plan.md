@@ -17,7 +17,7 @@ Integrate a fully self-contained GPG executable into Moaiy app bundle to ensure:
 - ✅ No requirement for users to install GPG separately
 
 ### Current Status
-- ✅ GPG packaging script created (`fix_gpg_deps.sh`)
+- ✅ GPG packaging script created (`scripts/fix_gpg_deps.sh`)
 - ✅ Sandbox testing framework ready (`MoaiySandboxTest`)
 - ✅ GPGService architecture supports both system and bundled GPG
 - ⏳ Bundled GPG not yet integrated into main app
@@ -91,7 +91,7 @@ Moaiy.app/
 
 #### 1.1 Automate GPG Bundle Creation
 **Tasks**:
-- [ ] Enhance `fix_gpg_deps.sh` script
+- [ ] Enhance `scripts/fix_gpg_deps.sh` script
   - Support both Intel and Apple Silicon architectures
   - Add error handling and validation
   - Create universal binary support
@@ -660,7 +660,7 @@ Moaiy.app/
 - [Code Signing Guide](https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution)
 
 ### Tools
-- `fix_gpg_deps.sh` - GPG packaging script
+- `scripts/fix_gpg_deps.sh` - GPG packaging script
 - `scripts/verify_gpg_bundle.sh` - Bundle verification
 - `scripts/sign_gpg_bundle.sh` - Code signing
 - `scripts/notarize_app.sh` - Notarization
@@ -677,7 +677,7 @@ Moaiy.app/
 
 ### Immediate Actions (This Week)
 1. ✅ Create feature branch `feature/bundled-gpg`
-2. [ ] Enhance `fix_gpg_deps.sh` script
+2. [ ] Enhance `scripts/fix_gpg_deps.sh` script
 3. [ ] Create GPG bundle for testing
 4. [ ] Add bundle to Xcode project
 5. [ ] Update GPGService.swift

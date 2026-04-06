@@ -380,7 +380,7 @@ To reach 100% completion, follow this order:
 
 ### Immediate (This Week)
 1. **Create Preparation Script** ⏰ 4-6 hours
-   - Enhance existing `fix_gpg_deps.sh`
+   - Enhance existing `scripts/fix_gpg_deps.sh`
    - Create `scripts/prepare_gpg_bundle.sh`
    - Add error handling and validation
 

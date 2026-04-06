@@ -10,7 +10,7 @@ on:
 jobs:
   build-and-test:
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,3 +27,10 @@ jobs:
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
             build
+
+      - name: Test
+        run: |
+          xcodebuild test -project Moaiy/Moaiy.xcodeproj \
+            -scheme MoaiyTests \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO

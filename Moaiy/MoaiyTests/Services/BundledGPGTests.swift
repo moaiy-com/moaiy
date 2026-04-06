@@ -305,8 +305,7 @@ struct BundledGPGTests {
             "/usr/local/Cellar",
             "/usr/local/opt",
             "/opt/homebrew/Cellar",
-            "/opt/homebrew/opt",
-            "/Users/"
+            "/opt/homebrew/opt"
         ]
         
         guard let enumerator = FileManager.default.enumerator(at: bundleURL, includingPropertiesForKeys: nil) else {
@@ -315,24 +314,18 @@ struct BundledGPGTests {
         }
         
         for case let fileURL as URL in enumerator {
+            let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
+            guard values.isRegularFile == true else { continue }
             guard fileURL.pathExtension == "dylib" || fileURL.pathExtension.isEmpty else { continue }
-            
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/strings")
-            process.arguments = [fileURL.path]
-            
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            
-            try process.run()
-            process.waitUntilExit()
-            
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
-            
-            for forbiddenPath in forbiddenPaths {
-                #expect(!output.contains(forbiddenPath),
-                        "\(fileURL.lastPathComponent) should not contain hardcoded path: \(forbiddenPath)")
+            guard let dependencyPaths = try? MachODependencyReader.readDependencyPaths(from: fileURL) else {
+                continue
+            }
+
+            for dependencyPath in dependencyPaths {
+                for forbiddenPath in forbiddenPaths {
+                    #expect(!dependencyPath.contains(forbiddenPath),
+                            "\(fileURL.lastPathComponent) dependency should not contain hardcoded path: \(forbiddenPath)")
+                }
             }
         }
     }

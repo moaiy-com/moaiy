@@ -12,6 +12,33 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Release execution checklist for v0.5.0 (`doc/v0.5.0-minimal-release-checklist.md`)
 - Core flow validation list for v0.5.0 (`doc/v0.5.0-core-flow-validation.md`)
 
+## [0.5.3] - 2026-04-06
+
+### Added
+
+- Protected release workflow v2 (`.github/workflows/release.yml`) with manual dispatch inputs:
+  - `version`
+  - `mode (draft|publish)`
+  - `signing (auto|unsigned|signed)`
+  - `gate (balanced|strict|fast)`
+- Release orchestration scripts under `scripts/release/`:
+  - `run_release.sh`
+  - `check_version_sync.sh`
+  - `external_validation.sh`
+  - `render_release_notes.sh`
+  - `setup_tag_ruleset.sh`
+  - release notes template
+
+### Changed
+
+- CI `build-and-test` now runs both build and tests, matching `main` protection semantics.
+- `package_dmg.sh` now supports architecture-aware packaging, artifact naming, and explicit version consistency checks.
+- Legacy `v050_external_validation.sh` now delegates to the version-agnostic validation script for backward compatibility.
+
+### Security
+
+- Introduced repository tag ruleset support script to protect `v*` tags from deletion and non-fast-forward rewrites.
+
 ## [0.5.1] - 2026-04-05
 
 ### Changed

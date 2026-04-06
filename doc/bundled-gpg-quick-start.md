@@ -54,11 +54,11 @@ Phase 1 focuses on GPG bundle preparation. Here's what to do:
 
 #### 3.1 Enhance the Packaging Script
 
-The existing `fix_gpg_deps.sh` script needs improvements:
+The existing `scripts/fix_gpg_deps.sh` script needs improvements:
 
 ```bash
 # Review current script
-cat fix_gpg_deps.sh
+cat scripts/fix_gpg_deps.sh
 
 # Create enhanced version
 # See Phase 1.1 in development plan for details
@@ -68,7 +68,7 @@ cat fix_gpg_deps.sh
 
 ```bash
 # Run the packaging script
-./fix_gpg_deps.sh
+./scripts/fix_gpg_deps.sh
 
 # Verify the bundle
 ls -la MoaiySandboxTest/Resources/gpg.bundle/
@@ -125,7 +125,7 @@ ls -la MoaiySandboxTest/Resources/gpg.bundle/
 ### Phase Checklist
 
 #### Phase 1: GPG Bundle Preparation (2-3 days)
-- [ ] Enhance `fix_gpg_deps.sh` script
+- [ ] Enhance `scripts/fix_gpg_deps.sh` script
 - [ ] Create `scripts/prepare_gpg_bundle.sh`
 - [ ] Test bundle creation
 - [ ] Run verification script
@@ -239,7 +239,7 @@ cat Moaiy/Resources/Entitlements.entitlements
 - [Code Signing Guide](https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution)
 
 ### Related Files
-- `fix_gpg_deps.sh` - GPG packaging script
+- `scripts/fix_gpg_deps.sh` - GPG packaging script
 - `scripts/verify_gpg_bundle.sh` - Bundle verification
 - `Moaiy/Services/GPGService.swift` - GPG service implementation
 - `Moaiy/Resources/Entitlements.entitlements` - Sandbox configuration
