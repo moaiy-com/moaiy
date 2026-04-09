@@ -22,7 +22,7 @@ struct KeyDetailView: View {
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: MoaiyUI.Spacing.xl) {
                 // Header Section
                 KeyDetailHeader(key: key)
 
@@ -38,7 +38,7 @@ struct KeyDetailView: View {
                     isDeleting: $isDeleting
                 )
             }
-            .padding()
+            .padding(MoaiyUI.Spacing.xxl)
         }
         .navigationTitle(key.name)
         .toolbar {
@@ -97,23 +97,24 @@ struct KeyDetailHeader: View {
     let key: GPGKey
     
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: MoaiyUI.Spacing.lg) {
             // Key icon
             ZStack {
                 Circle()
-                    .fill(key.isSecret ? Color.moaiyAccentV2.opacity(0.1) : Color.blue.opacity(0.1))
+                    .fill(key.isSecret ? Color.moaiyAccentV2.opacity(0.1) : Color.moaiyInfo.opacity(0.1))
                     .frame(width: 64, height: 64)
                 
                 Image(systemName: key.isSecret ? "key.fill" : "key")
                     .font(.title)
-                    .foregroundStyle(key.isSecret ? Color.moaiyAccentV2 : .blue)
+                    .foregroundStyle(key.isSecret ? Color.moaiyAccentV2 : Color.moaiyInfo)
             }
             
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: MoaiyUI.Spacing.xs) {
+                HStack(spacing: MoaiyUI.Spacing.sm) {
                     Text(key.name)
                         .font(.title2)
                         .fontWeight(.semibold)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                     
                     // Key type badge
                     Text(key.isSecret ? "key_type_private" : "key_type_public")
@@ -127,41 +128,40 @@ struct KeyDetailHeader: View {
                 
                 Text(key.email)
                     .font(.headline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
             }
             
             Spacer()
             
             // Status indicators
-            VStack(alignment: .trailing, spacing: 8) {
+            VStack(alignment: .trailing, spacing: MoaiyUI.Spacing.sm) {
                 if key.isExpired {
-                    HStack(spacing: 4) {
+                    HStack(spacing: MoaiyUI.Spacing.xs) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.moaiyError)
                         Text("status_expired")
                             .font(.caption)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.moaiyError)
                     }
                 }
                 
                 if key.isTrusted {
-                    HStack(spacing: 4) {
+                    HStack(spacing: MoaiyUI.Spacing.xs) {
                         Image(systemName: "checkmark.seal.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(Color.moaiySuccess)
                         Text("status_trusted")
                             .font(.caption)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(Color.moaiySuccess)
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(nsColor: .windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(MoaiyUI.Spacing.md)
+        .moaiyCardStyle(cornerRadius: MoaiyUI.Radius.lg)
     }
     
     private var keyTypeBadgeColor: Color {
-        key.isSecret ? Color.moaiyAccentV2 : .blue
+        key.isSecret ? Color.moaiyAccentV2 : Color.moaiyInfo
     }
 }
 
@@ -172,9 +172,9 @@ struct KeyStatusSection: View {
     @Binding var showingTrustManagement: Bool
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: MoaiyUI.Spacing.lg) {
             // Trust status
-            HStack(spacing: 12) {
+            HStack(spacing: MoaiyUI.Spacing.md) {
                 Image(systemName: trustIcon)
                     .font(.title2)
                     .foregroundStyle(trustColor)
@@ -183,9 +183,10 @@ struct KeyStatusSection: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(key.trustLevel.localizedName)
                         .font(.headline)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                     Text(key.trustLevel.localizedDescription)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                 }
 
                 Spacer()
@@ -194,41 +195,43 @@ struct KeyStatusSection: View {
                     showingTrustManagement = true
                 }
                 .buttonStyle(.bordered)
+                .tint(Color.moaiyAccentV2)
                 .controlSize(.small)
             }
             
             // Expiration status
             if key.isExpired {
-                HStack(spacing: 12) {
+                HStack(spacing: MoaiyUI.Spacing.md) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.title2)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.moaiyError)
                         .frame(width: 32)
                     
                     VStack(alignment: .leading, spacing: 2) {
                         Text("status_expired")
                             .font(.headline)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.moaiyError)
                         Text("message_key_expired_description")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
                     }
                     
                     Spacer()
                 }
             } else if let expiresAt = key.expiresAt {
-                HStack(spacing: 12) {
+                HStack(spacing: MoaiyUI.Spacing.md) {
                     Image(systemName: "clock.fill")
                         .font(.title2)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Color.moaiyInfo)
                         .frame(width: 32)
                     
                     VStack(alignment: .leading, spacing: 2) {
                         Text("label_expires")
                             .font(.headline)
+                            .foregroundStyle(Color.moaiyTextPrimary)
                         Text(expiresAt.formatted(date: .abbreviated, time: .omitted))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
                     }
                     
                     Spacer()
@@ -236,7 +239,7 @@ struct KeyStatusSection: View {
             }
             
             // Capabilities
-            HStack(spacing: 12) {
+            HStack(spacing: MoaiyUI.Spacing.md) {
                 Image(systemName: "checkmark.shield.fill")
                     .font(.title2)
                     .foregroundStyle(Color.moaiyAccentV2)
@@ -245,7 +248,8 @@ struct KeyStatusSection: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("label_capabilities")
                         .font(.headline)
-                    HStack(spacing: 8) {
+                        .foregroundStyle(Color.moaiyTextPrimary)
+                    HStack(spacing: MoaiyUI.Spacing.sm) {
                         CapabilityBadge(name: "Encrypt", icon: "lock.fill")
                         CapabilityBadge(name: "Sign", icon: "signature")
                     }
@@ -254,9 +258,8 @@ struct KeyStatusSection: View {
                 Spacer()
             }
         }
-        .padding()
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(MoaiyUI.Spacing.md)
+        .moaiyCardStyle(cornerRadius: MoaiyUI.Radius.lg)
     }
     
     private var trustIcon: String {
@@ -271,11 +274,11 @@ struct KeyStatusSection: View {
     
     private var trustColor: Color {
         switch key.trustLevel {
-        case .ultimate: return .green
-        case .full: return .blue
-        case .marginal: return .orange
-        case .none: return .red
-        case .unknown: return .secondary
+        case .ultimate: return Color.moaiySuccess
+        case .full: return Color.moaiyInfo
+        case .marginal: return Color.moaiyWarning
+        case .none: return Color.moaiyError
+        case .unknown: return Color.moaiyTextSecondary
         }
     }
 }
@@ -290,17 +293,18 @@ struct KeyActionsSection: View {
     @Binding var isDeleting: Bool
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: MoaiyUI.Spacing.md) {
             // Primary actions
             Button(action: { }) {
                 Label("action_encrypt_file", systemImage: "lock.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .tint(Color.moaiyAccentV2)
             .controlSize(.large)
 
             // Secondary actions
-            HStack(spacing: 12) {
+            HStack(spacing: MoaiyUI.Spacing.md) {
                 Button(action: { showingExportSheet = true }) {
                     Label("action_share", systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
@@ -317,7 +321,7 @@ struct KeyActionsSection: View {
             }
             
             Divider()
-                .padding(.vertical, 8)
+                .padding(.vertical, MoaiyUI.Spacing.sm)
             
             // Destructive action
             Button(role: .destructive, action: { showingDeleteSheet = true }) {
@@ -331,12 +335,11 @@ struct KeyActionsSection: View {
                 }
             }
             .buttonStyle(.bordered)
-            .foregroundStyle(.red)
+            .foregroundStyle(Color.moaiyError)
             .disabled(isDeleting)
         }
-        .padding()
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(MoaiyUI.Spacing.md)
+        .moaiyCardStyle(cornerRadius: MoaiyUI.Radius.lg)
     }
 }
 
@@ -370,15 +373,15 @@ struct ExportKeySheet: View {
     @State private var exportError: String?
     
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: MoaiyUI.Spacing.xxl) {
             // Header
-            VStack(spacing: 8) {
+            VStack(spacing: MoaiyUI.Spacing.sm) {
                 HStack {
                     Spacer()
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title3)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -390,42 +393,45 @@ struct ExportKeySheet: View {
                 Text("action_export_public_key")
                     .font(.title2)
                     .fontWeight(.semibold)
+                    .foregroundStyle(Color.moaiyTextPrimary)
 
                 Text("export_key_description")
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
                     .multilineTextAlignment(.center)
             }
             
             // Key info
-            VStack(spacing: 8) {
+            VStack(spacing: MoaiyUI.Spacing.sm) {
                 HStack {
                     Text("label_key_id")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                     Spacer()
                     Text(key.keyID)
                         .fontWeight(.medium)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                 }
                 
                 HStack {
                     Text("field_name")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                     Spacer()
                     Text(key.name)
                         .fontWeight(.medium)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                 }
                 
                 HStack {
                     Text("field_email")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                     Spacer()
                     Text(key.email)
                         .fontWeight(.medium)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                 }
             }
-            .padding()
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(MoaiyUI.Spacing.md)
+            .moaiyCardStyle(cornerRadius: MoaiyUI.Radius.md)
             
             // Error message
             if let error = exportError {
@@ -433,7 +439,7 @@ struct ExportKeySheet: View {
             }
             
             // Actions
-            VStack(spacing: 12) {
+            VStack(spacing: MoaiyUI.Spacing.md) {
                 Button(action: saveToFile) {
                     if isExporting {
                         ProgressView()
@@ -443,6 +449,7 @@ struct ExportKeySheet: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Color.moaiyAccentV2)
                 .controlSize(.large)
                 .disabled(isExporting)
                 
@@ -465,7 +472,8 @@ struct ExportKeySheet: View {
                 .controlSize(.large)
             }
         }
-        .padding(32)
+        .padding(MoaiyUI.Spacing.xxxl)
+        .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 400, idealWidth: 500, maxWidth: 660)
     }
     
@@ -556,60 +564,62 @@ struct DeleteKeySheet: View {
     @State private var selectedOption: DeleteKeyOption = .both
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: MoaiyUI.Spacing.xxl) {
             // Header
-            VStack(spacing: 8) {
+            VStack(spacing: MoaiyUI.Spacing.sm) {
                 HStack {
                     Spacer()
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title3)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.moaiyTextSecondary)
                     }
                     .buttonStyle(.plain)
                 }
 
                 Image(systemName: "trash.fill")
                     .font(.system(size: 48))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.moaiyError)
 
                 Text("action_delete_key")
                     .font(.title2)
                     .fontWeight(.semibold)
+                    .foregroundStyle(Color.moaiyTextPrimary)
 
                 Text("delete_key_select_option")
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
                     .multilineTextAlignment(.center)
             }
 
             // Key info
-            VStack(spacing: 8) {
+            VStack(spacing: MoaiyUI.Spacing.sm) {
                 HStack {
                     Text("field_name")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                     Spacer()
                     Text(key.name)
                         .fontWeight(.medium)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                 }
 
                 HStack {
                     Text("field_email")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                     Spacer()
                     Text(key.email)
                         .fontWeight(.medium)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                 }
             }
-            .padding()
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(MoaiyUI.Spacing.md)
+            .moaiyCardStyle(cornerRadius: MoaiyUI.Radius.md)
 
             // Delete options
-            VStack(spacing: 12) {
+            VStack(spacing: MoaiyUI.Spacing.md) {
                 Text(key.isSecret ? "delete_key_has_secret" : "delete_key_public_only")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
 
                 if key.isSecret {
                     // Option 1: Private key only
@@ -617,7 +627,7 @@ struct DeleteKeySheet: View {
                         title: "delete_option_private",
                         description: "delete_option_private_description",
                         icon: "key.fill",
-                        color: .orange,
+                        color: Color.moaiyWarning,
                         isSelected: selectedOption == .secretOnly
                     ) {
                         selectedOption = .secretOnly
@@ -628,7 +638,7 @@ struct DeleteKeySheet: View {
                         title: "delete_option_public",
                         description: "delete_option_public_description",
                         icon: "key",
-                        color: .blue,
+                        color: Color.moaiyInfo,
                         isSelected: selectedOption == .publicOnly
                     ) {
                         selectedOption = .publicOnly
@@ -639,7 +649,7 @@ struct DeleteKeySheet: View {
                         title: "delete_option_both",
                         description: "delete_option_both_description",
                         icon: "trash.fill",
-                        color: .red,
+                        color: Color.moaiyError,
                         isSelected: selectedOption == .both
                     ) {
                         selectedOption = .both
@@ -650,23 +660,23 @@ struct DeleteKeySheet: View {
                         title: "delete_option_public",
                         description: "delete_option_public_description",
                         icon: "key",
-                        color: .red,
+                        color: Color.moaiyError,
                         isSelected: true
                     ) { }
                 }
             }
 
             // Warning
-            HStack(spacing: 8) {
+            HStack(spacing: MoaiyUI.Spacing.sm) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.moaiyWarning)
                 Text("delete_key_warning")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.moaiyTextSecondary)
             }
 
             // Actions
-            HStack(spacing: 12) {
+            HStack(spacing: MoaiyUI.Spacing.md) {
                 Button("action_cancel") {
                     dismiss()
                 }
@@ -685,11 +695,13 @@ struct DeleteKeySheet: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Color.moaiyError)
                 .controlSize(.large)
                 .disabled(isDeleting)
             }
         }
-        .padding(32)
+        .padding(MoaiyUI.Spacing.xxxl)
+        .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 420, idealWidth: 520, maxWidth: 700)
     }
 
@@ -721,7 +733,7 @@ struct DeleteOptionRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: MoaiyUI.Spacing.md) {
                 Image(systemName: icon)
                     .font(.title2)
                     .foregroundStyle(color)
@@ -730,9 +742,10 @@ struct DeleteOptionRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.headline)
+                        .foregroundStyle(Color.moaiyTextPrimary)
                     Text(description)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.moaiyTextSecondary)
                         .multilineTextAlignment(.leading)
                 }
 
@@ -743,11 +756,11 @@ struct DeleteOptionRow: View {
                         .foregroundStyle(color)
                 }
             }
-            .padding(12)
-            .background(isSelected ? color.opacity(0.1) : Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(MoaiyUI.Spacing.md)
+            .background(isSelected ? color.opacity(0.1) : Color.moaiySurfaceSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: MoaiyUI.Radius.sm))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: MoaiyUI.Radius.sm)
                     .stroke(isSelected ? color : Color.clear, lineWidth: 2)
             )
         }
