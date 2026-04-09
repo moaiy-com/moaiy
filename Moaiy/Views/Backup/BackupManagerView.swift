@@ -403,9 +403,6 @@ struct BackupManagerView: View {
                 // Restore from backup
                 let summary = try await restoreFromBackupArchive(at: url)
 
-                // Reload keys
-                await viewModel.loadKeys()
-
                 if summary.failedFiles.isEmpty {
                     restoreSuccessMessage = summary.usedLegacyRestrictedPath
                         ? String(localized: "restore_success_message_legacy_restricted")
@@ -483,24 +480,14 @@ struct BackupManagerView: View {
             throw BackupError.invalidBackupFormat
         }
 
-        // Import all keys
+        // Import all keys with a single keyring refresh.
         let keyFiles = validationResult.files
-        var successfulFiles = 0
-        var failedFiles: [String] = []
-
-        for keyFile in keyFiles {
-            do {
-                _ = try await viewModel.importKey(from: keyFile)
-                successfulFiles += 1
-            } catch {
-                failedFiles.append(keyFile.lastPathComponent)
-            }
-        }
+        let importSummary = await viewModel.importKeys(from: keyFiles)
 
         return RestoreSummary(
-            totalFiles: keyFiles.count,
-            successfulFiles: successfulFiles,
-            failedFiles: failedFiles,
+            totalFiles: importSummary.totalFiles,
+            successfulFiles: importSummary.successfulFiles,
+            failedFiles: importSummary.failedFiles,
             usedLegacyRestrictedPath: validationResult.usedLegacyRestrictedPath
         )
     }
