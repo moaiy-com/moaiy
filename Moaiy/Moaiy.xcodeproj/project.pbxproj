@@ -59,7 +59,6 @@
 
 /* Begin PBXFileReference section */
 		0B018ACD2F6EE0AE00382075 /* ImportKeySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportKeySheet.swift; sourceTree = "<group>"; };
-		0B018ACE2F6EE0AE00382075 /* KeyDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyDetailView.swift; sourceTree = "<group>"; };
 		0B018ACE2F6EE0AF00382075 /* LoadingStates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingStates.swift; sourceTree = "<group>"; };
 		0B0F6B662F753E5C00668924 /* Tutorial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tutorial.swift; sourceTree = "<group>"; };
 		0B2A177C2F74F09F003D3CB1 /* gpg.bundle */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.plug-in"; path = gpg.bundle; sourceTree = "<group>"; };
@@ -270,7 +269,6 @@
 				3A2000012F76000100000008 /* PasswordInputSheet.swift */,
 				A00000000004 /* CreateKeyView.swift */,
 				0B018ACD2F6EE0AE00382075 /* ImportKeySheet.swift */,
-				0B018ACE2F6EE0AE00382075 /* KeyDetailView.swift */,
 				0B018ACE2F6EE0AF00382075 /* LoadingStates.swift */,
 			);
 			path = KeyManagement;

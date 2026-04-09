@@ -23,7 +23,7 @@ struct ImportKeySheet: View {
     @State private var importMode: ImportMode = .file
     @State private var importedFileURL: URL?
     @State private var keyserverQuery = ""
-    @State private var selectedKeyserver = "keys.openpgp.org"
+    @State private var selectedKeyserver = Constants.GPG.defaultKeyserver
     @State private var systemKeyringURL: URL?
     @State private var isImporting = false
     @State private var importError: String?
@@ -31,11 +31,7 @@ struct ImportKeySheet: View {
     @State private var migrationResult: KeyMigrationResult?
     @State private var showIncompleteSecretMigrationAlert = false
 
-    private let keyservers = [
-        "keys.openpgp.org",
-        "keyserver.ubuntu.com",
-        "pgp.mit.edu"
-    ]
+    private let keyservers = Constants.GPG.supportedKeyservers
 
     var body: some View {
         VStack(spacing: MoaiyUI.Spacing.xxl) {

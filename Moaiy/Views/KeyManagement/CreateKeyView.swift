@@ -289,7 +289,7 @@ struct SuccessView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Text(formatFingerprint(fingerprint))
+                Text(fingerprint.formattedFingerprint())
                     .font(.system(.caption, design: .monospaced))
                     .padding(12)
                     .background(Color(nsColor: .controlBackgroundColor))
@@ -304,16 +304,6 @@ struct SuccessView: View {
         }
     }
 
-    private func formatFingerprint(_ fp: String) -> String {
-        var result = ""
-        for (index, char) in fp.enumerated() {
-            if index > 0 && index % 4 == 0 {
-                result += " "
-            }
-            result.append(char)
-        }
-        return result
-    }
 }
 
 #Preview {

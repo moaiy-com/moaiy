@@ -165,16 +165,13 @@ struct KeyActionMenu: View {
             Section {
                 Button(action: encryptFromPicker) {
                     Label("action_encrypt", systemImage: "lock.fill")
-                        .font(.system(size: 14))
                 }
                 Button(action: decryptFromPicker) {
                     Label("action_decrypt", systemImage: "lock.open.fill")
-                        .font(.system(size: 14))
                 }
                 .disabled(!availability.canDecrypt)
                 Button(action: signDetachedFromPicker) {
                     Label("action_sign_detached", systemImage: "signature")
-                        .font(.system(size: 14))
                 }
                 .disabled(!availability.canSignDetached)
                 if availability.showsSignKey {
@@ -183,26 +180,22 @@ struct KeyActionMenu: View {
                         showingSigningSheet = true
                     }) {
                         Label("action_sign_key", systemImage: "signature")
-                            .font(.system(size: 14))
                     }
                     .disabled(!availability.canSignKey)
                 }
                 Button(action: verifyFromPicker) {
                     Label("action_verify_signature", systemImage: "checkmark.seal.fill")
-                        .font(.system(size: 14))
                 }
                 Button(action: {
                     showingTrustSheet = true
                 }) {
                     Label("trust_management_title", systemImage: "checkmark.shield")
-                        .font(.system(size: 14))
                 }
                 Button(action: {
                     guard availability.canEdit else { return }
                     showingEditSheet = true
                 }) {
                     Label("action_edit", systemImage: "pencil")
-                        .font(.system(size: 14))
                 }
                 .disabled(!availability.canEdit)
             }
@@ -214,7 +207,6 @@ struct KeyActionMenu: View {
                     showingUploadSheet = true
                 }) {
                     Label("upload_to_keyserver_title", systemImage: "cloud.fill")
-                        .font(.system(size: 14))
                 }
                 // Keep this block in place so backup/restore can be re-enabled by toggling
                 // `isBackupRestoreMenuEnabled` without touching the flow implementation.
@@ -223,7 +215,6 @@ struct KeyActionMenu: View {
                         showingBackupSheet = true
                     }) {
                         Label("backup_title", systemImage: "externaldrive.fill")
-                            .font(.system(size: 14))
                     }
                 }
             }
@@ -233,12 +224,10 @@ struct KeyActionMenu: View {
             Section {
                 Button(action: exportPublicKey) {
                     Label("action_export_public_key", systemImage: "square.and.arrow.up")
-                        .font(.system(size: 14))
                 }
                 if availability.showsExportPrivateKey {
                     Button(action: exportPrivateKey) {
                         Label("action_export_private_key", systemImage: "key.fill")
-                            .font(.system(size: 14))
                     }
                 }
             }
@@ -250,7 +239,6 @@ struct KeyActionMenu: View {
                     onDelete?()
                 }) {
                     Label("action_delete_key", systemImage: "trash.fill")
-                        .font(.system(size: 14))
                 }
             }
         } label: {
