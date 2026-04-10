@@ -462,7 +462,7 @@ struct PassphraseEditView: View {
             .buttonStyle(.borderedProminent)
             .tint(Color.moaiyAccentV2)
             .controlSize(.large)
-            .disabled(currentPassphrase.isEmpty || newPassphrase.isEmpty || newPassphrase != confirmPassphrase || isUpdating)
+            .disabled(newPassphrase.isEmpty || newPassphrase != confirmPassphrase || isUpdating)
         }
         .padding(MoaiyUI.Spacing.xxl)
         .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .keyEdit)), isPresented: $showError) {
@@ -482,7 +482,8 @@ struct PassphraseEditView: View {
                 try await viewModel.changePassphrase(
                     for: key,
                     oldPassphrase: currentPassphrase,
-                    newPassphrase: newPassphrase
+                    newPassphrase: newPassphrase,
+                    allowEmptyOldPassphrase: true
                 )
                 currentPassphrase = ""
                 newPassphrase = ""

@@ -9,6 +9,7 @@ import SwiftUI
 
 struct PasswordInputSheet: View {
     let fileName: String
+    var allowsEmptyPassword = false
     let onConfirm: (String) -> Void
     let onCancel: () -> Void
     
@@ -18,13 +19,13 @@ struct PasswordInputSheet: View {
     
     var body: some View {
         CredentialInputSheet(
-            titleKey: "password_required_title",
+            titleKey: allowsEmptyPassword ? "passphrase_title" : "password_required_title",
             confirmButtonKey: "decrypt_button",
-            isConfirmDisabled: password.isEmpty,
+            isConfirmDisabled: !allowsEmptyPassword && password.isEmpty,
             onConfirm: submitPassword,
             onCancel: onCancel,
             subtitle: {
-                Text("password_required_description")
+                Text(allowsEmptyPassword ? "passphrase_subtitle_default" : "password_required_description")
                     .font(MoaiyUI.Typography.sheetBody)
                     .foregroundStyle(Color.moaiyTextSecondary)
                     .multilineTextAlignment(.center)
@@ -33,11 +34,19 @@ struct PasswordInputSheet: View {
                 passwordField
             },
             context: AnyView(fileInfoView),
+            helper: allowsEmptyPassword ? AnyView(optionalHintView) : nil,
             error: showError ? AnyView(errorBanner) : nil
         )
         .onAppear {
             isPasswordFocused = true
         }
+    }
+
+    private var optionalHintView: some View {
+        Text("wizard_password_optional")
+            .font(MoaiyUI.Typography.caption)
+            .foregroundStyle(Color.moaiyTextSecondary)
+            .multilineTextAlignment(.center)
     }
     
     private var fileInfoView: some View {
@@ -91,7 +100,7 @@ struct PasswordInputSheet: View {
     }
 
     private func submitPassword() {
-        guard !password.isEmpty else {
+        guard allowsEmptyPassword || !password.isEmpty else {
             withAnimation {
                 showError = true
             }

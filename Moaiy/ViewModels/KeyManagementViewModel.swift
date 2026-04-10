@@ -505,7 +505,12 @@ final class KeyManagementViewModel {
     }
 
     /// Change passphrase for a secret key
-    func changePassphrase(for key: GPGKey, oldPassphrase: String, newPassphrase: String) async throws {
+    func changePassphrase(
+        for key: GPGKey,
+        oldPassphrase: String,
+        newPassphrase: String,
+        allowEmptyOldPassphrase: Bool = false
+    ) async throws {
         guard key.isSecret else {
             throw GPGError.keyNotFound("Secret key for \(key.fingerprint)")
         }
@@ -513,8 +518,10 @@ final class KeyManagementViewModel {
         let oldPassphrase = oldPassphrase.trimmingCharacters(in: .newlines)
         let newPassphrase = newPassphrase.trimmingCharacters(in: .newlines)
 
-        guard !oldPassphrase.isEmpty else {
-            throw GPGError.invalidPassphrase
+        if !allowEmptyOldPassphrase {
+            guard !oldPassphrase.isEmpty else {
+                throw GPGError.invalidPassphrase
+            }
         }
         guard !newPassphrase.isEmpty else {
             throw GPGError.invalidPassphrase

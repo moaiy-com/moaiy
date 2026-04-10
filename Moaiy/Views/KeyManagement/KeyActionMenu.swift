@@ -27,30 +27,6 @@ struct KeyActionFilePlanner {
         inputURL.appendingPathExtension("sig")
     }
 
-    static func nonConflictingURL(for desiredURL: URL, fileManager: FileManager = .default) -> URL {
-        guard fileManager.fileExists(atPath: desiredURL.path) else {
-            return desiredURL
-        }
-
-        let ext = desiredURL.pathExtension
-        let baseName = ext.isEmpty
-            ? desiredURL.lastPathComponent
-            : String(desiredURL.lastPathComponent.dropLast(ext.count + 1))
-        let directory = desiredURL.deletingLastPathComponent()
-
-        var index = 1
-        while true {
-            let candidateName = ext.isEmpty
-                ? "\(baseName) (\(index))"
-                : "\(baseName) (\(index)).\(ext)"
-            let candidateURL = directory.appendingPathComponent(candidateName)
-            if !fileManager.fileExists(atPath: candidateURL.path) {
-                return candidateURL
-            }
-            index += 1
-        }
-    }
-
     static func defaultPublicFileName(for keyName: String) -> String {
         "\(sanitizedKeyName(for: keyName))_public.asc"
     }
@@ -140,6 +116,7 @@ struct KeyActionMenu: View {
     @State private var showingSigningSheet = false
     @State private var showingEditSheet = false
     @State private var pendingPassphraseAction: PassphraseAction?
+    @State private var pendingPassphraseAllowsEmpty = true
     @State private var pendingUntrustedEncryptURLs: [URL] = []
     @State private var showingUntrustedEncryptionConfirmation = false
     @State private var alertTitle: LocalizedStringKey = "operation_success"
@@ -250,21 +227,28 @@ struct KeyActionMenu: View {
         .sheet(
             isPresented: Binding(
                 get: { pendingPassphraseAction != nil },
-                set: { if !$0 { pendingPassphraseAction = nil } }
+                set: {
+                    if !$0 {
+                        pendingPassphraseAction = nil
+                        pendingPassphraseAllowsEmpty = true
+                    }
+                }
             )
         ) {
             PassphraseSheet(
                 keyName: key.name,
-                allowsEmptyPassphrase: true,
+                allowsEmptyPassphrase: pendingPassphraseAllowsEmpty,
                 onConfirm: { passphrase in
                     guard let action = pendingPassphraseAction else { return }
                     pendingPassphraseAction = nil
+                    pendingPassphraseAllowsEmpty = true
                     Task {
                         await executePassphraseAction(action, passphrase: passphrase)
                     }
                 },
                 onCancel: {
                     pendingPassphraseAction = nil
+                    pendingPassphraseAllowsEmpty = true
                 }
             )
         }
@@ -352,7 +336,15 @@ struct KeyActionMenu: View {
         let selectedURLs = panel.urls
         guard !selectedURLs.isEmpty else { return }
 
-        pendingPassphraseAction = .decrypt(selectedURLs)
+        Task { @MainActor in
+            let requiresPassphrase = await requiresPassphraseForSecretKey()
+            if requiresPassphrase {
+                pendingPassphraseAllowsEmpty = false
+                pendingPassphraseAction = .decrypt(selectedURLs)
+            } else {
+                await decryptFiles(selectedURLs, passphrase: "")
+            }
+        }
     }
 
     private func signDetachedFromPicker() {
@@ -368,6 +360,7 @@ struct KeyActionMenu: View {
         let selectedURLs = panel.urls
         guard !selectedURLs.isEmpty else { return }
 
+        pendingPassphraseAllowsEmpty = true
         pendingPassphraseAction = .signDetached(selectedURLs)
     }
 
@@ -398,7 +391,17 @@ struct KeyActionMenu: View {
     private func exportPrivateKey() {
         guard key.isSecret else { return }
         guard let outputURL = presentExportPanel(defaultFileName: defaultPrivateFileName) else { return }
+        pendingPassphraseAllowsEmpty = true
         pendingPassphraseAction = .exportSecret(outputURL)
+    }
+
+    @MainActor
+    private func requiresPassphraseForSecretKey() async -> Bool {
+        do {
+            return try await GPGService.shared.secretKeyRequiresPassphrase(keyID: key.fingerprint)
+        } catch {
+            return true
+        }
     }
 
     @MainActor
@@ -428,22 +431,20 @@ struct KeyActionMenu: View {
                 ) else {
                     continue
                 }
-                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: outputURL)
-
                 let hasSourceAccess = url.startAccessingSecurityScopedResource()
-                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
+                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
                 defer {
                     if hasSourceAccess {
                         url.stopAccessingSecurityScopedResource()
                     }
                     if hasOutputAccess {
-                        plannedOutputURL.stopAccessingSecurityScopedResource()
+                        outputURL.stopAccessingSecurityScopedResource()
                     }
                 }
 
                 _ = try await GPGService.shared.encryptFile(
                     sourceURL: url,
-                    destinationURL: plannedOutputURL,
+                    destinationURL: outputURL,
                     recipients: [key.fingerprint],
                     allowUntrustedRecipients: allowUntrustedRecipients
                 )
@@ -481,24 +482,26 @@ struct KeyActionMenu: View {
                 ) else {
                     continue
                 }
-                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: outputURL)
-
                 let hasSourceAccess = url.startAccessingSecurityScopedResource()
-                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
+                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
                 defer {
                     if hasSourceAccess {
                         url.stopAccessingSecurityScopedResource()
                     }
                     if hasOutputAccess {
-                        plannedOutputURL.stopAccessingSecurityScopedResource()
+                        outputURL.stopAccessingSecurityScopedResource()
                     }
                 }
 
                 _ = try await GPGService.shared.decryptFile(
                     sourceURL: url,
-                    destinationURL: plannedOutputURL,
-                    passphrase: passphrase
+                    destinationURL: outputURL,
+                    passphrase: passphrase,
+                    preferredSecretKey: key.fingerprint
                 )
+                guard FileManager.default.fileExists(atPath: outputURL.path) else {
+                    throw GPGError.decryptionFailed("No output generated")
+                }
                 decryptedFileCount += 1
             } catch {
                 failedFileCount += 1
@@ -533,22 +536,20 @@ struct KeyActionMenu: View {
                 ) else {
                     continue
                 }
-                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: outputURL)
-
                 let hasSourceAccess = url.startAccessingSecurityScopedResource()
-                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
+                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
                 defer {
                     if hasSourceAccess {
                         url.stopAccessingSecurityScopedResource()
                     }
                     if hasOutputAccess {
-                        plannedOutputURL.stopAccessingSecurityScopedResource()
+                        outputURL.stopAccessingSecurityScopedResource()
                     }
                 }
 
                 _ = try await GPGService.shared.signFileDetached(
                     sourceURL: url,
-                    destinationURL: plannedOutputURL,
+                    destinationURL: outputURL,
                     keyID: key.fingerprint,
                     passphrase: passphrase
                 )

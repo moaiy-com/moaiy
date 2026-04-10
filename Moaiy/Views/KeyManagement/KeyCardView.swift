@@ -15,6 +15,7 @@ struct KeyCardView: View {
     @State private var operationResults: [OperationResult] = []
     @State private var showingResultOverlay = false
     @State private var showingPasswordSheet = false
+    @State private var decryptAllowsEmptyPassword = true
     @State private var passwordSheetFileName = ""
     @State private var pendingDecryptRequests: [DecryptRequest] = []
     @State private var pendingDetectedFiles: [DetectedFile] = []
@@ -53,8 +54,10 @@ struct KeyCardView: View {
         .sheet(isPresented: $showingPasswordSheet) {
             PasswordInputSheet(
                 fileName: passwordSheetFileName,
+                allowsEmptyPassword: decryptAllowsEmptyPassword,
                 onConfirm: { password in
                     showingPasswordSheet = false
+                    decryptAllowsEmptyPassword = true
                     passwordSheetFileName = ""
                     Task {
                         await performQueuedDecryptions(password: password)
@@ -62,6 +65,7 @@ struct KeyCardView: View {
                 },
                 onCancel: {
                     showingPasswordSheet = false
+                    decryptAllowsEmptyPassword = true
                     passwordSheetFileName = ""
                     pendingDecryptRequests = []
                     if !operationResults.isEmpty {
@@ -247,6 +251,7 @@ struct KeyCardView: View {
             isProcessing = true
             operationResults = []
             pendingDecryptRequests = []
+            decryptAllowsEmptyPassword = true
             passwordSheetFileName = ""
 
             var detectedFiles: [DetectedFile] = []
@@ -285,12 +290,37 @@ struct KeyCardView: View {
     private func completeBatchProcessing() {
         isProcessing = false
         if !pendingDecryptRequests.isEmpty {
-            passwordSheetFileName = pendingDecryptRequests.first?.sourceURL.lastPathComponent ?? ""
-            showingPasswordSheet = true
+            Task { @MainActor in
+                await startQueuedDecryptionFlow()
+            }
             return
         }
         if !operationResults.isEmpty {
             showingResultOverlay = true
+        }
+    }
+
+    @MainActor
+    private func startQueuedDecryptionFlow() async {
+        let requiresPassphrase = await requiresPassphraseForSecretKey()
+        if requiresPassphrase {
+            decryptAllowsEmptyPassword = false
+            passwordSheetFileName = pendingDecryptRequests.first?.sourceURL.lastPathComponent ?? ""
+            showingPasswordSheet = true
+            return
+        }
+
+        decryptAllowsEmptyPassword = true
+        passwordSheetFileName = ""
+        await performQueuedDecryptions(password: "")
+    }
+
+    @MainActor
+    private func requiresPassphraseForSecretKey() async -> Bool {
+        do {
+            return try await GPGService.shared.secretKeyRequiresPassphrase(keyID: key.fingerprint)
+        } catch {
+            return true
         }
     }
 
@@ -347,22 +377,20 @@ struct KeyCardView: View {
                 ) else {
                     return
                 }
-                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: outputURL)
-
                 let hasSourceAccess = url.startAccessingSecurityScopedResource()
-                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
+                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
                 defer {
                     if hasSourceAccess {
                         url.stopAccessingSecurityScopedResource()
                     }
                     if hasOutputAccess {
-                        plannedOutputURL.stopAccessingSecurityScopedResource()
+                        outputURL.stopAccessingSecurityScopedResource()
                     }
                 }
 
                 let finalOutputURL = try await GPGService.shared.encryptFile(
                     sourceURL: url,
-                    destinationURL: plannedOutputURL,
+                    destinationURL: outputURL,
                     recipients: [key.fingerprint],
                     allowUntrustedRecipients: allowUntrustedRecipients
                 )
@@ -378,22 +406,20 @@ struct KeyCardView: View {
                 ) else {
                     return
                 }
-                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: outputURL)
-
                 let hasSourceAccess = url.startAccessingSecurityScopedResource()
-                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
+                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
                 defer {
                     if hasSourceAccess {
                         url.stopAccessingSecurityScopedResource()
                     }
                     if hasOutputAccess {
-                        plannedOutputURL.stopAccessingSecurityScopedResource()
+                        outputURL.stopAccessingSecurityScopedResource()
                     }
                 }
 
                 let finalOutputURL = try await GPGService.shared.encryptFile(
                     sourceURL: url,
-                    destinationURL: plannedOutputURL,
+                    destinationURL: outputURL,
                     recipients: [key.fingerprint],
                     allowUntrustedRecipients: allowUntrustedRecipients
                 )
@@ -422,23 +448,26 @@ struct KeyCardView: View {
 
         for request in pendingDecryptRequests {
             do {
-                let plannedOutputURL = KeyActionFilePlanner.nonConflictingURL(for: request.outputURL)
                 let hasSourceAccess = request.sourceURL.startAccessingSecurityScopedResource()
-                let hasOutputAccess = plannedOutputURL.startAccessingSecurityScopedResource()
+                let hasOutputAccess = request.outputURL.startAccessingSecurityScopedResource()
                 defer {
                     if hasSourceAccess {
                         request.sourceURL.stopAccessingSecurityScopedResource()
                     }
                     if hasOutputAccess {
-                        plannedOutputURL.stopAccessingSecurityScopedResource()
+                        request.outputURL.stopAccessingSecurityScopedResource()
                     }
                 }
 
                 let finalOutputURL = try await GPGService.shared.decryptFile(
                     sourceURL: request.sourceURL,
-                    destinationURL: plannedOutputURL,
-                    passphrase: password
+                    destinationURL: request.outputURL,
+                    passphrase: password,
+                    preferredSecretKey: key.fingerprint
                 )
+                guard FileManager.default.fileExists(atPath: finalOutputURL.path) else {
+                    throw GPGError.decryptionFailed("No output generated")
+                }
                 operationResults.append(
                     OperationResult.successDecrypt(fileURL: request.sourceURL, outputURL: finalOutputURL)
                 )
