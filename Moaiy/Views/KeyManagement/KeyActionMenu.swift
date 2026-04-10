@@ -642,7 +642,7 @@ struct KeyActionMenu: View {
         do {
             let keyData = try await viewModel.exportPublicKey(key)
             try writeDataSafely(keyData, to: outputURL)
-            showSuccess(message: String(localized: "action_export_public_key"))
+            showSuccess(message: String(localized: "export_public_key_success_message"))
         } catch {
             showError(
                 title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .exportKey)),
@@ -656,7 +656,7 @@ struct KeyActionMenu: View {
         do {
             let keyData = try await viewModel.exportSecretKey(key, passphrase: passphrase)
             try writeDataSafely(keyData, to: outputURL)
-            showSuccess(message: String(localized: "action_export_private_key"))
+            showSuccess(message: String(localized: "export_private_key_success_message"))
         } catch {
             showError(
                 title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .exportKey)),

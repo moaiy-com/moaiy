@@ -158,7 +158,7 @@ struct SettingsView: View {
         if let version = service.gpgVersion {
             gpgVersion = version
         } else {
-            gpgVersion = "about_gpg_not_available"
+            gpgVersion = String(localized: "about_gpg_not_available")
         }
     }
 

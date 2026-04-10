@@ -29,7 +29,6 @@ struct ImportKeySheet: View {
     @State private var importError: String?
     @State private var importResult: KeyImportResult?
     @State private var migrationResult: KeyMigrationResult?
-    @State private var showIncompleteSecretMigrationAlert = false
 
     private let keyservers = Constants.GPG.supportedKeyservers
 
@@ -109,7 +108,12 @@ struct ImportKeySheet: View {
                     )
 
                     if let migrationResult {
-                        MigrationResultCard(result: migrationResult)
+                        MigrationResultCard(
+                            result: migrationResult,
+                            onRetry: migrationResult.sourceSecretKeyCount > 0 && !migrationResult.secretKeysMigrated
+                                ? { importFromSystemKeyring() }
+                                : nil
+                        )
                     }
                 }
             }
@@ -159,14 +163,6 @@ struct ImportKeySheet: View {
         .padding(MoaiyUI.Spacing.xxxl)
         .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 420, idealWidth: 540, maxWidth: 720)
-        .alert("migration_system_keyring_title", isPresented: $showIncompleteSecretMigrationAlert) {
-            Button("action_retry") {
-                importFromSystemKeyring()
-            }
-            Button("action_ok", role: .cancel) { }
-        } message: {
-            Text("migration_system_keyring_message")
-        }
     }
 
     private var canImport: Bool {
@@ -280,10 +276,6 @@ struct ImportKeySheet: View {
                 let result = try await viewModel.migrateKeysFromExternalKeyring(at: sourceURL)
                 migrationResult = result
                 isImporting = false
-
-                if result.sourceSecretKeyCount > 0 && !result.secretKeysMigrated {
-                    showIncompleteSecretMigrationAlert = true
-                }
             } catch {
                 importError = UserFacingErrorMapper.message(for: error, context: .importKey)
                 isImporting = false
@@ -335,6 +327,7 @@ struct SystemKeyringImportCard: View {
 
 struct MigrationResultCard: View {
     let result: KeyMigrationResult
+    var onRetry: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: MoaiyUI.Spacing.sm) {
@@ -360,9 +353,19 @@ struct MigrationResultCard: View {
             .foregroundStyle(Color.moaiyTextSecondary)
 
             if result.sourceSecretKeyCount > 0 && !result.secretKeysMigrated {
-                Text("backup_secret_warning")
-                    .font(.caption)
-                    .foregroundStyle(Color.moaiyWarning)
+                VStack(alignment: .leading, spacing: MoaiyUI.Spacing.sm) {
+                    Text("migration_secret_keys_incomplete_warning")
+                        .font(.caption)
+                        .foregroundStyle(Color.moaiyWarning)
+
+                    if let onRetry {
+                        Button("action_retry") {
+                            onRetry()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
             }
         }
         .padding(MoaiyUI.Spacing.md)

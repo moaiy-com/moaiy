@@ -614,6 +614,40 @@
         }
       }
     },
+    "export_private_key_success_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Private key exported successfully"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "私钥导出成功"
+          }
+        }
+      }
+    },
+    "export_public_key_success_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Public key exported successfully"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公钥导出成功"
+          }
+        }
+      }
+    },
     "action_filters" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4860,6 +4894,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请选择已有的 GnuPG 主目录（通常为 ~/.gnupg）"
+          }
+        }
+      }
+    },
+    "migration_secret_keys_incomplete_warning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some secret keys were not imported. Retry import and verify key availability."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分私钥未导入。请重试导入并确认密钥是否可用。"
           }
         }
       }
