@@ -17,45 +17,26 @@ struct PasswordInputSheet: View {
     @FocusState private var isPasswordFocused: Bool
     
     var body: some View {
-        VStack(spacing: MoaiyUI.Spacing.xxl) {
-            HStack {
-                Spacer()
-                Button(action: onCancel) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(Color.moaiyTextSecondary)
-                }
-                .buttonStyle(.plain)
-            }
-            headerView
-            fileInfoView
-            passwordField
-            errorView
-            buttonsView
-        }
-        .padding(MoaiyUI.Spacing.xxl)
-        .background(Color.moaiySurfaceBackground)
-        .moaiyModalAdaptiveSize(minWidth: 360, idealWidth: 420, maxWidth: 520)
+        CredentialInputSheet(
+            titleKey: "password_required_title",
+            confirmButtonKey: "decrypt_button",
+            isConfirmDisabled: password.isEmpty,
+            onConfirm: submitPassword,
+            onCancel: onCancel,
+            subtitle: {
+                Text("password_required_description")
+                    .font(MoaiyUI.Typography.sheetBody)
+                    .foregroundStyle(Color.moaiyTextSecondary)
+                    .multilineTextAlignment(.center)
+            },
+            input: {
+                passwordField
+            },
+            context: AnyView(fileInfoView),
+            error: showError ? AnyView(errorBanner) : nil
+        )
         .onAppear {
             isPasswordFocused = true
-        }
-    }
-    
-    private var headerView: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "lock.shield")
-                .font(.system(size: 48))
-                .foregroundStyle(Color.moaiyAccentV2)
-            
-            Text("password_required_title")
-                .font(.title2)
-                .fontWeight(.semibold)
-                .foregroundStyle(Color.moaiyTextPrimary)
-            
-            Text("password_required_description")
-                .font(.body)
-                .foregroundStyle(Color.moaiyTextSecondary)
-                .multilineTextAlignment(.center)
         }
     }
     
@@ -65,7 +46,7 @@ struct PasswordInputSheet: View {
                 .foregroundStyle(Color.moaiyTextSecondary)
             
             Text(fileName)
-                .font(.body)
+                .font(MoaiyUI.Typography.sheetBody)
                 .lineLimit(1)
                 .truncationMode(.middle)
             
@@ -80,66 +61,44 @@ struct PasswordInputSheet: View {
     }
     
     private var passwordField: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: MoaiyUI.Spacing.sm) {
             Text("password_field_label")
-                .font(.subheadline)
+                .font(MoaiyUI.Typography.fieldLabel)
                 .foregroundStyle(Color.moaiyTextSecondary)
             
             SecureField("password_field_placeholder", text: $password)
                 .textFieldStyle(.roundedBorder)
                 .focused($isPasswordFocused)
                 .onSubmit {
-                    if !password.isEmpty {
-                        onConfirm(password)
-                    } else {
-                        showError = true
-                    }
+                    submitPassword()
                 }
         }
     }
     
-    @ViewBuilder
-    private var errorView: some View {
-        if showError {
-            HStack {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Color.moaiyWarning)
-                
-                Text("password_empty_error")
-                    .font(.caption)
-                    .foregroundStyle(Color.moaiyTextPrimary)
-            }
-            .padding(.horizontal, MoaiyUI.Spacing.md)
-            .padding(.vertical, MoaiyUI.Spacing.sm)
-            .moaiyBannerStyle(tint: Color.moaiyWarning)
-            .transition(.opacity)
+    private var errorBanner: some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Color.moaiyWarning)
+            
+            Text("password_empty_error")
+                .font(MoaiyUI.Typography.caption)
+                .foregroundStyle(Color.moaiyTextPrimary)
         }
+        .padding(.horizontal, MoaiyUI.Spacing.md)
+        .padding(.vertical, MoaiyUI.Spacing.sm)
+        .moaiyBannerStyle(tint: Color.moaiyWarning)
+        .transition(.opacity)
     }
-    
-    private var buttonsView: some View {
-        HStack(spacing: 12) {
-            Button("action_cancel") {
-                onCancel()
+
+    private func submitPassword() {
+        guard !password.isEmpty else {
+            withAnimation {
+                showError = true
             }
-            .buttonStyle(.bordered)
-            .keyboardShortcut(.escape, modifiers: [])
-            
-            Spacer()
-            
-            Button("decrypt_button") {
-                if password.isEmpty {
-                    withAnimation {
-                        showError = true
-                    }
-                } else {
-                    onConfirm(password)
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.moaiyAccentV2)
-            .disabled(password.isEmpty)
-            .keyboardShortcut(.return, modifiers: [])
+            return
         }
+
+        onConfirm(password)
     }
 }
 

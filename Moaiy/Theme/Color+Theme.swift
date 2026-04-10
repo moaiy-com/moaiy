@@ -38,6 +38,20 @@ enum MoaiyUI {
         static let overlayYOffset: CGFloat = 6
     }
 
+    enum Typography {
+        static let sheetTitle: Font = .title2.weight(.semibold)
+        static let sheetSubtitle: Font = .subheadline
+        static let sheetBody: Font = .body
+        static let fieldLabel: Font = .subheadline
+        static let caption: Font = .caption
+        static let button: Font = .body
+    }
+
+    enum IconSize {
+        static let sheetHero: CGFloat = 48
+        static let closeButton: CGFloat = 18
+    }
+
     static let animationFast: Double = 0.12
     static let animationNormal: Double = 0.18
 }
