@@ -188,6 +188,79 @@ struct FileEncryptionFlowTests {
         }
     }
 
+    @Test("decrypt preflight reports key mismatch before decrypt")
+    func decryptPreflight_keyMismatchDetection() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let fileManager = FileManager.default
+        let recipient = makeIdentity(seed: "preflight-recipient")
+        let other = makeIdentity(seed: "preflight-other")
+        let plaintext = "preflight-mismatch-\(UUID().uuidString)"
+        let tempDirectory = try makeTempDirectory(label: "preflight-mismatch")
+        var recipientFingerprint: String?
+        var otherFingerprint: String?
+
+        defer {
+            try? fileManager.removeItem(at: tempDirectory)
+        }
+
+        do {
+            let recipientFP = try await service.generateKey(
+                name: recipient.name,
+                email: recipient.email,
+                keyType: .ecc,
+                passphrase: recipient.passphrase
+            )
+            recipientFingerprint = recipientFP
+
+            let otherFP = try await service.generateKey(
+                name: other.name,
+                email: other.email,
+                keyType: .ecc,
+                passphrase: other.passphrase
+            )
+            otherFingerprint = otherFP
+
+            let sourceURL = tempDirectory.appendingPathComponent("input.txt")
+            try Data(plaintext.utf8).write(to: sourceURL, options: .atomic)
+
+            let encryptedURL = try await service.encryptFile(
+                sourceURL: sourceURL,
+                destinationURL: tempDirectory.appendingPathComponent("input.txt.moy"),
+                recipients: [recipientFP]
+            )
+
+            let mismatch = try await service.checkDecryptionRecipientMatch(
+                sourceURL: encryptedURL,
+                preferredSecretKey: otherFP
+            )
+            #expect(mismatch.matchesPreferredKey == false)
+            #expect(mismatch.recipientKeyIDs.isEmpty == false)
+
+            let match = try await service.checkDecryptionRecipientMatch(
+                sourceURL: encryptedURL,
+                preferredSecretKey: recipientFP
+            )
+            #expect(match.matchesPreferredKey == true)
+        } catch {
+            if let recipientFingerprint {
+                await cleanupKey(fingerprint: recipientFingerprint, service: service)
+            }
+            if let otherFingerprint {
+                await cleanupKey(fingerprint: otherFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let recipientFingerprint {
+            await cleanupKey(fingerprint: recipientFingerprint, service: service)
+        }
+        if let otherFingerprint {
+            await cleanupKey(fingerprint: otherFingerprint, service: service)
+        }
+    }
+
     @Test("decryptFile with wrong passphrase fails and does not produce output")
     func decryptFile_wrongPassphraseFailsWithoutOutput() async throws {
         let service = GPGService.shared

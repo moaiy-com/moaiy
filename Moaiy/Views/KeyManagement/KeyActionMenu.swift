@@ -337,6 +337,14 @@ struct KeyActionMenu: View {
         guard !selectedURLs.isEmpty else { return }
 
         Task { @MainActor in
+            if let mismatchMessage = await decryptionKeyMismatchMessageIfNeeded(for: selectedURLs) {
+                showError(
+                    title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
+                    message: mismatchMessage
+                )
+                return
+            }
+
             let requiresPassphrase = await requiresPassphraseForSecretKey()
             if requiresPassphrase {
                 pendingPassphraseAllowsEmpty = false
@@ -402,6 +410,30 @@ struct KeyActionMenu: View {
         } catch {
             return true
         }
+    }
+
+    @MainActor
+    private func decryptionKeyMismatchMessageIfNeeded(for urls: [URL]) async -> String? {
+        for url in urls {
+            do {
+                let result = try await GPGService.shared.checkDecryptionRecipientMatch(
+                    sourceURL: url,
+                    preferredSecretKey: key.fingerprint
+                )
+                guard !result.matchesPreferredKey else {
+                    continue
+                }
+
+                return UserFacingErrorMapper.decryptionKeyMismatchMessage(
+                    recipientKeyIDs: result.recipientKeyIDs,
+                    availableSecretKeys: viewModel.secretKeys
+                )
+            } catch {
+                return UserFacingErrorMapper.message(for: error, context: .decrypt)
+            }
+        }
+
+        return nil
     }
 
     @MainActor

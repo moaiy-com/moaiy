@@ -10,6 +10,7 @@ import SwiftUI
 struct KeyCardView: View {
     let key: GPGKey
     var onDelete: (() -> Void)?
+    @Environment(KeyManagementViewModel.self) private var viewModel
     
     @State private var isProcessing = false
     @State private var operationResults: [OperationResult] = []
@@ -20,6 +21,8 @@ struct KeyCardView: View {
     @State private var pendingDecryptRequests: [DecryptRequest] = []
     @State private var pendingDetectedFiles: [DetectedFile] = []
     @State private var showingUntrustedEncryptionConfirmation = false
+    @State private var showingDecryptionMismatchAlert = false
+    @State private var decryptionMismatchAlertMessage = ""
     
     private let detector = GPGFileTypeDetector()
 
@@ -32,7 +35,7 @@ struct KeyCardView: View {
         let url: URL
         let type: GPGFileType
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
             keyInfoSection
@@ -73,6 +76,14 @@ struct KeyCardView: View {
                     }
                 }
             )
+        }
+        .alert(
+            LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
+            isPresented: $showingDecryptionMismatchAlert
+        ) {
+            Button("action_ok", role: .cancel) { }
+        } message: {
+            Text(decryptionMismatchAlertMessage)
         }
         .alert("encrypt_untrusted_recipient_title", isPresented: $showingUntrustedEncryptionConfirmation) {
             Button("action_cancel", role: .cancel) {
@@ -278,11 +289,14 @@ struct KeyCardView: View {
     @MainActor
     private func processDetectedFiles(_ detectedFiles: [DetectedFile], allowUntrustedRecipients: Bool) async {
         for detected in detectedFiles {
-            await processFile(
+            let shouldContinue = await processFile(
                 url: detected.url,
                 type: detected.type,
                 allowUntrustedRecipients: allowUntrustedRecipients
             )
+            guard shouldContinue else {
+                break
+            }
         }
     }
 
@@ -338,7 +352,7 @@ struct KeyCardView: View {
     }
 
     @MainActor
-    private func processFile(url: URL, type: GPGFileType, allowUntrustedRecipients: Bool) async {
+    private func processFile(url: URL, type: GPGFileType, allowUntrustedRecipients: Bool) async -> Bool {
         do {
             switch type {
             case .encrypted:
@@ -350,7 +364,14 @@ struct KeyCardView: View {
                             errorMessage: String(localized: "error_decryption_requires_private_key")
                         )
                     )
-                    return
+                    return true
+                }
+
+                if let mismatchMessage = await decryptionKeyMismatchMessageIfNeeded(for: url) {
+                    decryptionMismatchAlertMessage = mismatchMessage
+                    showingDecryptionMismatchAlert = true
+                    pendingDecryptRequests = []
+                    return false
                 }
 
                 let defaultOutputURL = KeyActionFilePlanner.decryptedOutputURL(for: url)
@@ -358,7 +379,7 @@ struct KeyCardView: View {
                     defaultFileName: defaultOutputURL.lastPathComponent,
                     preferredDirectory: url.deletingLastPathComponent()
                 ) else {
-                    return
+                    return true
                 }
 
                 pendingDecryptRequests.append(
@@ -367,7 +388,7 @@ struct KeyCardView: View {
                         outputURL: outputURL
                     )
                 )
-                return
+                return true
 
             case .notGPG:
                 let defaultOutputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
@@ -375,7 +396,7 @@ struct KeyCardView: View {
                     defaultFileName: defaultOutputURL.lastPathComponent,
                     preferredDirectory: url.deletingLastPathComponent()
                 ) else {
-                    return
+                    return true
                 }
                 let hasSourceAccess = url.startAccessingSecurityScopedResource()
                 let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
@@ -397,6 +418,7 @@ struct KeyCardView: View {
                 operationResults.append(
                     OperationResult.successEncrypt(fileURL: url, outputURL: finalOutputURL)
                 )
+                return true
 
             case .publicKey, .privateKey, .signature, .unknown:
                 let defaultOutputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
@@ -404,7 +426,7 @@ struct KeyCardView: View {
                     defaultFileName: defaultOutputURL.lastPathComponent,
                     preferredDirectory: url.deletingLastPathComponent()
                 ) else {
-                    return
+                    return true
                 }
                 let hasSourceAccess = url.startAccessingSecurityScopedResource()
                 let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
@@ -426,6 +448,7 @@ struct KeyCardView: View {
                 operationResults.append(
                     OperationResult.successEncrypt(fileURL: url, outputURL: finalOutputURL)
                 )
+                return true
             }
         } catch {
             operationResults.append(
@@ -435,6 +458,27 @@ struct KeyCardView: View {
                     errorMessage: UserFacingErrorMapper.message(for: error, context: .encrypt)
                 )
             )
+            return true
+        }
+    }
+
+    @MainActor
+    private func decryptionKeyMismatchMessageIfNeeded(for url: URL) async -> String? {
+        do {
+            let result = try await GPGService.shared.checkDecryptionRecipientMatch(
+                sourceURL: url,
+                preferredSecretKey: key.fingerprint
+            )
+            guard !result.matchesPreferredKey else {
+                return nil
+            }
+
+            return UserFacingErrorMapper.decryptionKeyMismatchMessage(
+                recipientKeyIDs: result.recipientKeyIDs,
+                availableSecretKeys: viewModel.secretKeys
+            )
+        } catch {
+            return UserFacingErrorMapper.message(for: error, context: .decrypt)
         }
     }
     

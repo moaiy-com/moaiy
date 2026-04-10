@@ -1297,6 +1297,48 @@ final class GPGService {
         return try writeStagedOutput(from: stagedOutputURL, to: destinationURL)
     }
 
+    /// Checks whether an encrypted file is addressed to the preferred secret key.
+    /// - Parameters:
+    ///   - sourceURL: Encrypted file URL
+    ///   - preferredSecretKey: Preferred secret key fingerprint or key ID
+    /// - Returns: Recipient metadata and whether preferred key is compatible
+    func checkDecryptionRecipientMatch(
+        sourceURL: URL,
+        preferredSecretKey: String
+    ) async throws -> DecryptionRecipientCheckResult {
+        let recipientKeyIDs = try await listEncryptedRecipientKeyIDs(sourceURL: sourceURL)
+
+        guard let normalizedPreferredKey = normalizeKeyReference(preferredSecretKey) else {
+            return DecryptionRecipientCheckResult(
+                matchesPreferredKey: true,
+                recipientKeyIDs: recipientKeyIDs
+            )
+        }
+
+        guard !recipientKeyIDs.isEmpty else {
+            // Missing recipient metadata (e.g. hidden recipient mode): do not block.
+            return DecryptionRecipientCheckResult(
+                matchesPreferredKey: true,
+                recipientKeyIDs: recipientKeyIDs
+            )
+        }
+
+        let preferredKeyIDCandidates = try await listSecretKeyIDCandidates(keyReference: normalizedPreferredKey)
+        let matchesPreferredKey: Bool
+        if preferredKeyIDCandidates.isEmpty {
+            let preferredTail16 = String(normalizedPreferredKey.suffix(16))
+            matchesPreferredKey = recipientKeyIDs.contains(preferredTail16)
+        } else {
+            let recipientSet = Set(recipientKeyIDs)
+            matchesPreferredKey = !preferredKeyIDCandidates.isDisjoint(with: recipientSet)
+        }
+
+        return DecryptionRecipientCheckResult(
+            matchesPreferredKey: matchesPreferredKey,
+            recipientKeyIDs: recipientKeyIDs
+        )
+    }
+
     /// Determines whether a secret key requires passphrase entry.
     /// Returns `true` when the key is passphrase-protected, `false` otherwise.
     /// Falls back to a conservative `true` when metadata cannot be resolved.
@@ -1947,6 +1989,56 @@ final class GPGService {
         }
     }
 
+    private func listEncryptedRecipientKeyIDs(sourceURL: URL) async throws -> [String] {
+        let fileManager = FileManager.default
+        let stagingDirectory = try secureOperationDirectory(prefix: "decrypt-recipient-check")
+        let stagedSourceURL = stagingDirectory.appendingPathComponent("input")
+        let stagedOutputURL = stagingDirectory.appendingPathComponent("output")
+        let accessGranted = sourceURL.startAccessingSecurityScopedResource()
+
+        defer {
+            if accessGranted {
+                sourceURL.stopAccessingSecurityScopedResource()
+            }
+            try? fileManager.removeItem(at: stagingDirectory)
+        }
+
+        try fileManager.copyItem(at: sourceURL, to: stagedSourceURL)
+
+        let result = try await executeGPG(
+            arguments: [
+                "--decrypt",
+                "--batch",
+                "--yes",
+                "--no-tty",
+                "--pinentry-mode", "loopback",
+                "--passphrase-fd", "0",
+                "--status-fd", "1",
+                "--output", stagedOutputURL.path,
+                "--",
+                stagedSourceURL.path
+            ],
+            input: "\n",
+            timeout: 30
+        )
+
+        let output = [result.stdout, result.stderr]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+
+        let recipientKeyIDsFromStatus = Array(parseEncryptedRecipientKeyIDs(from: output)).sorted()
+        if !recipientKeyIDsFromStatus.isEmpty {
+            return recipientKeyIDsFromStatus
+        }
+
+        let recipientKeyIDsFromOutput = parseRecipientKeyIDs(from: output)
+        if !recipientKeyIDsFromOutput.isEmpty {
+            return recipientKeyIDsFromOutput
+        }
+
+        return []
+    }
+
     private func listSecretKeygrips(keyID: String) async throws -> Set<String> {
         let result = try await executeGPG(
             arguments: [
@@ -1982,6 +2074,50 @@ final class GPGService {
                     return normalizeKeygrip(String(fields[9]))
                 }
         )
+    }
+
+    private func listSecretKeyIDCandidates(keyReference: String) async throws -> Set<String> {
+        let result = try await executeGPG(
+            arguments: [
+                "--batch",
+                "--with-colons",
+                "--fixed-list-mode",
+                "--list-secret-keys",
+                "--",
+                keyReference
+            ]
+        )
+
+        guard result.exitCode == 0 else {
+            return []
+        }
+
+        guard let output = result.stdout, !output.isEmpty else {
+            return []
+        }
+
+        var candidates = Set<String>()
+        for line in output.split(separator: "\n") {
+            let fields = line.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+            guard let recordType = fields.first else {
+                continue
+            }
+
+            if (recordType == "sec" || recordType == "ssb"), fields.count > 4 {
+                if let normalized = normalizeKeyReference(fields[4]) {
+                    candidates.insert(String(normalized.suffix(16)))
+                }
+                continue
+            }
+
+            if recordType == "fpr", fields.count > 9 {
+                if let normalized = normalizeKeyReference(fields[9]) {
+                    candidates.insert(String(normalized.suffix(16)))
+                }
+            }
+        }
+
+        return candidates
     }
 
     private func readAgentKeyInfoFlags() async throws -> [String: Set<String>] {
@@ -2096,6 +2232,34 @@ final class GPGService {
                 return String(normalized.suffix(16))
             }
         )
+    }
+
+    private func parseRecipientKeyIDs(from output: String) -> [String] {
+        var keyIDs: [String] = []
+        var seen = Set<String>()
+
+        for lineSubstring in output.split(separator: "\n") {
+            let line = String(lineSubstring)
+            let lowercased = line.lowercased().replacingOccurrences(of: "keyid", with: "id")
+            guard let idRange = lowercased.range(of: "id ") else {
+                continue
+            }
+
+            let suffix = line[idRange.upperBound...]
+            for token in suffix.split(whereSeparator: { character in
+                character.isWhitespace || character == "," || character == ":" || character == ")" || character == "("
+            }) {
+                guard let normalized = normalizeKeyReference(String(token)) else {
+                    continue
+                }
+                let tail16 = String(normalized.suffix(16))
+                if seen.insert(tail16).inserted {
+                    keyIDs.append(tail16)
+                }
+            }
+        }
+
+        return keyIDs
     }
 
     private func parseGPGStatusFields(from output: String) -> [[String]] {
@@ -2582,6 +2746,11 @@ struct GPGExecutionResult {
     let stdout: String?
     let stderr: String?
     let data: Data?
+}
+
+struct DecryptionRecipientCheckResult {
+    let matchesPreferredKey: Bool
+    let recipientKeyIDs: [String]
 }
 
 /// GPG Key trust level
