@@ -9,8 +9,11 @@ import SwiftUI
 
 struct KeyStatisticsView: View {
     @Environment(KeyManagementViewModel.self) private var viewModel
+    private let expiringSoonWindowDays = 30
 
     var body: some View {
+        let snapshot = makeSnapshot()
+
         VStack(spacing: MoaiyUI.Spacing.lg) {
             HStack {
                 VStack(alignment: .leading, spacing: MoaiyUI.Spacing.xs) {
@@ -33,7 +36,7 @@ struct KeyStatisticsView: View {
                     HStack(spacing: MoaiyUI.Spacing.md) {
                         StatCard(
                             title: "statistics_total_keys",
-                            value: "\(viewModel.keys.count)",
+                            value: "\(snapshot.totalKeys)",
                             icon: "key.fill",
                             color: Color.moaiyInfo
                         )
@@ -47,7 +50,7 @@ struct KeyStatisticsView: View {
 
                         StatCard(
                             title: "statistics_trusted",
-                            value: "\(trustedKeysCount)",
+                            value: "\(snapshot.trustedKeysCount)",
                             icon: "checkmark.seal.fill",
                             color: Color.moaiySuccess
                         )
@@ -58,7 +61,7 @@ struct KeyStatisticsView: View {
                             .font(.headline)
                             .foregroundStyle(Color.moaiyTextPrimary)
 
-                        ForEach(algorithmStats.sorted(by: { $0.value > $1.value }), id: \.key) { algorithm, count in
+                        ForEach(snapshot.sortedAlgorithmStats, id: \.key) { algorithm, count in
                             HStack {
                                 Text(algorithm)
                                     .font(.subheadline)
@@ -71,13 +74,13 @@ struct KeyStatisticsView: View {
                                     .fontWeight(.semibold)
                                     .foregroundStyle(Color.moaiyAccentV2)
 
-                                Text("(\(Int(Double(count) / Double(viewModel.keys.count) * 100))%)")
+                                Text("(\(snapshot.percentage(for: count))%)")
                                     .font(.caption)
                                     .foregroundStyle(Color.moaiyTextSecondary)
                             }
                             .padding(.vertical, MoaiyUI.Spacing.xs)
 
-                            ProgressView(value: Double(count), total: Double(viewModel.keys.count))
+                            ProgressView(value: Double(count), total: Double(max(snapshot.totalKeys, 1)))
                                 .tint(Color.moaiyAccentV2)
                         }
                     }
@@ -90,7 +93,7 @@ struct KeyStatisticsView: View {
                             .foregroundStyle(Color.moaiyTextPrimary)
 
                         ForEach(TrustLevel.allCases, id: \.self) { level in
-                            let count = trustLevelStats[level] ?? 0
+                            let count = snapshot.trustLevelStats[level] ?? 0
                             if count > 0 {
                                 HStack {
                                     Image(systemName: trustIcon(for: level))
@@ -125,7 +128,7 @@ struct KeyStatisticsView: View {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.title3)
                                     .foregroundStyle(Color.moaiyError)
-                                Text("\(expiredKeysCount)")
+                                Text("\(snapshot.expiredKeysCount)")
                                     .font(.title3)
                                     .fontWeight(.bold)
                                     .foregroundStyle(Color.moaiyTextPrimary)
@@ -141,7 +144,7 @@ struct KeyStatisticsView: View {
                                 Image(systemName: "clock.fill")
                                     .font(.title3)
                                     .foregroundStyle(Color.moaiyWarning)
-                                Text("\(expiringSoonCount)")
+                                Text("\(snapshot.expiringSoonKeysCount)")
                                     .font(.title3)
                                     .fontWeight(.bold)
                                     .foregroundStyle(Color.moaiyTextPrimary)
@@ -157,7 +160,7 @@ struct KeyStatisticsView: View {
                                 Image(systemName: "infinity")
                                     .font(.title3)
                                     .foregroundStyle(Color.moaiySuccess)
-                                Text("\(neverExpireCount)")
+                                Text("\(snapshot.neverExpireKeysCount)")
                                     .font(.title3)
                                     .fontWeight(.bold)
                                     .foregroundStyle(Color.moaiyTextPrimary)
@@ -232,42 +235,12 @@ struct KeyStatisticsView: View {
         .moaiyModalAdaptiveSize(minWidth: 640, idealWidth: 760, maxWidth: 960, minHeight: 620, idealHeight: 780, maxHeight: 980)
     }
 
-    // MARK: - Computed Properties
-
-    private var trustedKeysCount: Int {
-        viewModel.keys.filter { $0.trustLevel == .full || $0.trustLevel == .ultimate }.count
-    }
-
-    private var algorithmStats: [String: Int] {
-        var stats: [String: Int] = [:]
-        for key in viewModel.keys {
-            stats[key.algorithm, default: 0] += 1
-        }
-        return stats
-    }
-
-    private var trustLevelStats: [TrustLevel: Int] {
-        var stats: [TrustLevel: Int] = [:]
-        for key in viewModel.keys {
-            stats[key.trustLevel, default: 0] += 1
-        }
-        return stats
-    }
-
-    private var expiredKeysCount: Int {
-        viewModel.keys.filter { $0.isExpired }.count
-    }
-
-    private var expiringSoonCount: Int {
-        let thirtyDaysFromNow = Calendar.current.date(byAdding: .day, value: 30, to: Date()) ?? Date.distantFuture
-        return viewModel.keys.filter { key in
-            guard let expiresAt = key.expiresAt else { return false }
-            return !key.isExpired && expiresAt < thirtyDaysFromNow
-        }.count
-    }
-
-    private var neverExpireCount: Int {
-        viewModel.keys.filter { $0.expiresAt == nil }.count
+    private func makeSnapshot(referenceDate: Date = Date()) -> KeyStatisticsSnapshot {
+        KeyStatisticsSnapshot(
+            keys: viewModel.keys,
+            referenceDate: referenceDate,
+            expiringSoonWindowDays: expiringSoonWindowDays
+        )
     }
 
     // MARK: - Helper Functions
@@ -290,6 +263,75 @@ struct KeyStatisticsView: View {
         case .none: return Color.moaiyError
         case .unknown: return Color.moaiyTextSecondary
         }
+    }
+}
+
+private struct KeyStatisticsSnapshot {
+    let totalKeys: Int
+    let trustedKeysCount: Int
+    let algorithmStats: [String: Int]
+    let sortedAlgorithmStats: [(key: String, value: Int)]
+    let trustLevelStats: [TrustLevel: Int]
+    let expiredKeysCount: Int
+    let expiringSoonKeysCount: Int
+    let neverExpireKeysCount: Int
+
+    init(keys: [GPGKey], referenceDate: Date, expiringSoonWindowDays: Int) {
+        totalKeys = keys.count
+
+        let expiringSoonDate = Calendar.current.date(
+            byAdding: .day,
+            value: expiringSoonWindowDays,
+            to: referenceDate
+        ) ?? .distantFuture
+
+        var trustedKeys = 0
+        var expiredKeys = 0
+        var expiringSoonKeys = 0
+        var neverExpireKeys = 0
+        var algorithmCounts: [String: Int] = [:]
+        var trustCounts: [TrustLevel: Int] = [:]
+
+        for key in keys {
+            if key.trustLevel == .full || key.trustLevel == .ultimate {
+                trustedKeys += 1
+            }
+
+            algorithmCounts[key.algorithm, default: 0] += 1
+            trustCounts[key.trustLevel, default: 0] += 1
+
+            guard let expiresAt = key.expiresAt else {
+                neverExpireKeys += 1
+                continue
+            }
+
+            if expiresAt < referenceDate {
+                expiredKeys += 1
+                continue
+            }
+
+            if expiresAt < expiringSoonDate {
+                expiringSoonKeys += 1
+            }
+        }
+
+        trustedKeysCount = trustedKeys
+        algorithmStats = algorithmCounts
+        sortedAlgorithmStats = algorithmCounts.sorted { lhs, rhs in
+            if lhs.value == rhs.value {
+                return lhs.key.localizedCaseInsensitiveCompare(rhs.key) == .orderedAscending
+            }
+            return lhs.value > rhs.value
+        }
+        trustLevelStats = trustCounts
+        expiredKeysCount = expiredKeys
+        expiringSoonKeysCount = expiringSoonKeys
+        neverExpireKeysCount = neverExpireKeys
+    }
+
+    func percentage(for count: Int) -> Int {
+        guard totalKeys > 0 else { return 0 }
+        return Int(Double(count) / Double(totalKeys) * 100)
     }
 }
 
