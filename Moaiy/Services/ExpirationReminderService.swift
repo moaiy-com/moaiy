@@ -9,21 +9,64 @@ import Foundation
 import UserNotifications
 import os.log
 
+protocol NotificationCenterClient {
+    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool
+    func authorizationStatus() async -> UNAuthorizationStatus
+    func add(_ request: UNNotificationRequest) async throws
+    func removeAllPendingNotificationRequests()
+}
+
+struct UserNotificationCenterClient: NotificationCenterClient {
+    private let center: UNUserNotificationCenter
+
+    init(center: UNUserNotificationCenter = .current()) {
+        self.center = center
+    }
+
+    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool {
+        try await center.requestAuthorization(options: options)
+    }
+
+    func authorizationStatus() async -> UNAuthorizationStatus {
+        let settings = await center.notificationSettings()
+        return settings.authorizationStatus
+    }
+
+    func add(_ request: UNNotificationRequest) async throws {
+        try await center.add(request)
+    }
+
+    func removeAllPendingNotificationRequests() {
+        center.removeAllPendingNotificationRequests()
+    }
+}
+
 @MainActor
 @Observable
 class ExpirationReminderService {
     private let logger = Logger(subsystem: "com.moaiy.app", category: "ExpirationReminder")
+    private let notificationClient: NotificationCenterClient
+    private let userDefaults: UserDefaults
+    var onPermissionDenied: (() -> Void)?
+
+    private enum DefaultsKey {
+        static let reminderEnabled = "expirationReminderEnabled"
+        static let reminderDays = "expirationReminderDays"
+    }
 
     // MARK: - Published State
 
     var isEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: "expirationReminderEnabled") }
+        get { userDefaults.bool(forKey: DefaultsKey.reminderEnabled) }
         set {
-            UserDefaults.standard.set(newValue, forKey: "expirationReminderEnabled")
+            userDefaults.set(newValue, forKey: DefaultsKey.reminderEnabled)
             if newValue {
-                Task {
+                Task { @MainActor in
                     let authorized = await ensureNotificationPermissionIfNeeded()
-                    guard authorized else { return }
+                    guard authorized else {
+                        isEnabled = false
+                        return
+                    }
                     await scheduleReminders()
                 }
             } else {
@@ -33,9 +76,9 @@ class ExpirationReminderService {
     }
 
     var reminderDays: Int {
-        get { UserDefaults.standard.integer(forKey: "expirationReminderDays") }
+        get { userDefaults.integer(forKey: DefaultsKey.reminderDays) }
         set {
-            UserDefaults.standard.set(newValue, forKey: "expirationReminderDays")
+            userDefaults.set(newValue, forKey: DefaultsKey.reminderDays)
             Task { await scheduleReminders() }
         }
     }
@@ -49,12 +92,20 @@ class ExpirationReminderService {
 
     // MARK: - Initialization
 
-    init() {
+    init(
+        notificationClient: NotificationCenterClient = UserNotificationCenterClient(),
+        userDefaults: UserDefaults = .standard,
+        onPermissionDenied: (() -> Void)? = nil
+    ) {
+        self.notificationClient = notificationClient
+        self.userDefaults = userDefaults
+        self.onPermissionDenied = onPermissionDenied
+
         // Default values
-        if UserDefaults.standard.object(forKey: "expirationReminderEnabled") == nil {
+        if userDefaults.object(forKey: DefaultsKey.reminderEnabled) == nil {
             isEnabled = true
         }
-        if UserDefaults.standard.object(forKey: "expirationReminderDays") == nil {
+        if userDefaults.object(forKey: DefaultsKey.reminderDays) == nil {
             reminderDays = 30 // Default: 30 days before expiration
         }
 
@@ -123,7 +174,7 @@ class ExpirationReminderService {
         )
 
         do {
-            try await UNUserNotificationCenter.current().add(request)
+            try await notificationClient.add(request)
             logger.info("Sent expired keys notification")
         } catch {
             logger.error("Failed to send notification: \(error.localizedDescription)")
@@ -146,7 +197,7 @@ class ExpirationReminderService {
         )
 
         do {
-            try await UNUserNotificationCenter.current().add(request)
+            try await notificationClient.add(request)
             logger.info("Sent expiring soon notification")
         } catch {
             logger.error("Failed to send notification: \(error.localizedDescription)")
@@ -155,7 +206,7 @@ class ExpirationReminderService {
 
     /// Cancel all scheduled reminders
     func cancelAllReminders() async {
-        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        notificationClient.removeAllPendingNotificationRequests()
         logger.info("Cancelled all expiration reminders")
     }
 
@@ -164,29 +215,31 @@ class ExpirationReminderService {
     private func requestNotificationPermission() async -> Bool {
         do {
             let options: UNAuthorizationOptions = [.alert, .sound, .badge]
-            let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: options)
+            let granted = try await notificationClient.requestAuthorization(options: options)
 
             if granted {
                 logger.info("Notification permission granted")
             } else {
                 logger.warning("Notification permission denied")
+                onPermissionDenied?()
             }
             return granted
         } catch {
             logger.error("Failed to request notification permission: \(error.localizedDescription)")
+            onPermissionDenied?()
             return false
         }
     }
 
     private func ensureNotificationPermissionIfNeeded() async -> Bool {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        switch settings.authorizationStatus {
+        switch await notificationClient.authorizationStatus() {
         case .authorized, .provisional:
             return true
         case .notDetermined:
             return await requestNotificationPermission()
         case .denied:
             logger.warning("Notification permission denied")
+            onPermissionDenied?()
             return false
         @unknown default:
             return false
@@ -215,7 +268,7 @@ class ExpirationReminderService {
         )
 
         do {
-            try await UNUserNotificationCenter.current().add(request)
+            try await notificationClient.add(request)
         } catch {
             logger.error("Failed to schedule reminder for \(key.fingerprint): \(error.localizedDescription)")
         }

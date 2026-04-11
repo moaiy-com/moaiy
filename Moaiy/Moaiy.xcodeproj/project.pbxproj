@@ -33,6 +33,7 @@
 		3A1000012F76000100000007 /* UploadToKeyserverSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2000012F76000100000007 /* UploadToKeyserverSheet.swift */; };
 		3A1000012F76000100000008 /* PasswordInputSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2000012F76000100000008 /* PasswordInputSheet.swift */; };
 		3A1000012F76000100000009 /* DeleteKeyOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2000012F76000100000009 /* DeleteKeyOption.swift */; };
+		3A1000012F7600010000000A /* OperationPromptHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2000012F7600010000000A /* OperationPromptHost.swift */; };
 		B00000000001 /* MoaiyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000001 /* MoaiyApp.swift */; };
 		B00000000002 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000002 /* MainView.swift */; };
 		B00000000003 /* KeyManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000003 /* KeyManagementView.swift */; };
@@ -59,7 +60,6 @@
 
 /* Begin PBXFileReference section */
 		0B018ACD2F6EE0AE00382075 /* ImportKeySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportKeySheet.swift; sourceTree = "<group>"; };
-		0B018ACE2F6EE0AE00382075 /* KeyDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyDetailView.swift; sourceTree = "<group>"; };
 		0B018ACE2F6EE0AF00382075 /* LoadingStates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingStates.swift; sourceTree = "<group>"; };
 		0B0F6B662F753E5C00668924 /* Tutorial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tutorial.swift; sourceTree = "<group>"; };
 		0B2A177C2F74F09F003D3CB1 /* gpg.bundle */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.plug-in"; path = gpg.bundle; sourceTree = "<group>"; };
@@ -86,6 +86,7 @@
 		3A2000012F76000100000007 /* UploadToKeyserverSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadToKeyserverSheet.swift; sourceTree = "<group>"; };
 		3A2000012F76000100000008 /* PasswordInputSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordInputSheet.swift; sourceTree = "<group>"; };
 		3A2000012F76000100000009 /* DeleteKeyOption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteKeyOption.swift; sourceTree = "<group>"; };
+		3A2000012F7600010000000A /* OperationPromptHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationPromptHost.swift; sourceTree = "<group>"; };
 		A00000000001 /* MoaiyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoaiyApp.swift; sourceTree = "<group>"; };
 		A00000000002 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		A00000000003 /* KeyManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyManagementView.swift; sourceTree = "<group>"; };
@@ -266,11 +267,11 @@
 				3A2000012F76000100000004 /* DropZoneView.swift */,
 				3A2000012F76000100000005 /* KeyActionMenu.swift */,
 				3A2000012F76000100000006 /* OperationResultOverlay.swift */,
+				3A2000012F7600010000000A /* OperationPromptHost.swift */,
 				3A2000012F76000100000007 /* UploadToKeyserverSheet.swift */,
 				3A2000012F76000100000008 /* PasswordInputSheet.swift */,
 				A00000000004 /* CreateKeyView.swift */,
 				0B018ACD2F6EE0AE00382075 /* ImportKeySheet.swift */,
-				0B018ACE2F6EE0AE00382075 /* KeyDetailView.swift */,
 				0B018ACE2F6EE0AF00382075 /* LoadingStates.swift */,
 			);
 			path = KeyManagement;
@@ -488,6 +489,7 @@
 				3A1000012F76000100000004 /* DropZoneView.swift in Sources */,
 				3A1000012F76000100000005 /* KeyActionMenu.swift in Sources */,
 				3A1000012F76000100000006 /* OperationResultOverlay.swift in Sources */,
+				3A1000012F7600010000000A /* OperationPromptHost.swift in Sources */,
 				3A1000012F76000100000007 /* UploadToKeyserverSheet.swift in Sources */,
 				3A1000012F76000100000008 /* PasswordInputSheet.swift in Sources */,
 				0BE22B582F6FC4CC009DDCB2 /* KeyEditSheet.swift in Sources */,
@@ -538,7 +540,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.5.3;
+				MARKETING_VERSION = 0.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taugast.MoaiyTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -560,7 +562,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.5.3;
+				MARKETING_VERSION = 0.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taugast.MoaiyTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -727,7 +729,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.5.3;
+				MARKETING_VERSION = 0.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.moaiy.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -764,7 +766,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.5.3;
+				MARKETING_VERSION = 0.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.moaiy.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

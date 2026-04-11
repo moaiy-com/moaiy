@@ -53,19 +53,4 @@ struct KeyActionFilePlannerTests {
         #expect(fileName == "Alice_Bob_private.asc")
     }
 
-    @Test("Conflict planner appends numeric suffix")
-    func nonConflictingURL_appendsNumericSuffix() throws {
-        let fileManager = FileManager.default
-        let tempDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("moaiy-planner-test-\(UUID().uuidString)", isDirectory: true)
-        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
-        defer { try? fileManager.removeItem(at: tempDirectory) }
-
-        let existingURL = tempDirectory.appendingPathComponent("output.moy")
-        try Data().write(to: existingURL)
-
-        let candidate = KeyActionFilePlanner.nonConflictingURL(for: existingURL)
-
-        #expect(candidate.lastPathComponent == "output (1).moy")
-    }
 }

@@ -17,10 +17,7 @@ struct KeySigningSheet: View {
     @State private var setTrustAfterSigning = true
     @State private var selectedTrustLevel: TrustLevel = .marginal
     @State private var isSigning = false
-    @State private var showError = false
-    @State private var errorMessage: String?
-    @State private var showSuccess = false
-    @State private var successMessageKey: LocalizedStringKey = "sign_success_message"
+    @State private var promptAlert: PromptAlertContent?
     
     var body: some View {
         VStack(spacing: MoaiyUI.Spacing.xxl) {
@@ -164,18 +161,7 @@ struct KeySigningSheet: View {
         .onAppear {
             selectedSignerKey = viewModel.secretKeys.first
         }
-        .alert("sign_success_title", isPresented: $showSuccess) {
-            Button("action_ok") { dismiss() }
-        } message: {
-            Text(successMessageKey)
-        }
-        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .sign)), isPresented: $showError) {
-            Button("action_ok") { }
-        } message: {
-            if let error = errorMessage {
-                Text(error)
-            }
-        }
+        .moaiyPromptAlertHost(alert: $promptAlert)
     }
     
     private func signKey() {
@@ -189,11 +175,18 @@ struct KeySigningSheet: View {
                     passphrase: passphrase,
                     trustLevel: setTrustAfterSigning ? selectedTrustLevel : nil
                 )
-                successMessageKey = setTrustAfterSigning ? "sign_success_message" : "sign_success_message_no_trust_update"
-                showSuccess = true
+                let successMessage = setTrustAfterSigning
+                    ? String(localized: "sign_success_message")
+                    : String(localized: "sign_success_message_no_trust_update")
+                promptAlert = PromptAlertContent.success(
+                    message: successMessage,
+                    onAcknowledge: { dismiss() }
+                )
             } catch {
-                errorMessage = UserFacingErrorMapper.message(for: error, context: .sign)
-                showError = true
+                promptAlert = PromptAlertContent.failure(
+                    context: .sign,
+                    error: error
+                )
             }
             isSigning = false
         }

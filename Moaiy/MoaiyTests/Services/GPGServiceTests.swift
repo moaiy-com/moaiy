@@ -120,6 +120,22 @@ struct GPGServiceTests {
             #expect(keys.first?.trustLevel == expectedLevel, "Expected \(expectedLevel) for code '\(code)'")
         }
     }
+
+    @Test("parseKeyList uses validity instead of ownertrust for trust gating")
+    func parseKeyList_prefersValidityOverOwnerTrust() {
+        let output = """
+        pub:-:255:22:AFF61E980F814219:1774688367:1933041600::f:::scESC:::::ed25519:::0:
+        fpr:::::::::DADEED8EFF5EF22705285E12AFF61E980F814219:
+        uid:-::::1775291570::2C1D1D5D979714BE1FE6602C7B78DE27E251169F::222 <333@44.com>::::::::::0:
+        sub:-:255:18:A9491BDF1AEC49B2:1774688367::::::e:::::cv25519::
+        fpr:::::::::9DAF4148FF8A9D58E5BF22F7A9491BDF1AEC49B2:
+        """
+
+        let keys = parseKeyListOutput(output, secretOnly: false)
+
+        #expect(keys.count == 1)
+        #expect(keys.first?.trustLevel == .unknown)
+    }
     
     @Test("parseKeyList handles user ID without email")
     func parseKeyList_handlesUserIDWithoutEmail() {
@@ -367,8 +383,8 @@ private func parseKeyListOutput(_ output: String, secretOnly: Bool) -> [GPGKey] 
                 currentKey?.algorithm = fields[3]
                 currentKey?.keyLength = Int(fields[2]) ?? 0
                 currentKey?.fingerprint = fields[4]
-                if fields.count >= 9 {
-                    currentKey?.trustLevel = TrustLevel(gpgCode: fields[8]) ?? .unknown
+                if fields.count >= 2 {
+                    currentKey?.trustLevel = TrustLevel(gpgCode: fields[1]) ?? .unknown
                 }
             }
             
@@ -392,8 +408,8 @@ private func parseKeyListOutput(_ output: String, secretOnly: Bool) -> [GPGKey] 
                 } else {
                     currentKey?.name = userID
                 }
-                if fields.count >= 9, currentKey?.trustLevel == .unknown {
-                    currentKey?.trustLevel = TrustLevel(gpgCode: fields[8]) ?? .unknown
+                if fields.count >= 2, currentKey?.trustLevel == .unknown {
+                    currentKey?.trustLevel = TrustLevel(gpgCode: fields[1]) ?? .unknown
                 }
             }
         default:

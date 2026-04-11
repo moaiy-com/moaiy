@@ -124,6 +124,42 @@ enum UserFacingErrorMapper {
         return mapRawMessage(error.localizedDescription, context: context)
     }
 
+    static func decryptionKeyMismatchMessage(
+        recipientKeyIDs: [String],
+        availableSecretKeys: [GPGKey]
+    ) -> String {
+        let baseMessage = String(localized: "error_decryption_requires_private_key")
+        guard !recipientKeyIDs.isEmpty else {
+            return baseMessage
+        }
+
+        let normalizedRecipientIDs = recipientKeyIDs.compactMap(normalizedTail16(for:))
+        guard !normalizedRecipientIDs.isEmpty else {
+            return baseMessage
+        }
+
+        let recipientSet = Set(normalizedRecipientIDs)
+        let matchingSecretKeys = availableSecretKeys
+            .filter(\.isSecret)
+            .filter { key in
+                guard let keyTail16 = normalizedTail16(for: key.fingerprint) ?? normalizedTail16(for: key.keyID) else {
+                    return false
+                }
+                return recipientSet.contains(keyTail16)
+            }
+
+        let keyHint: String
+        if matchingSecretKeys.isEmpty {
+            keyHint = normalizedRecipientIDs.joined(separator: ", ")
+        } else {
+            keyHint = matchingSecretKeys.map { key in
+                "\(key.name) <\(key.email)> (\(key.keyID))"
+            }.joined(separator: ", ")
+        }
+
+        return "\(baseMessage)\n\(String(localized: "label_key_id")): \(keyHint)"
+    }
+
     static func alertTitleKey(for context: UserFacingErrorContext) -> String {
         switch context {
         case .general:
@@ -306,5 +342,21 @@ enum UserFacingErrorMapper {
             String(localized: "edit_error_operation_failed")
         ]
         return friendlyMessages.contains(message)
+    }
+
+    private static func normalizedTail16(for value: String) -> String? {
+        var normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+
+        if normalized.lowercased().hasPrefix("0x") {
+            normalized.removeFirst(2)
+        }
+        normalized = normalized.replacingOccurrences(of: " ", with: "")
+
+        guard normalized.range(of: "^[A-Fa-f0-9]{8,40}$", options: .regularExpression) != nil else {
+            return nil
+        }
+
+        return String(normalized.uppercased().suffix(16))
     }
 }

@@ -33,6 +33,16 @@ enum Constants {
 
         /// Internal cipher algorithm preference for OpenPGP encryption operations
         static let defaultCipherAlgorithm = "AES256"
+
+        /// Default public keyserver host.
+        static let defaultKeyserver = "keys.openpgp.org"
+
+        /// Supported public keyserver hosts in UI pickers.
+        static let supportedKeyservers: [String] = [
+            defaultKeyserver,
+            "keyserver.ubuntu.com",
+            "pgp.mit.edu"
+        ]
     }
     
     // MARK: - UI Configuration

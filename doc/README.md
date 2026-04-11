@@ -66,6 +66,10 @@ Language policy:
 ### [External Validation Pack](./v0.5.0-external-validation-pack.md)
 ### [v0.5.0 Release Notes](./v0.5.0-release-notes.md)
 
+## Release Documentation (v0.6.0)
+
+### [Notification Permission Regression Script](./v0.6.0-notification-permission-regression-script.md)
+
 ## Root-Level References
 
 - [Project README](../README.md)
@@ -76,4 +80,4 @@ Language policy:
 
 ---
 
-Last updated: 2026-04-05
+Last updated: 2026-04-11

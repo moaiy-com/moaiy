@@ -15,11 +15,7 @@ struct BackupManagerView: View {
 
     @State private var isCreatingBackup = false
     @State private var isRestoring = false
-    @State private var showBackupSuccess = false
-    @State private var showRestoreSuccess = false
-    @State private var restoreSuccessMessage = String(localized: "restore_success_message")
-    @State private var showError = false
-    @State private var errorMessage: String?
+    @State private var promptAlert: PromptAlertContent?
     @State private var pendingBackupURL: URL?
     @State private var showingSecretKeyPassphraseSheet = false
     @State private var includeSecretKeys = true
@@ -199,23 +195,7 @@ struct BackupManagerView: View {
                 }
             )
         }
-        .alert("backup_success_title", isPresented: $showBackupSuccess) {
-            Button("action_ok") { }
-        } message: {
-            Text("backup_success_message")
-        }
-        .alert("restore_success_title", isPresented: $showRestoreSuccess) {
-            Button("action_ok") { }
-        } message: {
-            Text(restoreSuccessMessage)
-        }
-        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .backup)), isPresented: $showError) {
-            Button("action_ok") { }
-        } message: {
-            if let error = errorMessage {
-                Text(error)
-            }
-        }
+        .moaiyPromptAlertHost(alert: $promptAlert)
     }
 
     // MARK: - Backup Operations
@@ -266,10 +246,14 @@ struct BackupManagerView: View {
                 lastBackupDate = Date()
                 saveBackupHistory()
 
-                showBackupSuccess = true
+                promptAlert = PromptAlertContent.success(
+                    message: String(localized: "backup_success_message")
+                )
             } catch {
-                errorMessage = UserFacingErrorMapper.message(for: error, context: .backup)
-                showError = true
+                promptAlert = PromptAlertContent.failure(
+                    context: .backup,
+                    error: error
+                )
             }
             isCreatingBackup = false
             pendingBackupURL = nil
@@ -403,21 +387,22 @@ struct BackupManagerView: View {
                 // Restore from backup
                 let summary = try await restoreFromBackupArchive(at: url)
 
-                // Reload keys
-                await viewModel.loadKeys()
-
                 if summary.failedFiles.isEmpty {
-                    restoreSuccessMessage = summary.usedLegacyRestrictedPath
+                    let restoreSuccessMessage = summary.usedLegacyRestrictedPath
                         ? String(localized: "restore_success_message_legacy_restricted")
                         : String(localized: "restore_success_message")
-                    showRestoreSuccess = true
+                    promptAlert = PromptAlertContent.success(
+                        message: restoreSuccessMessage
+                    )
                 } else {
                     let failed = summary.failedFiles.joined(separator: ", ")
                     throw GPGError.importFailed("\(summary.successfulFiles)/\(summary.totalFiles) - \(failed)")
                 }
             } catch {
-                errorMessage = UserFacingErrorMapper.message(for: error, context: .backup)
-                showError = true
+                promptAlert = PromptAlertContent.failure(
+                    context: .backup,
+                    error: error
+                )
             }
             isRestoring = false
         }
@@ -483,24 +468,14 @@ struct BackupManagerView: View {
             throw BackupError.invalidBackupFormat
         }
 
-        // Import all keys
+        // Import all keys with a single keyring refresh.
         let keyFiles = validationResult.files
-        var successfulFiles = 0
-        var failedFiles: [String] = []
-
-        for keyFile in keyFiles {
-            do {
-                _ = try await viewModel.importKey(from: keyFile)
-                successfulFiles += 1
-            } catch {
-                failedFiles.append(keyFile.lastPathComponent)
-            }
-        }
+        let importSummary = await viewModel.importKeys(from: keyFiles)
 
         return RestoreSummary(
-            totalFiles: keyFiles.count,
-            successfulFiles: successfulFiles,
-            failedFiles: failedFiles,
+            totalFiles: importSummary.totalFiles,
+            successfulFiles: importSummary.successfulFiles,
+            failedFiles: importSummary.failedFiles,
             usedLegacyRestrictedPath: validationResult.usedLegacyRestrictedPath
         )
     }

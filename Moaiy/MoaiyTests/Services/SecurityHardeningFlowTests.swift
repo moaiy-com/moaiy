@@ -13,6 +13,91 @@ import Testing
 @MainActor
 struct SecurityHardeningFlowTests {
 
+    @Test("Imported public key with full ownertrust still requires explicit encryption override")
+    func fileEncryption_importedPublicKey_ownerTrustFull_requiresOverride() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let identity = makeIdentity(seed: "ownertrust-vs-validity")
+        let tempDir = try makeTempDirectory(label: "ownertrust-vs-validity")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        var importedFingerprint: String?
+
+        do {
+            let fingerprint = try await service.generateKey(
+                name: identity.name,
+                email: identity.email,
+                keyType: .ecc,
+                passphrase: identity.passphrase
+            )
+            importedFingerprint = fingerprint
+
+            let publicData = try await service.exportPublicKey(keyID: fingerprint, armor: true)
+            try? await service.deleteKey(keyID: fingerprint, secret: true)
+            try? await service.deleteKey(keyID: fingerprint, secret: false)
+
+            let importURL = tempDir.appendingPathComponent("recipient-public-ownertrust-full.asc")
+            try publicData.write(to: importURL, options: .atomic)
+            _ = try await service.importKey(from: importURL)
+
+            // Simulate the problematic real-world state:
+            // ownertrust is full, but key validity stays unknown for imported public keys.
+            try await service.setTrust(keyID: fingerprint, trustLevel: .full)
+            let ownerTrust = try await service.checkTrust(keyID: fingerprint)
+            #expect(ownerTrust == .full)
+
+            let listedKeys = try await service.listKeys(secretOnly: false)
+            guard let listedImportedKey = listedKeys.first(where: { $0.fingerprint == fingerprint }) else {
+                Issue.record("Imported key should appear in key list")
+                return
+            }
+
+            #expect(listedImportedKey.trustLevel == .unknown)
+            #expect(listedImportedKey.isTrusted == false)
+
+            let sourceURL = tempDir.appendingPathComponent("plain.txt")
+            try Data("ownertrust-validity-check".utf8).write(to: sourceURL, options: .atomic)
+
+            let blockedOutputURL = tempDir.appendingPathComponent("blocked.moy")
+            do {
+                _ = try await service.encryptFile(
+                    sourceURL: sourceURL,
+                    destinationURL: blockedOutputURL,
+                    recipients: [fingerprint]
+                )
+                Issue.record("Expected encryption to fail without explicit untrusted override")
+            } catch let error as GPGError {
+                switch error {
+                case .encryptionFailed:
+                    break
+                default:
+                    Issue.record("Unexpected GPGError: \(error)")
+                }
+            } catch {
+                Issue.record("Unexpected error type: \(error)")
+            }
+
+            let allowedOutputURL = tempDir.appendingPathComponent("allowed.moy")
+            let finalURL = try await service.encryptFile(
+                sourceURL: sourceURL,
+                destinationURL: allowedOutputURL,
+                recipients: [fingerprint],
+                allowUntrustedRecipients: true
+            )
+            #expect(FileManager.default.fileExists(atPath: finalURL.path))
+        } catch {
+            if let importedFingerprint {
+                await cleanupKey(fingerprint: importedFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let importedFingerprint {
+            await cleanupKey(fingerprint: importedFingerprint, service: service)
+        }
+    }
+
     @Test("Encryption blocks untrusted recipients by default and allows explicit override")
     func encryption_untrustedRecipient_requiresExplicitOverride() async throws {
         let service = GPGService.shared
@@ -119,6 +204,173 @@ struct SecurityHardeningFlowTests {
 
         if let generatedFingerprint {
             await cleanupKey(fingerprint: generatedFingerprint, service: service)
+        }
+    }
+
+    @Test("Changing passphrase from unprotected key with empty current passphrase requires the new passphrase afterward")
+    func changePassphrase_unprotectedKey_emptyOld_setsNewPassphrase() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let identity = makeIdentity(seed: "change-pass-empty-old")
+        let firstPassphrase = "Moaiy-First-\(UUID().uuidString.prefix(8))!"
+        let secondPassphrase = "Moaiy-Second-\(UUID().uuidString.prefix(8))!"
+        var generatedFingerprint: String?
+
+        do {
+            let fingerprint = try await service.generateKey(
+                name: identity.name,
+                email: identity.email,
+                keyType: .ecc,
+                passphrase: nil
+            )
+            generatedFingerprint = fingerprint
+
+            try await service.changePassphrase(
+                keyID: fingerprint,
+                oldPassphrase: "",
+                newPassphrase: firstPassphrase
+            )
+
+            do {
+                try await service.changePassphrase(
+                    keyID: fingerprint,
+                    oldPassphrase: "wrong-\(UUID().uuidString.prefix(6))",
+                    newPassphrase: secondPassphrase
+                )
+                Issue.record("Expected invalid passphrase after setting a new passphrase")
+            } catch let error as GPGError {
+                switch error {
+                case .invalidPassphrase:
+                    break
+                default:
+                    Issue.record("Unexpected GPGError: \(error)")
+                }
+            }
+
+            try await service.changePassphrase(
+                keyID: fingerprint,
+                oldPassphrase: firstPassphrase,
+                newPassphrase: secondPassphrase
+            )
+        } catch {
+            if let generatedFingerprint {
+                await cleanupKey(fingerprint: generatedFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let generatedFingerprint {
+            await cleanupKey(fingerprint: generatedFingerprint, service: service)
+        }
+    }
+
+    @Test("Changing passphrase from unprotected key tolerates accidental old-passphrase input")
+    func changePassphrase_unprotectedKey_typedOld_fallsBackAndSetsNewPassphrase() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let identity = makeIdentity(seed: "change-pass-typed-old")
+        let typedOldPassphrase = "typed-old-\(UUID().uuidString.prefix(6))"
+        let firstPassphrase = "Moaiy-Fallback-\(UUID().uuidString.prefix(8))!"
+        let secondPassphrase = "Moaiy-Verify-\(UUID().uuidString.prefix(8))!"
+        var generatedFingerprint: String?
+
+        do {
+            let fingerprint = try await service.generateKey(
+                name: identity.name,
+                email: identity.email,
+                keyType: .ecc,
+                passphrase: nil
+            )
+            generatedFingerprint = fingerprint
+
+            try await service.changePassphrase(
+                keyID: fingerprint,
+                oldPassphrase: typedOldPassphrase,
+                newPassphrase: firstPassphrase
+            )
+
+            do {
+                try await service.changePassphrase(
+                    keyID: fingerprint,
+                    oldPassphrase: typedOldPassphrase,
+                    newPassphrase: secondPassphrase
+                )
+                Issue.record("Typed old passphrase should not unlock the updated key")
+            } catch let error as GPGError {
+                switch error {
+                case .invalidPassphrase:
+                    break
+                default:
+                    Issue.record("Unexpected GPGError: \(error)")
+                }
+            }
+
+            try await service.changePassphrase(
+                keyID: fingerprint,
+                oldPassphrase: firstPassphrase,
+                newPassphrase: secondPassphrase
+            )
+        } catch {
+            if let generatedFingerprint {
+                await cleanupKey(fingerprint: generatedFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let generatedFingerprint {
+            await cleanupKey(fingerprint: generatedFingerprint, service: service)
+        }
+    }
+
+    @Test("Secret key passphrase requirement detection distinguishes protected and unprotected keys")
+    func secretKeyRequiresPassphrase_detectsProtectionState() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let protectedIdentity = makeIdentity(seed: "key-protected")
+        let unprotectedIdentity = makeIdentity(seed: "key-unprotected")
+        var protectedFingerprint: String?
+        var unprotectedFingerprint: String?
+
+        do {
+            let protected = try await service.generateKey(
+                name: protectedIdentity.name,
+                email: protectedIdentity.email,
+                keyType: .ecc,
+                passphrase: protectedIdentity.passphrase
+            )
+            protectedFingerprint = protected
+
+            let unprotected = try await service.generateKey(
+                name: unprotectedIdentity.name,
+                email: unprotectedIdentity.email,
+                keyType: .ecc,
+                passphrase: nil
+            )
+            unprotectedFingerprint = unprotected
+
+            let protectedRequires = try await service.secretKeyRequiresPassphrase(keyID: protected)
+            let unprotectedRequires = try await service.secretKeyRequiresPassphrase(keyID: unprotected)
+
+            #expect(protectedRequires == true)
+            #expect(unprotectedRequires == false)
+        } catch {
+            if let protectedFingerprint {
+                await cleanupKey(fingerprint: protectedFingerprint, service: service)
+            }
+            if let unprotectedFingerprint {
+                await cleanupKey(fingerprint: unprotectedFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let protectedFingerprint {
+            await cleanupKey(fingerprint: protectedFingerprint, service: service)
+        }
+        if let unprotectedFingerprint {
+            await cleanupKey(fingerprint: unprotectedFingerprint, service: service)
         }
     }
 

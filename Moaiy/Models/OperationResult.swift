@@ -43,13 +43,13 @@ enum OperationType: String, Codable {
     
     var iconColor: Color {
         switch self {
-        case .encrypt: return .blue
-        case .decrypt: return .green
-        case .sign: return .purple
-        case .verify: return .orange
-        case .import: return .cyan
-        case .export: return .indigo
-        case .backup: return .brown
+        case .encrypt: return .moaiyAccentV2
+        case .decrypt: return .moaiySuccess
+        case .sign: return .moaiyWarning
+        case .verify: return .moaiyInfo
+        case .import: return .moaiyInfo
+        case .export: return .moaiyAccentV2
+        case .backup: return .moaiyWarning
         }
     }
 }

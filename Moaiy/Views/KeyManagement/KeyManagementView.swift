@@ -12,6 +12,7 @@ struct KeyManagementView: View {
     @State private var showingCreateKey = false
     @State private var showingImportKey = false
     @State private var keyToDelete: GPGKey?
+    @State private var promptAlert: PromptAlertContent?
 
     init(viewModel: KeyManagementViewModel? = nil) {
         _viewModel = State(initialValue: viewModel ?? AppState.shared.keyManagement)
@@ -80,62 +81,78 @@ struct KeyManagementView: View {
             ImportKeySheet()
                 .environment(viewModel)
         }
-        .confirmationDialog(
-            "confirm_delete_key_title",
-            isPresented: .init(
-                get: { keyToDelete != nil },
-                set: { if !$0 { keyToDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("action_delete", role: .destructive) {
-                if let key = keyToDelete {
-                    Task {
-                        do {
-                            try await viewModel.deleteKey(key)
-                        } catch {
-                            // Error will be handled by viewModel.errorMessage
-                        }
-                    }
-                }
-                keyToDelete = nil
-            }
-            Button("action_cancel", role: .cancel) {
-                keyToDelete = nil
-            }
-        } message: {
-            if let key = keyToDelete {
-                Text(
-                    String(
-                        format: String(localized: "confirm_delete_key_message"),
-                        locale: Locale.current,
-                        key.name
-                    )
-                )
-            }
+        .moaiyPromptAlertHost(alert: $promptAlert)
+        .onAppear {
+            syncPromptIfNeeded()
         }
-        .alert(
-            LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: viewModel.errorContext)),
-            isPresented: Binding(
-                get: { viewModel.errorMessage != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        viewModel.clearError()
+        .onChange(of: keyToDelete) { _, _ in
+            syncPromptIfNeeded()
+        }
+        .onChange(of: viewModel.errorMessage) { _, _ in
+            syncPromptIfNeeded()
+        }
+        .onChange(of: viewModel.errorContext) { _, _ in
+            syncPromptIfNeeded()
+        }
+    }
+
+    private func syncPromptIfNeeded() {
+        if let key = keyToDelete {
+            promptAlert = makeDeleteConfirmationPrompt(for: key)
+            return
+        }
+
+        updateErrorPromptIfNeeded()
+    }
+
+    private func makeDeleteConfirmationPrompt(for key: GPGKey) -> PromptAlertContent {
+        PromptAlertContent.destructiveConfirmation(
+            title: "confirm_delete_key_title",
+            message: String(
+                format: String(localized: "confirm_delete_key_message"),
+                locale: Locale.current,
+                key.name
+            ),
+            confirmTitle: "action_delete",
+            onConfirm: {
+                keyToDelete = nil
+                Task {
+                    do {
+                        try await viewModel.deleteKey(key)
+                    } catch {
+                        // Error will be handled by viewModel.errorMessage
                     }
                 }
-            )
-        ) {
-            Button("action_retry") {
-                Task { await viewModel.refresh() }
+            },
+            onCancel: {
+                keyToDelete = nil
+            },
+            onDismiss: {
+                keyToDelete = nil
             }
-            Button("action_cancel", role: .cancel) {
+        )
+    }
+
+    private func updateErrorPromptIfNeeded() {
+        guard let message = viewModel.errorMessage else {
+            promptAlert = nil
+            return
+        }
+
+        promptAlert = PromptAlertContent.retryableFailure(
+            title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: viewModel.errorContext)),
+            message: message,
+            onRetry: {
+                viewModel.clearError()
+                Task { await viewModel.refresh() }
+            },
+            onCancel: {
+                viewModel.clearError()
+            },
+            onDismiss: {
                 viewModel.clearError()
             }
-        } message: {
-            if let error = viewModel.errorMessage {
-                Text(error)
-            }
-        }
+        )
     }
 
     private var brandBackgroundView: some View {

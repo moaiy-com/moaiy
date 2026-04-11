@@ -13,8 +13,8 @@ import Testing
 @MainActor
 struct FileEncryptionFlowTests {
 
-    @Test("File encrypt/decrypt roundtrip and destination conflict handling succeed")
-    func fileEncryptDecrypt_roundtrip_andConflictHandling() async throws {
+    @Test("File encrypt/decrypt roundtrip and existing destination overwrite succeed")
+    func fileEncryptDecrypt_roundtrip_andOverwriteHandling() async throws {
         let service = GPGService.shared
         try await waitForServiceReady(service)
 
@@ -60,7 +60,7 @@ struct FileEncryptionFlowTests {
             let decryptedText = try String(contentsOf: decryptedURL, encoding: .utf8)
             #expect(normalized(decryptedText) == normalized(plaintext))
             
-            // MR-09: existing destination should be preserved and output should use suffix.
+            // Existing destination is replaced because the user explicitly selected it.
             let requestedEncryptedURL = tempDirectory.appendingPathComponent("output.moy")
             try Data("existing".utf8).write(to: requestedEncryptedURL, options: .atomic)
 
@@ -69,7 +69,7 @@ struct FileEncryptionFlowTests {
                 destinationURL: requestedEncryptedURL,
                 recipients: [fingerprint]
             )
-            #expect(conflictedEncryptedURL.lastPathComponent == "output (1).moy")
+            #expect(conflictedEncryptedURL.lastPathComponent == "output.moy")
             #expect(fileManager.fileExists(atPath: conflictedEncryptedURL.path))
 
             let requestedDecryptedURL = tempDirectory.appendingPathComponent("output.txt")
@@ -80,11 +80,241 @@ struct FileEncryptionFlowTests {
                 destinationURL: requestedDecryptedURL,
                 passphrase: identity.passphrase
             )
-            #expect(conflictedDecryptedURL.lastPathComponent == "output (1).txt")
+            #expect(conflictedDecryptedURL.lastPathComponent == "output.txt")
             #expect(fileManager.fileExists(atPath: conflictedDecryptedURL.path))
 
             let conflictedDecryptedText = try String(contentsOf: conflictedDecryptedURL, encoding: .utf8)
             #expect(normalized(conflictedDecryptedText) == normalized(plaintext))
+        } catch {
+            if let generatedFingerprint {
+                await cleanupKey(fingerprint: generatedFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let generatedFingerprint {
+            await cleanupKey(fingerprint: generatedFingerprint, service: service)
+        }
+    }
+
+    @Test("decryptFile respects preferred secret key and fails when mismatched")
+    func decryptFile_preferredSecretKey_mismatchFails() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let fileManager = FileManager.default
+        let sender = makeIdentity(seed: "preferred-secret-a")
+        let other = makeIdentity(seed: "preferred-secret-b")
+        let plaintext = "preferred-secret-key-\(UUID().uuidString)"
+        let tempDirectory = try makeTempDirectory(label: "preferred-secret-key")
+        var senderFingerprint: String?
+        var otherFingerprint: String?
+
+        defer {
+            try? fileManager.removeItem(at: tempDirectory)
+        }
+
+        do {
+            let fpA = try await service.generateKey(
+                name: sender.name,
+                email: sender.email,
+                keyType: .ecc,
+                passphrase: sender.passphrase
+            )
+            senderFingerprint = fpA
+
+            let fpB = try await service.generateKey(
+                name: other.name,
+                email: other.email,
+                keyType: .ecc,
+                passphrase: other.passphrase
+            )
+            otherFingerprint = fpB
+
+            let sourceURL = tempDirectory.appendingPathComponent("input.txt")
+            try Data(plaintext.utf8).write(to: sourceURL, options: .atomic)
+
+            let encryptedURL = try await service.encryptFile(
+                sourceURL: sourceURL,
+                destinationURL: tempDirectory.appendingPathComponent("input.txt.moy"),
+                recipients: [fpA]
+            )
+
+            let mismatchedDestination = tempDirectory.appendingPathComponent("mismatch.txt")
+            do {
+                _ = try await service.decryptFile(
+                    sourceURL: encryptedURL,
+                    destinationURL: mismatchedDestination,
+                    passphrase: sender.passphrase,
+                    preferredSecretKey: fpB
+                )
+                Issue.record("Expected decrypt to fail when preferred secret key does not match recipient")
+            } catch let error as GPGError {
+                switch error {
+                case .keyNotFound, .decryptionFailed:
+                    break
+                default:
+                    Issue.record("Unexpected GPGError: \(error)")
+                }
+            } catch {
+                Issue.record("Unexpected error type: \(error)")
+            }
+
+            let matchedDestination = tempDirectory.appendingPathComponent("matched.txt")
+            let matchedURL = try await service.decryptFile(
+                sourceURL: encryptedURL,
+                destinationURL: matchedDestination,
+                passphrase: sender.passphrase,
+                preferredSecretKey: fpA
+            )
+            #expect(fileManager.fileExists(atPath: matchedURL.path))
+            let decryptedText = try String(contentsOf: matchedURL, encoding: .utf8)
+            #expect(normalized(decryptedText) == normalized(plaintext))
+        } catch {
+            if let senderFingerprint {
+                await cleanupKey(fingerprint: senderFingerprint, service: service)
+            }
+            if let otherFingerprint {
+                await cleanupKey(fingerprint: otherFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let senderFingerprint {
+            await cleanupKey(fingerprint: senderFingerprint, service: service)
+        }
+        if let otherFingerprint {
+            await cleanupKey(fingerprint: otherFingerprint, service: service)
+        }
+    }
+
+    @Test("decrypt preflight reports key mismatch before decrypt")
+    func decryptPreflight_keyMismatchDetection() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let fileManager = FileManager.default
+        let recipient = makeIdentity(seed: "preflight-recipient")
+        let other = makeIdentity(seed: "preflight-other")
+        let plaintext = "preflight-mismatch-\(UUID().uuidString)"
+        let tempDirectory = try makeTempDirectory(label: "preflight-mismatch")
+        var recipientFingerprint: String?
+        var otherFingerprint: String?
+
+        defer {
+            try? fileManager.removeItem(at: tempDirectory)
+        }
+
+        do {
+            let recipientFP = try await service.generateKey(
+                name: recipient.name,
+                email: recipient.email,
+                keyType: .ecc,
+                passphrase: recipient.passphrase
+            )
+            recipientFingerprint = recipientFP
+
+            let otherFP = try await service.generateKey(
+                name: other.name,
+                email: other.email,
+                keyType: .ecc,
+                passphrase: other.passphrase
+            )
+            otherFingerprint = otherFP
+
+            let sourceURL = tempDirectory.appendingPathComponent("input.txt")
+            try Data(plaintext.utf8).write(to: sourceURL, options: .atomic)
+
+            let encryptedURL = try await service.encryptFile(
+                sourceURL: sourceURL,
+                destinationURL: tempDirectory.appendingPathComponent("input.txt.moy"),
+                recipients: [recipientFP]
+            )
+
+            let mismatch = try await service.checkDecryptionRecipientMatch(
+                sourceURL: encryptedURL,
+                preferredSecretKey: otherFP
+            )
+            #expect(mismatch.matchesPreferredKey == false)
+            #expect(mismatch.recipientKeyIDs.isEmpty == false)
+
+            let match = try await service.checkDecryptionRecipientMatch(
+                sourceURL: encryptedURL,
+                preferredSecretKey: recipientFP
+            )
+            #expect(match.matchesPreferredKey == true)
+        } catch {
+            if let recipientFingerprint {
+                await cleanupKey(fingerprint: recipientFingerprint, service: service)
+            }
+            if let otherFingerprint {
+                await cleanupKey(fingerprint: otherFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let recipientFingerprint {
+            await cleanupKey(fingerprint: recipientFingerprint, service: service)
+        }
+        if let otherFingerprint {
+            await cleanupKey(fingerprint: otherFingerprint, service: service)
+        }
+    }
+
+    @Test("decryptFile with wrong passphrase fails and does not produce output")
+    func decryptFile_wrongPassphraseFailsWithoutOutput() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let fileManager = FileManager.default
+        let identity = makeIdentity(seed: "wrong-passphrase")
+        let plaintext = "wrong-passphrase-\(UUID().uuidString)"
+        let tempDirectory = try makeTempDirectory(label: "wrong-passphrase")
+        var generatedFingerprint: String?
+
+        defer {
+            try? fileManager.removeItem(at: tempDirectory)
+        }
+
+        do {
+            let fingerprint = try await service.generateKey(
+                name: identity.name,
+                email: identity.email,
+                keyType: .ecc,
+                passphrase: identity.passphrase
+            )
+            generatedFingerprint = fingerprint
+
+            let sourceURL = tempDirectory.appendingPathComponent("input.txt")
+            try Data(plaintext.utf8).write(to: sourceURL, options: .atomic)
+
+            let encryptedURL = try await service.encryptFile(
+                sourceURL: sourceURL,
+                destinationURL: tempDirectory.appendingPathComponent("input.txt.moy"),
+                recipients: [fingerprint]
+            )
+
+            let wrongPassphraseOutput = tempDirectory.appendingPathComponent("wrong-passphrase.txt")
+            do {
+                _ = try await service.decryptFile(
+                    sourceURL: encryptedURL,
+                    destinationURL: wrongPassphraseOutput,
+                    passphrase: "totally-wrong-passphrase",
+                    preferredSecretKey: fingerprint
+                )
+                Issue.record("Expected decrypt to fail when passphrase is incorrect")
+            } catch let error as GPGError {
+                switch error {
+                case .invalidPassphrase, .decryptionFailed:
+                    break
+                default:
+                    Issue.record("Unexpected GPGError: \(error)")
+                }
+            } catch {
+                Issue.record("Unexpected error type: \(error)")
+            }
+
+            #expect(fileManager.fileExists(atPath: wrongPassphraseOutput.path) == false)
         } catch {
             if let generatedFingerprint {
                 await cleanupKey(fingerprint: generatedFingerprint, service: service)

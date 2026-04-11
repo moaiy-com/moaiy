@@ -12,16 +12,12 @@ struct UploadToKeyserverSheet: View {
     let onDismiss: () -> Void
     let onSuccess: () -> Void
     
-    @State private var selectedKeyserver = "keys.openpgp.org"
+    @State private var selectedKeyserver = Constants.GPG.defaultKeyserver
     @State private var isUploading = false
     @State private var uploadSuccess = false
     @State private var errorMessage: String?
     
-    private let keyservers = [
-        "keys.openpgp.org",
-        "keyserver.ubuntu.com",
-        "pgp.mit.edu"
-    ]
+    private let keyservers = Constants.GPG.supportedKeyservers
     
     var body: some View {
         VStack(spacing: MoaiyUI.Spacing.xxl) {

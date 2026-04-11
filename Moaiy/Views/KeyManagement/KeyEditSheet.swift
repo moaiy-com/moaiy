@@ -34,8 +34,7 @@ struct KeyEditSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var selectedTab: KeyEditTab = .expiration
-    @State private var showSuccess = false
-    @State private var successMessage: String?
+    @State private var promptAlert: PromptAlertContent?
 
     var body: some View {
         VStack(spacing: MoaiyUI.Spacing.lg) {
@@ -78,18 +77,24 @@ struct KeyEditSheet: View {
                 switch selectedTab {
                 case .expiration:
                     ExpirationEditView(key: key, onSuccess: { message in
-                        successMessage = message
-                        showSuccess = true
+                        promptAlert = PromptAlertContent.success(
+                            message: message,
+                            onAcknowledge: { dismiss() }
+                        )
                     })
                 case .userIds:
                     UserIDsEditView(key: key, onSuccess: { message in
-                        successMessage = message
-                        showSuccess = true
+                        promptAlert = PromptAlertContent.success(
+                            message: message,
+                            onAcknowledge: { dismiss() }
+                        )
                     })
                 case .passphrase:
                     PassphraseEditView(key: key, onSuccess: { message in
-                        successMessage = message
-                        showSuccess = true
+                        promptAlert = PromptAlertContent.success(
+                            message: message,
+                            onAcknowledge: { dismiss() }
+                        )
                     })
                 }
             }
@@ -97,13 +102,7 @@ struct KeyEditSheet: View {
         }
         .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 520, idealWidth: 620, maxWidth: 760, minHeight: 500, idealHeight: 620, maxHeight: 860)
-        .alert("edit_success_title", isPresented: $showSuccess) {
-            Button("action_ok") { dismiss() }
-        } message: {
-            if let message = successMessage {
-                Text(message)
-            }
-        }
+        .moaiyPromptAlertHost(alert: $promptAlert)
     }
 }
 
@@ -118,8 +117,7 @@ struct ExpirationEditView: View {
     @State private var customDate = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
     @State private var passphrase = ""
     @State private var isUpdating = false
-    @State private var showError = false
-    @State private var errorMessage: String?
+    @State private var promptAlert: PromptAlertContent?
 
     enum ExpirationOption: CaseIterable {
         case never
@@ -231,13 +229,7 @@ struct ExpirationEditView: View {
             .disabled(isUpdating)
         }
         .padding(MoaiyUI.Spacing.xxl)
-        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .keyEdit)), isPresented: $showError) {
-            Button("action_ok") { }
-        } message: {
-            if let error = errorMessage {
-                Text(error)
-            }
-        }
+        .moaiyPromptAlertHost(alert: $promptAlert)
     }
 
     private func updateExpiration() {
@@ -267,8 +259,10 @@ struct ExpirationEditView: View {
                 passphrase = ""
                 onSuccess(String(localized: "edit_expiration_success"))
             } catch {
-                errorMessage = UserFacingErrorMapper.message(for: error, context: .keyEdit)
-                showError = true
+                promptAlert = PromptAlertContent.failure(
+                    context: .keyEdit,
+                    error: error
+                )
             }
             isUpdating = false
         }
@@ -286,8 +280,7 @@ struct UserIDsEditView: View {
     @State private var newUserEmail = ""
     @State private var passphrase = ""
     @State private var isAdding = false
-    @State private var showError = false
-    @State private var errorMessage: String?
+    @State private var promptAlert: PromptAlertContent?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -366,13 +359,7 @@ struct UserIDsEditView: View {
             .moaiyBannerStyle(tint: Color.moaiyInfo)
         }
         .padding(MoaiyUI.Spacing.xxl)
-        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .keyEdit)), isPresented: $showError) {
-            Button("action_ok") { }
-        } message: {
-            if let error = errorMessage {
-                Text(error)
-            }
-        }
+        .moaiyPromptAlertHost(alert: $promptAlert)
     }
 
     private func addUserID() {
@@ -391,8 +378,10 @@ struct UserIDsEditView: View {
                 passphrase = ""
                 onSuccess(String(localized: "edit_userid_success"))
             } catch {
-                errorMessage = UserFacingErrorMapper.message(for: error, context: .keyEdit)
-                showError = true
+                promptAlert = PromptAlertContent.failure(
+                    context: .keyEdit,
+                    error: error
+                )
             }
             isAdding = false
         }
@@ -410,8 +399,7 @@ struct PassphraseEditView: View {
     @State private var newPassphrase = ""
     @State private var confirmPassphrase = ""
     @State private var isUpdating = false
-    @State private var showError = false
-    @State private var errorMessage: String?
+    @State private var promptAlert: PromptAlertContent?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -462,16 +450,10 @@ struct PassphraseEditView: View {
             .buttonStyle(.borderedProminent)
             .tint(Color.moaiyAccentV2)
             .controlSize(.large)
-            .disabled(currentPassphrase.isEmpty || newPassphrase.isEmpty || newPassphrase != confirmPassphrase || isUpdating)
+            .disabled(newPassphrase.isEmpty || newPassphrase != confirmPassphrase || isUpdating)
         }
         .padding(MoaiyUI.Spacing.xxl)
-        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .keyEdit)), isPresented: $showError) {
-            Button("action_ok") { }
-        } message: {
-            if let error = errorMessage {
-                Text(error)
-            }
-        }
+        .moaiyPromptAlertHost(alert: $promptAlert)
     }
 
     private func updatePassphrase() {
@@ -482,15 +464,18 @@ struct PassphraseEditView: View {
                 try await viewModel.changePassphrase(
                     for: key,
                     oldPassphrase: currentPassphrase,
-                    newPassphrase: newPassphrase
+                    newPassphrase: newPassphrase,
+                    allowEmptyOldPassphrase: true
                 )
                 currentPassphrase = ""
                 newPassphrase = ""
                 confirmPassphrase = ""
                 onSuccess(String(localized: "edit_passphrase_success"))
             } catch {
-                errorMessage = UserFacingErrorMapper.message(for: error, context: .keyEdit)
-                showError = true
+                promptAlert = PromptAlertContent.failure(
+                    context: .keyEdit,
+                    error: error
+                )
             }
             isUpdating = false
         }

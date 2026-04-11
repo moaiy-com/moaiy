@@ -8,6 +8,18 @@
 import Foundation
 import os.log
 
+struct BatchKeyImportSummary {
+    let totalFiles: Int
+    let successfulFiles: Int
+    let failedFiles: [String]
+    let imported: Int
+    let unchanged: Int
+
+    var hasFailures: Bool {
+        !failedFiles.isEmpty
+    }
+}
+
 @MainActor
 @Observable
 final class KeyManagementViewModel {
@@ -235,19 +247,7 @@ final class KeyManagementViewModel {
         errorMessage = nil
         
         do {
-            let hasSecurityScope = url.startAccessingSecurityScopedResource()
-            defer {
-                if hasSecurityScope {
-                    url.stopAccessingSecurityScopedResource()
-                }
-            }
-
-            // Temporary files inside our container are often readable without a security scope.
-            guard FileManager.default.isReadableFile(atPath: url.path) else {
-                throw GPGError.fileAccessDenied(url.path)
-            }
-
-            let result = try await gpgService.importKey(from: url)
+            let result = try await importKeyCore(from: url)
             await loadKeys()
             return result
         } catch {
@@ -255,6 +255,43 @@ final class KeyManagementViewModel {
             isLoading = false
             throw error
         }
+    }
+
+    /// Import multiple key files with a single keyring refresh at the end.
+    /// Failed files are reported in the summary while successful files continue importing.
+    func importKeys(from urls: [URL]) async -> BatchKeyImportSummary {
+        isLoading = true
+        errorMessage = nil
+
+        var successfulFiles = 0
+        var failedFiles: [String] = []
+        var importedCount = 0
+        var unchangedCount = 0
+
+        for url in urls {
+            do {
+                let result = try await importKeyCore(from: url)
+                successfulFiles += 1
+                importedCount += result.imported
+                unchangedCount += result.unchanged
+            } catch {
+                failedFiles.append(url.lastPathComponent)
+            }
+        }
+
+        if successfulFiles > 0 {
+            await loadKeys()
+        } else {
+            isLoading = false
+        }
+
+        return BatchKeyImportSummary(
+            totalFiles: urls.count,
+            successfulFiles: successfulFiles,
+            failedFiles: failedFiles,
+            imported: importedCount,
+            unchanged: unchangedCount
+        )
     }
 
     /// Import a key from keyserver using URL/fingerprint/key ID/email query.
@@ -468,7 +505,12 @@ final class KeyManagementViewModel {
     }
 
     /// Change passphrase for a secret key
-    func changePassphrase(for key: GPGKey, oldPassphrase: String, newPassphrase: String) async throws {
+    func changePassphrase(
+        for key: GPGKey,
+        oldPassphrase: String,
+        newPassphrase: String,
+        allowEmptyOldPassphrase: Bool = false
+    ) async throws {
         guard key.isSecret else {
             throw GPGError.keyNotFound("Secret key for \(key.fingerprint)")
         }
@@ -476,8 +518,10 @@ final class KeyManagementViewModel {
         let oldPassphrase = oldPassphrase.trimmingCharacters(in: .newlines)
         let newPassphrase = newPassphrase.trimmingCharacters(in: .newlines)
 
-        guard !oldPassphrase.isEmpty else {
-            throw GPGError.invalidPassphrase
+        if !allowEmptyOldPassphrase {
+            guard !oldPassphrase.isEmpty else {
+                throw GPGError.invalidPassphrase
+            }
         }
         guard !newPassphrase.isEmpty else {
             throw GPGError.invalidPassphrase
@@ -570,6 +614,22 @@ final class KeyManagementViewModel {
     private func setError(_ error: Error, context: UserFacingErrorContext) {
         errorContext = context
         errorMessage = UserFacingErrorMapper.message(for: error, context: context)
+    }
+
+    private func importKeyCore(from url: URL) async throws -> KeyImportResult {
+        let hasSecurityScope = url.startAccessingSecurityScopedResource()
+        defer {
+            if hasSecurityScope {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        // Temporary files inside our container are often readable without a security scope.
+        guard FileManager.default.isReadableFile(atPath: url.path) else {
+            throw GPGError.fileAccessDenied(url.path)
+        }
+
+        return try await gpgService.importKey(from: url)
     }
 
     private func isValidEmail(_ email: String) -> Bool {
