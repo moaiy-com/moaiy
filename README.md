@@ -8,6 +8,10 @@ Moaiy is an open-source macOS app for encryption and recovery workflows, designe
 
 **[Chinese Version](./README_CN.md)**
 
+## App Screenshot
+
+![Moaiy main key management view](./doc/images/moaiy-main-ui.png)
+
 ## Features
 
 - Generate, import, export, and delete keys
