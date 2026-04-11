@@ -21,7 +21,7 @@ struct CreateKeyView: View {
     @State private var errorMessage: String?
     @State private var showSuccess = false
     @State private var createdKeyFingerprint: String?
-    @State private var showNoPasswordConfirmation = false
+    @State private var promptAlert: PromptAlertContent?
 
     var body: some View {
         VStack(spacing: 16) {
@@ -48,14 +48,7 @@ struct CreateKeyView: View {
             }
         }
         .moaiyModalAdaptiveSize(minWidth: 500, idealWidth: 580, maxWidth: 720, minHeight: 520, idealHeight: 640)
-        .alert("create_key_empty_passphrase_title", isPresented: $showNoPasswordConfirmation) {
-            Button("create_key_empty_passphrase_confirm", role: .destructive) {
-                createKey()
-            }
-            Button("action_cancel", role: .cancel) { }
-        } message: {
-            Text("create_key_empty_passphrase_message")
-        }
+        .moaiyPromptAlertHost(alert: $promptAlert)
     }
 
     private var headerView: some View {
@@ -205,7 +198,12 @@ struct CreateKeyView: View {
     private func handleCreateButtonTapped() {
         errorMessage = nil
         if password.isEmpty {
-            showNoPasswordConfirmation = true
+            promptAlert = PromptAlertContent.destructiveConfirmation(
+                title: "create_key_empty_passphrase_title",
+                message: String(localized: "create_key_empty_passphrase_message"),
+                confirmTitle: "create_key_empty_passphrase_confirm",
+                onConfirm: { createKey() }
+            )
             return
         }
         createKey()

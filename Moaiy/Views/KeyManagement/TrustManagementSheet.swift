@@ -14,8 +14,7 @@ struct TrustManagementSheet: View {
     
     @State private var selectedTrustLevel: TrustLevel
     @State private var isUpdating = false
-    @State private var showError = false
-    @State private var errorMessage: String?
+    @State private var promptAlert: PromptAlertContent?
     @State private var trustDetails: KeyTrustDetails?
     
     init(key: GPGKey) {
@@ -111,13 +110,7 @@ struct TrustManagementSheet: View {
         .task {
             await loadTrustDetails()
         }
-        .alert(LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .trust)), isPresented: $showError) {
-            Button("action_ok") { }
-        } message: {
-            if let error = errorMessage {
-                Text(error)
-            }
-        }
+        .moaiyPromptAlertHost(alert: $promptAlert)
     }
     
     private func loadTrustDetails() async {
@@ -137,8 +130,10 @@ struct TrustManagementSheet: View {
                 try await viewModel.setTrust(for: key, trustLevel: selectedTrustLevel)
                 dismiss()
             } catch {
-                errorMessage = UserFacingErrorMapper.message(for: error, context: .trust)
-                showError = true
+                promptAlert = PromptAlertContent.failure(
+                    context: .trust,
+                    error: error
+                )
             }
             isUpdating = false
         }

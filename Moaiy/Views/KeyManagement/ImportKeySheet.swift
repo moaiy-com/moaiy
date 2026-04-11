@@ -26,9 +26,8 @@ struct ImportKeySheet: View {
     @State private var selectedKeyserver = Constants.GPG.defaultKeyserver
     @State private var systemKeyringURL: URL?
     @State private var isImporting = false
-    @State private var importError: String?
-    @State private var importResult: KeyImportResult?
     @State private var migrationResult: KeyMigrationResult?
+    @State private var promptAlert: PromptAlertContent?
 
     private let keyservers = Constants.GPG.supportedKeyservers
 
@@ -69,9 +68,8 @@ struct ImportKeySheet: View {
             .pickerStyle(.segmented)
             .padding(.horizontal, MoaiyUI.Spacing.xs)
             .onChange(of: importMode) { _, _ in
-                importError = nil
-                importResult = nil
                 migrationResult = nil
+                promptAlert = nil
             }
 
             // Import source
@@ -80,14 +78,12 @@ struct ImportKeySheet: View {
                     if let fileURL = importedFileURL {
                         FilePreviewCard(url: fileURL) {
                             importedFileURL = nil
-                            importError = nil
-                            importResult = nil
+                            promptAlert = nil
                         }
                     } else {
                         DropZoneView { url in
                             importedFileURL = url
-                            importError = nil
-                            importResult = nil
+                            promptAlert = nil
                         }
                     }
                 } else if importMode == .keyserver {
@@ -97,8 +93,7 @@ struct ImportKeySheet: View {
                         keyservers: keyservers
                     )
                     .onChange(of: keyserverQuery) { _, _ in
-                        importError = nil
-                        importResult = nil
+                        promptAlert = nil
                     }
                 } else {
                     SystemKeyringImportCard(
@@ -116,24 +111,6 @@ struct ImportKeySheet: View {
                         )
                     }
                 }
-            }
-
-            // Error message
-            if let error = importError {
-                ErrorBanner(message: error)
-            }
-
-            // Success message
-            if let result = importResult, importMode != .system {
-                SuccessBanner(
-                    message: String(localized: "import_success_message"),
-                    details: String(
-                        format: String(localized: "import_success_details"),
-                        locale: Locale.current,
-                        Int64(result.imported),
-                        Int64(result.unchanged)
-                    )
-                )
             }
 
             // Actions
@@ -163,6 +140,7 @@ struct ImportKeySheet: View {
         .padding(MoaiyUI.Spacing.xxxl)
         .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 420, idealWidth: 540, maxWidth: 720)
+        .moaiyPromptAlertHost(alert: $promptAlert)
     }
 
     private var canImport: Bool {
@@ -200,21 +178,16 @@ struct ImportKeySheet: View {
         guard let fileURL = importedFileURL else { return }
 
         isImporting = true
-        importError = nil
-        importResult = nil
+        promptAlert = nil
 
         Task { @MainActor in
             do {
                 let result = try await viewModel.importKey(from: fileURL)
-                importResult = result
                 isImporting = false
-
-                // Auto dismiss after success
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                dismiss()
+                showImportSuccessAlert(result)
             } catch {
-                importError = UserFacingErrorMapper.message(for: error, context: .importKey)
                 isImporting = false
+                showImportErrorAlert(error)
             }
         }
     }
@@ -224,8 +197,7 @@ struct ImportKeySheet: View {
         guard !query.isEmpty else { return }
 
         isImporting = true
-        importError = nil
-        importResult = nil
+        promptAlert = nil
 
         Task { @MainActor in
             do {
@@ -233,14 +205,11 @@ struct ImportKeySheet: View {
                     query: query,
                     keyserver: selectedKeyserver
                 )
-                importResult = result
                 isImporting = false
-
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                dismiss()
+                showImportSuccessAlert(result)
             } catch {
-                importError = UserFacingErrorMapper.message(for: error, context: .importKey)
                 isImporting = false
+                showImportErrorAlert(error)
             }
         }
     }
@@ -259,16 +228,15 @@ struct ImportKeySheet: View {
         }
 
         systemKeyringURL = url
-        importError = nil
         migrationResult = nil
+        promptAlert = nil
     }
 
     private func importFromSystemKeyring() {
         guard let sourceURL = systemKeyringURL else { return }
 
         isImporting = true
-        importError = nil
-        importResult = nil
+        promptAlert = nil
         migrationResult = nil
 
         Task { @MainActor in
@@ -277,10 +245,29 @@ struct ImportKeySheet: View {
                 migrationResult = result
                 isImporting = false
             } catch {
-                importError = UserFacingErrorMapper.message(for: error, context: .importKey)
                 isImporting = false
+                showImportErrorAlert(error)
             }
         }
+    }
+
+    private func showImportSuccessAlert(_ result: KeyImportResult) {
+        let details = String(
+            format: String(localized: "import_success_details"),
+            locale: Locale.current,
+            Int64(result.imported),
+            Int64(result.unchanged)
+        )
+        promptAlert = PromptAlertContent.success(
+            message: "\(String(localized: "import_success_message"))\n\(details)"
+        )
+    }
+
+    private func showImportErrorAlert(_ error: Error) {
+        promptAlert = PromptAlertContent.failure(
+            context: .importKey,
+            error: error
+        )
     }
 }
 
@@ -512,59 +499,6 @@ struct FilePreviewCard: View {
         }
         .padding(MoaiyUI.Spacing.md)
         .moaiyCardStyle(cornerRadius: MoaiyUI.Radius.md)
-    }
-}
-
-// MARK: - Error Banner
-
-struct ErrorBanner: View {
-    let message: String
-    
-    var body: some View {
-        HStack(spacing: MoaiyUI.Spacing.md) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(Color.moaiyError)
-            
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(Color.moaiyTextPrimary)
-            
-            Spacer()
-        }
-        .padding(MoaiyUI.Spacing.md)
-        .moaiyBannerStyle(tint: Color.moaiyError)
-    }
-}
-
-// MARK: - Success Banner
-
-struct SuccessBanner: View {
-    let message: String
-    let details: String
-    
-    var body: some View {
-        VStack(spacing: MoaiyUI.Spacing.sm) {
-            HStack(spacing: MoaiyUI.Spacing.md) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.moaiySuccess)
-                
-                Text(message)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(Color.moaiyTextPrimary)
-                
-                Spacer()
-            }
-            
-            HStack {
-                Spacer()
-                Text(details)
-                    .font(.caption)
-                    .foregroundStyle(Color.moaiyTextSecondary)
-            }
-        }
-        .padding(MoaiyUI.Spacing.md)
-        .moaiyBannerStyle(tint: Color.moaiySuccess)
     }
 }
 

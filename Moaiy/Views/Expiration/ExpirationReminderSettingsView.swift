@@ -12,6 +12,7 @@ struct ExpirationReminderSettingsView: View {
     @Environment(KeyManagementViewModel.self) private var viewModel
     @Environment(\.dismiss) private var dismiss
     @State private var showingPermissionAlert = false
+    @State private var promptAlert: PromptAlertContent?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,11 +50,20 @@ struct ExpirationReminderSettingsView: View {
         .onChange(of: viewModel.keys) { _, newKeys in
             reminderService.updateKeys(newKeys)
         }
-        .alert("expiration_permission_title", isPresented: $showingPermissionAlert) {
-            Button("action_ok") { }
-        } message: {
-            Text("expiration_permission_message")
+        .onChange(of: showingPermissionAlert) { _, isShowing in
+            guard isShowing else { return }
+            promptAlert = PromptAlertContent.info(
+                title: "expiration_permission_title",
+                message: String(localized: "expiration_permission_message"),
+                onAcknowledge: {
+                    showingPermissionAlert = false
+                },
+                onDismiss: {
+                    showingPermissionAlert = false
+                }
+            )
         }
+        .moaiyPromptAlertHost(alert: $promptAlert)
     }
 
     private var headerView: some View {

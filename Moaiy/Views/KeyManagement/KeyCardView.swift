@@ -20,9 +20,7 @@ struct KeyCardView: View {
     @State private var passwordSheetFileName = ""
     @State private var pendingDecryptRequests: [DecryptRequest] = []
     @State private var pendingDetectedFiles: [DetectedFile] = []
-    @State private var showingUntrustedEncryptionConfirmation = false
-    @State private var showingDecryptionMismatchAlert = false
-    @State private var decryptionMismatchAlertMessage = ""
+    @State private var promptAlert: PromptAlertContent?
     
     private let detector = GPGFileTypeDetector()
 
@@ -42,18 +40,17 @@ struct KeyCardView: View {
         }
         .padding(MoaiyUI.Spacing.md)
         .moaiyCardStyle(cornerRadius: MoaiyUI.Radius.lg)
-        .sheet(isPresented: $showingResultOverlay) {
-            OperationResultOverlay(
-                results: operationResults,
-                onDismiss: {
-                    showingResultOverlay = false
-                    operationResults = []
-                },
-                onOpenInFinder: { url in
-                    NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: url.deletingLastPathComponent().path)
-                }
-            )
-        }
+        .moaiyOperationPromptHost(
+            alert: $promptAlert,
+            operationResults: $operationResults,
+            isShowingOperationResults: $showingResultOverlay,
+            onOpenInFinder: { url in
+                NSWorkspace.shared.selectFile(
+                    url.path,
+                    inFileViewerRootedAtPath: url.deletingLastPathComponent().path
+                )
+            }
+        )
         .sheet(isPresented: $showingPasswordSheet) {
             PasswordInputSheet(
                 fileName: passwordSheetFileName,
@@ -76,31 +73,6 @@ struct KeyCardView: View {
                     }
                 }
             )
-        }
-        .alert(
-            LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
-            isPresented: $showingDecryptionMismatchAlert
-        ) {
-            Button("action_ok", role: .cancel) { }
-        } message: {
-            Text(decryptionMismatchAlertMessage)
-        }
-        .alert("encrypt_untrusted_recipient_title", isPresented: $showingUntrustedEncryptionConfirmation) {
-            Button("action_cancel", role: .cancel) {
-                pendingDetectedFiles = []
-                isProcessing = false
-            }
-            Button("action_confirm", role: .destructive) {
-                let files = pendingDetectedFiles
-                pendingDetectedFiles = []
-                Task { @MainActor in
-                    isProcessing = true
-                    await processDetectedFiles(files, allowUntrustedRecipients: true)
-                    completeBatchProcessing()
-                }
-            }
-        } message: {
-            Text("encrypt_untrusted_recipient_message")
         }
         .contextMenu {
             Button(action: {
@@ -276,8 +248,7 @@ struct KeyCardView: View {
             }
 
             if requiresUntrustedEncryptionConfirmation(for: detectedFiles) {
-                pendingDetectedFiles = detectedFiles
-                showingUntrustedEncryptionConfirmation = true
+                presentUntrustedRecipientConfirmation(for: detectedFiles)
                 return
             }
 
@@ -316,7 +287,7 @@ struct KeyCardView: View {
 
     @MainActor
     private func startQueuedDecryptionFlow() async {
-        let requiresPassphrase = await requiresPassphraseForSecretKey()
+        let requiresPassphrase = await KeyFileCryptoCoordinator.requiresPassphrase(for: key.fingerprint)
         if requiresPassphrase {
             decryptAllowsEmptyPassword = false
             passwordSheetFileName = pendingDecryptRequests.first?.sourceURL.lastPathComponent ?? ""
@@ -329,159 +300,114 @@ struct KeyCardView: View {
         await performQueuedDecryptions(password: "")
     }
 
-    @MainActor
-    private func requiresPassphraseForSecretKey() async -> Bool {
-        do {
-            return try await GPGService.shared.secretKeyRequiresPassphrase(keyID: key.fingerprint)
-        } catch {
-            return true
+    private func requiresUntrustedEncryptionConfirmation(for detectedFiles: [DetectedFile]) -> Bool {
+        let intents = detectedFiles.map { detected in
+            KeyFileIntent.autoDetected(type: detected.type)
         }
+        return KeyFileCryptoCoordinator.shouldRequireUntrustedRecipientConfirmation(
+            intents: intents,
+            keyIsSecret: key.isSecret,
+            keyIsTrusted: key.isTrusted
+        )
     }
 
-    private func requiresUntrustedEncryptionConfirmation(for detectedFiles: [DetectedFile]) -> Bool {
-        guard !key.isTrusted else { return false }
-
-        return detectedFiles.contains { detected in
-            switch detected.type {
-            case .encrypted:
-                return false
-            case .notGPG, .publicKey, .privateKey, .signature, .unknown:
-                return true
+    private func presentUntrustedRecipientConfirmation(for detectedFiles: [DetectedFile]) {
+        pendingDetectedFiles = detectedFiles
+        promptAlert = PromptAlertContent.destructiveConfirmation(
+            title: "encrypt_untrusted_recipient_title",
+            message: String(localized: "encrypt_untrusted_recipient_message"),
+            onConfirm: {
+                let files = pendingDetectedFiles
+                pendingDetectedFiles = []
+                Task { @MainActor in
+                    isProcessing = true
+                    await processDetectedFiles(files, allowUntrustedRecipients: true)
+                    completeBatchProcessing()
+                }
+            },
+            onCancel: {
+                pendingDetectedFiles = []
+                isProcessing = false
+            },
+            onDismiss: {
+                pendingDetectedFiles = []
+                isProcessing = false
             }
-        }
+        )
     }
 
     @MainActor
     private func processFile(url: URL, type: GPGFileType, allowUntrustedRecipients: Bool) async -> Bool {
-        do {
-            switch type {
-            case .encrypted:
-                guard key.isSecret else {
-                    operationResults.append(
-                        OperationResult.failure(
-                            fileURL: url,
-                            operation: .decrypt,
-                            errorMessage: String(localized: "error_decryption_requires_private_key")
-                        )
-                    )
-                    return true
-                }
+        let route = KeyFileCryptoCoordinator.route(
+            for: .autoDetected(type: type),
+            keyIsSecret: key.isSecret
+        )
 
-                if let mismatchMessage = await decryptionKeyMismatchMessageIfNeeded(for: url) {
-                    decryptionMismatchAlertMessage = mismatchMessage
-                    showingDecryptionMismatchAlert = true
-                    pendingDecryptRequests = []
-                    return false
-                }
-
-                let defaultOutputURL = KeyActionFilePlanner.decryptedOutputURL(for: url)
-                guard let outputURL = presentFileOperationSavePanel(
-                    defaultFileName: defaultOutputURL.lastPathComponent,
-                    preferredDirectory: url.deletingLastPathComponent()
-                ) else {
-                    return true
-                }
-
-                pendingDecryptRequests.append(
-                    DecryptRequest(
-                        sourceURL: url,
-                        outputURL: outputURL
-                    )
-                )
-                return true
-
-            case .notGPG:
-                let defaultOutputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
-                guard let outputURL = presentFileOperationSavePanel(
-                    defaultFileName: defaultOutputURL.lastPathComponent,
-                    preferredDirectory: url.deletingLastPathComponent()
-                ) else {
-                    return true
-                }
-                let hasSourceAccess = url.startAccessingSecurityScopedResource()
-                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
-                defer {
-                    if hasSourceAccess {
-                        url.stopAccessingSecurityScopedResource()
-                    }
-                    if hasOutputAccess {
-                        outputURL.stopAccessingSecurityScopedResource()
-                    }
-                }
-
-                let finalOutputURL = try await GPGService.shared.encryptFile(
-                    sourceURL: url,
-                    destinationURL: outputURL,
-                    recipients: [key.fingerprint],
-                    allowUntrustedRecipients: allowUntrustedRecipients
-                )
-                operationResults.append(
-                    OperationResult.successEncrypt(fileURL: url, outputURL: finalOutputURL)
-                )
-                return true
-
-            case .publicKey, .privateKey, .signature, .unknown:
-                let defaultOutputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
-                guard let outputURL = presentFileOperationSavePanel(
-                    defaultFileName: defaultOutputURL.lastPathComponent,
-                    preferredDirectory: url.deletingLastPathComponent()
-                ) else {
-                    return true
-                }
-                let hasSourceAccess = url.startAccessingSecurityScopedResource()
-                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
-                defer {
-                    if hasSourceAccess {
-                        url.stopAccessingSecurityScopedResource()
-                    }
-                    if hasOutputAccess {
-                        outputURL.stopAccessingSecurityScopedResource()
-                    }
-                }
-
-                let finalOutputURL = try await GPGService.shared.encryptFile(
-                    sourceURL: url,
-                    destinationURL: outputURL,
-                    recipients: [key.fingerprint],
-                    allowUntrustedRecipients: allowUntrustedRecipients
-                )
-                operationResults.append(
-                    OperationResult.successEncrypt(fileURL: url, outputURL: finalOutputURL)
-                )
-                return true
-            }
-        } catch {
+        switch route {
+        case .rejectDecryptRequiresPrivateKey:
             operationResults.append(
                 OperationResult.failure(
                     fileURL: url,
-                    operation: .encrypt,
-                    errorMessage: UserFacingErrorMapper.message(for: error, context: .encrypt)
+                    operation: .decrypt,
+                    errorMessage: String(localized: "error_decryption_requires_private_key")
                 )
             )
+            return true
+
+        case .decrypt:
+            if let mismatchMessage = await KeyFileCryptoCoordinator.decryptionKeyMismatchMessageIfNeeded(
+                for: [url],
+                preferredSecretKey: key.fingerprint,
+                availableSecretKeys: viewModel.secretKeys
+            ) {
+                promptAlert = PromptAlertContent.failure(
+                    title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
+                    message: mismatchMessage
+                )
+                pendingDecryptRequests = []
+                return false
+            }
+
+            let defaultOutputURL = KeyActionFilePlanner.decryptedOutputURL(for: url)
+            guard let outputURL = presentFileOperationSavePanel(
+                defaultFileName: defaultOutputURL.lastPathComponent,
+                preferredDirectory: url.deletingLastPathComponent()
+            ) else {
+                return true
+            }
+
+            pendingDecryptRequests.append(
+                DecryptRequest(
+                    sourceURL: url,
+                    outputURL: outputURL
+                )
+            )
+            return true
+
+        case .encrypt:
+            let defaultOutputURL = KeyActionFilePlanner.encryptedOutputURL(for: url)
+            guard let outputURL = presentFileOperationSavePanel(
+                defaultFileName: defaultOutputURL.lastPathComponent,
+                preferredDirectory: url.deletingLastPathComponent()
+            ) else {
+                return true
+            }
+            let outcomes = await KeyFileCryptoCoordinator.encrypt(
+                requests: [
+                    KeyFileOperationRequest(
+                        sourceURL: url,
+                        destinationURL: outputURL
+                    )
+                ],
+                recipientKey: key.fingerprint,
+                allowUntrustedRecipients: allowUntrustedRecipients
+            )
+
+            operationResults.append(contentsOf: KeyFileOperationResultMapper.encryptResults(from: outcomes))
             return true
         }
     }
 
-    @MainActor
-    private func decryptionKeyMismatchMessageIfNeeded(for url: URL) async -> String? {
-        do {
-            let result = try await GPGService.shared.checkDecryptionRecipientMatch(
-                sourceURL: url,
-                preferredSecretKey: key.fingerprint
-            )
-            guard !result.matchesPreferredKey else {
-                return nil
-            }
-
-            return UserFacingErrorMapper.decryptionKeyMismatchMessage(
-                recipientKeyIDs: result.recipientKeyIDs,
-                availableSecretKeys: viewModel.secretKeys
-            )
-        } catch {
-            return UserFacingErrorMapper.message(for: error, context: .decrypt)
-        }
-    }
-    
     @MainActor
     private func performQueuedDecryptions(password: String) async {
         guard !pendingDecryptRequests.isEmpty else {
@@ -489,42 +415,15 @@ struct KeyCardView: View {
         }
         
         isProcessing = true
-
-        for request in pendingDecryptRequests {
-            do {
-                let hasSourceAccess = request.sourceURL.startAccessingSecurityScopedResource()
-                let hasOutputAccess = request.outputURL.startAccessingSecurityScopedResource()
-                defer {
-                    if hasSourceAccess {
-                        request.sourceURL.stopAccessingSecurityScopedResource()
-                    }
-                    if hasOutputAccess {
-                        request.outputURL.stopAccessingSecurityScopedResource()
-                    }
-                }
-
-                let finalOutputURL = try await GPGService.shared.decryptFile(
-                    sourceURL: request.sourceURL,
-                    destinationURL: request.outputURL,
-                    passphrase: password,
-                    preferredSecretKey: key.fingerprint
-                )
-                guard FileManager.default.fileExists(atPath: finalOutputURL.path) else {
-                    throw GPGError.decryptionFailed("No output generated")
-                }
-                operationResults.append(
-                    OperationResult.successDecrypt(fileURL: request.sourceURL, outputURL: finalOutputURL)
-                )
-            } catch {
-                operationResults.append(
-                    OperationResult.failure(
-                        fileURL: request.sourceURL,
-                        operation: .decrypt,
-                        errorMessage: UserFacingErrorMapper.message(for: error, context: .decrypt)
-                    )
-                )
-            }
+        let requests = pendingDecryptRequests.map {
+            KeyFileOperationRequest(sourceURL: $0.sourceURL, destinationURL: $0.outputURL)
         }
+        let outcomes = await KeyFileCryptoCoordinator.decrypt(
+            requests: requests,
+            passphrase: password,
+            preferredSecretKey: key.fingerprint
+        )
+        operationResults.append(contentsOf: KeyFileOperationResultMapper.decryptResults(from: outcomes))
         
         pendingDecryptRequests = []
         isProcessing = false
