@@ -45,7 +45,13 @@ struct ExpirationReminderSettingsView: View {
             maxHeight: 900
         )
         .onAppear {
+            reminderService.onPermissionDenied = {
+                showingPermissionAlert = true
+            }
             reminderService.updateKeys(viewModel.keys)
+        }
+        .onDisappear {
+            reminderService.onPermissionDenied = nil
         }
         .onChange(of: viewModel.keys) { _, newKeys in
             reminderService.updateKeys(newKeys)
