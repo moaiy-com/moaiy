@@ -151,31 +151,24 @@ struct ImportKeySheet: View {
 
     @ViewBuilder
     private var adaptiveImportModePicker: some View {
-        ViewThatFits(in: .horizontal) {
-            Picker("", selection: $importMode) {
-                importModePickerContent
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize(horizontal: true, vertical: false)
-            .frame(maxWidth: .infinity, alignment: .leading)
-
+        HStack {
+            Spacer()
             Picker("", selection: $importMode) {
                 importModePickerContent
             }
             .pickerStyle(.menu)
             .labelsHidden()
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer()
         }
         .padding(.horizontal, MoaiyUI.Spacing.xs)
     }
 
     @ViewBuilder
     private var importModePickerContent: some View {
-        Text("action_select_files").tag(ImportMode.file)
-        Text("import_from_keyserver").tag(ImportMode.keyserver)
-        Text("import_from_yubikey").tag(ImportMode.yubikey)
-        Text("migration_system_keyring_title").tag(ImportMode.system)
+        Text("import_mode_from_file").tag(ImportMode.file)
+        Text("import_mode_from_keyserver").tag(ImportMode.keyserver)
+        Text("import_mode_from_smartcard").tag(ImportMode.yubikey)
+        Text("import_mode_from_existing_keys").tag(ImportMode.system)
     }
 
     private var canImport: Bool {
