@@ -202,6 +202,82 @@ struct GPGServiceTests {
         #expect(keys.first?.secretMaterial == .localSecret)
         #expect(keys.first?.cardSerialNumber == nil)
     }
+
+    @Test("parse smartcard LEARN output extracts fingerprints and public key URL")
+    func parseSmartCardLearnOutput_extractsFingerprintsAndURL() {
+        let output = """
+        S APPTYPE OPENPGP
+        S KEY-FPR 1 50AA1EFC028475CBC64AF04980A9F21258CB1E83
+        S KEY-FPR 2 9DAF4148FF8A9D58E5BF22F7A9491BDF1AEC49B2
+        S PUBKEY-URL https%3A%2F%2Fkeys.openpgp.org%2Fvks%2Fv1%2Fby-fingerprint%2F50AA1EFC028475CBC64AF04980A9F21258CB1E83
+        """
+
+        let parsed = parseSmartCardLearnOutput(output)
+
+        #expect(parsed.fingerprints.count == 2)
+        #expect(parsed.fingerprints.contains("50AA1EFC028475CBC64AF04980A9F21258CB1E83"))
+        #expect(parsed.fingerprints.contains("9DAF4148FF8A9D58E5BF22F7A9491BDF1AEC49B2"))
+        #expect(
+            parsed.publicKeyURL == "https://keys.openpgp.org/vks/v1/by-fingerprint/50AA1EFC028475CBC64AF04980A9F21258CB1E83"
+        )
+    }
+
+    @Test("parse smartcard LEARN output handles missing public key URL")
+    func parseSmartCardLearnOutput_handlesMissingURL() {
+        let output = """
+        S APPTYPE OPENPGP
+        S KEY-FPR 1 50AA1EFC028475CBC64AF04980A9F21258CB1E83
+        S PUBKEY-URL
+        """
+
+        let parsed = parseSmartCardLearnOutput(output)
+
+        #expect(parsed.fingerprints.count == 1)
+        #expect(parsed.publicKeyURL == nil)
+    }
+
+    @Test("parse smartcard status output extracts URL of public key line")
+    func parseSmartCardLearnOutput_extractsCardStatusURL() {
+        let output = """
+        Reader ...........: Yubico YubiKey OTP FIDO CCID 00 00
+        Application ID ...: D2760001240103040006198741080000
+        URL of public key : https://keys.openpgp.org/vks/v1/by-fingerprint/50AA1EFC028475CBC64AF04980A9F21258CB1E83
+        """
+
+        let parsed = parseSmartCardLearnOutput(output)
+
+        #expect(parsed.publicKeyURL == "https://keys.openpgp.org/vks/v1/by-fingerprint/50AA1EFC028475CBC64AF04980A9F21258CB1E83")
+    }
+
+    @Test("parse smartcard assuan D-line decodes percent-escaped URL")
+    func parseSmartCardLearnOutput_extractsAssuanDLineURL() {
+        let output = """
+        D https%3A%2F%2Fkeys.openpgp.org%2Fvks%2Fv1%2Fby-fingerprint%2F50AA1EFC028475CBC64AF04980A9F21258CB1E83
+        OK
+        """
+
+        let parsed = parseSmartCardLearnOutput(output)
+
+        #expect(parsed.publicKeyURL == "https://keys.openpgp.org/vks/v1/by-fingerprint/50AA1EFC028475CBC64AF04980A9F21258CB1E83")
+    }
+
+    @Test("Public key completion level resolves complete")
+    func smartCardCompletionLevel_complete() {
+        let level = resolveSmartCardCompletionLevel(completedPublicKeyCount: 2, pendingPublicKeyCount: 0)
+        #expect(level == .complete)
+    }
+
+    @Test("Public key completion level resolves partial")
+    func smartCardCompletionLevel_partial() {
+        let level = resolveSmartCardCompletionLevel(completedPublicKeyCount: 1, pendingPublicKeyCount: 1)
+        #expect(level == .partial)
+    }
+
+    @Test("Public key completion level resolves stub-only")
+    func smartCardCompletionLevel_stubOnly() {
+        let level = resolveSmartCardCompletionLevel(completedPublicKeyCount: 0, pendingPublicKeyCount: 2)
+        #expect(level == .stubOnly)
+    }
     
     // MARK: - Import Result Parsing Tests
     
@@ -383,6 +459,58 @@ struct GPGServiceTests {
         #expect(fileManager.fileExists(atPath: staleDirectory.path) == false)
         #expect(fileManager.fileExists(atPath: freshDirectory.path) == true)
     }
+
+    @Test("deleteKey maps missing secret key to keyNotFound")
+    @MainActor
+    func deleteKey_missingSecretKey_mapsToKeyNotFound() async throws {
+        let service = GPGService.shared
+        try await Task.sleep(for: .seconds(1))
+
+        guard service.isReady else {
+            Issue.record("GPGService is not ready")
+            return
+        }
+
+        let nonexistentKeyID = "0000000000000000000000000000000000000000"
+
+        do {
+            try await service.deleteKey(keyID: nonexistentKeyID, secret: true)
+            Issue.record("Deleting a missing secret key should throw keyNotFound")
+        } catch let error as GPGError {
+            guard case .keyNotFound = error else {
+                Issue.record("Expected keyNotFound, got \(error.localizedDescription)")
+                return
+            }
+        } catch {
+            Issue.record("Expected GPGError.keyNotFound, got \(error.localizedDescription)")
+        }
+    }
+
+    @Test("deleteKey maps missing public key to keyNotFound")
+    @MainActor
+    func deleteKey_missingPublicKey_mapsToKeyNotFound() async throws {
+        let service = GPGService.shared
+        try await Task.sleep(for: .seconds(1))
+
+        guard service.isReady else {
+            Issue.record("GPGService is not ready")
+            return
+        }
+
+        let nonexistentKeyID = "1111111111111111111111111111111111111111"
+
+        do {
+            try await service.deleteKey(keyID: nonexistentKeyID, secret: false)
+            Issue.record("Deleting a missing public key should throw keyNotFound")
+        } catch let error as GPGError {
+            guard case .keyNotFound = error else {
+                Issue.record("Expected keyNotFound, got \(error.localizedDescription)")
+                return
+            }
+        } catch {
+            Issue.record("Expected GPGError.keyNotFound, got \(error.localizedDescription)")
+        }
+    }
 }
 
 // MARK: - Helper Functions for Testing
@@ -520,6 +648,99 @@ private func parseVerificationResultOutput(_ output: String) -> VerificationResu
 private func parseTimestampString(_ string: String) -> Date? {
     guard let timestamp = Double(string), timestamp > 0 else { return nil }
     return Date(timeIntervalSince1970: timestamp)
+}
+
+private func parseSmartCardLearnOutput(_ output: String) -> (fingerprints: [String], publicKeyURL: String?) {
+    var fingerprints: [String] = []
+    var seenFingerprints: Set<String> = []
+    var publicKeyURL: String?
+
+    for line in output.split(separator: "\n") {
+        let trimmed = String(line).trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("S KEY-FPR ") {
+            let parts = trimmed.split(whereSeparator: \.isWhitespace).map(String.init)
+            guard let rawFingerprint = parts.last else {
+                continue
+            }
+            let normalizedFingerprint = rawFingerprint
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: " ", with: "")
+                .uppercased()
+            guard normalizedFingerprint.isEmpty == false else {
+                continue
+            }
+            if seenFingerprints.insert(normalizedFingerprint).inserted {
+                fingerprints.append(normalizedFingerprint)
+            }
+            continue
+        }
+
+        if trimmed.hasPrefix("S PUBKEY-URL") {
+            let rawValue = String(trimmed.dropFirst("S PUBKEY-URL".count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let normalizedURL = normalizeSmartCardPublicKeyURL(rawValue) {
+                publicKeyURL = normalizedURL
+            }
+            continue
+        }
+
+        if trimmed.hasPrefix("S KEY-ATTR PUBKEY-URL") {
+            let rawValue = String(trimmed.dropFirst("S KEY-ATTR PUBKEY-URL".count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let normalizedURL = normalizeSmartCardPublicKeyURL(rawValue) {
+                publicKeyURL = normalizedURL
+            }
+            continue
+        }
+
+        if trimmed.hasPrefix("D ") {
+            let rawValue = String(trimmed.dropFirst(2))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let normalizedURL = normalizeSmartCardPublicKeyURL(rawValue) {
+                publicKeyURL = normalizedURL
+            }
+            continue
+        }
+
+        if trimmed.localizedCaseInsensitiveContains("URL of public key"),
+           let separator = trimmed.firstIndex(of: ":") {
+            let rawValue = String(trimmed[trimmed.index(after: separator)...])
+            if let normalizedURL = normalizeSmartCardPublicKeyURL(rawValue) {
+                publicKeyURL = normalizedURL
+            }
+        }
+    }
+
+    return (fingerprints, publicKeyURL)
+}
+
+private func normalizeSmartCardPublicKeyURL(_ value: String) -> String? {
+    let decoded = (value.removingPercentEncoding ?? value)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+    guard !decoded.isEmpty else {
+        return nil
+    }
+    if decoded.range(of: #"^[A-Za-z][A-Za-z0-9+\.-]*:"#, options: .regularExpression) != nil {
+        return decoded
+    }
+    guard let range = decoded.range(of: #"[A-Za-z][A-Za-z0-9+\.-]*:[^\s]+"#, options: .regularExpression) else {
+        return nil
+    }
+    return String(decoded[range])
+}
+
+private func resolveSmartCardCompletionLevel(
+    completedPublicKeyCount: Int,
+    pendingPublicKeyCount: Int
+) -> SmartCardPublicKeyCompletionLevel {
+    if completedPublicKeyCount > 0 && pendingPublicKeyCount == 0 {
+        return .complete
+    }
+    if completedPublicKeyCount > 0 {
+        return .partial
+    }
+    return .stubOnly
 }
 
 /// Helper class for building GPGKey (copy from GPGService for testing)

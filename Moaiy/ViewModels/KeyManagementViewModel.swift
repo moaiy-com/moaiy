@@ -323,7 +323,7 @@ final class KeyManagementViewModel {
         errorMessage = nil
 
         do {
-            let result = try await gpgService.learnSmartCardStubs()
+            let result = try await gpgService.importSmartCardWithPublicKeyCompletion()
             await loadKeys()
             return result
         } catch {
@@ -387,9 +387,21 @@ final class KeyManagementViewModel {
                 // Delete both secret and public keys
                 // Note: GPG requires deleting secret key first
                 if key.isSecret {
-                    try await gpgService.deleteKey(keyID: key.fingerprint, secret: true)
+                    do {
+                        try await gpgService.deleteKey(keyID: key.fingerprint, secret: true)
+                    } catch {
+                        guard isMissingKeyDeletionError(error) else {
+                            throw error
+                        }
+                    }
                 }
-                try await gpgService.deleteKey(keyID: key.fingerprint, secret: false)
+                do {
+                    try await gpgService.deleteKey(keyID: key.fingerprint, secret: false)
+                } catch {
+                    guard isMissingKeyDeletionError(error) else {
+                        throw error
+                    }
+                }
             }
             await loadKeys()
         } catch {
@@ -397,6 +409,13 @@ final class KeyManagementViewModel {
             isLoading = false
             throw error
         }
+    }
+
+    private func isMissingKeyDeletionError(_ error: Error) -> Bool {
+        if case GPGError.keyNotFound = error {
+            return true
+        }
+        return false
     }
     
     // MARK: - Trust Management

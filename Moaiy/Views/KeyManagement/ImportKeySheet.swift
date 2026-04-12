@@ -97,7 +97,10 @@ struct ImportKeySheet: View {
                         YubiKeyImportCard(isImporting: isImporting)
 
                         if let yubiKeyImportResult {
-                            YubiKeyImportResultCard(result: yubiKeyImportResult)
+                            YubiKeyImportResultCard(
+                                result: yubiKeyImportResult,
+                                onGuideToKeyserver: moveToKeyserverImport(suggestedQuery:)
+                            )
                         }
                     } else {
                         SystemKeyringImportCard(
@@ -118,6 +121,10 @@ struct ImportKeySheet: View {
                 }
             }
             .frame(maxHeight: 360)
+
+            if let yubiKeyImportResult, shouldShowYubiKeyPublicKeyGuidance(yubiKeyImportResult) {
+                smartCardCompletionGuidanceBar(for: yubiKeyImportResult)
+            }
 
             // Actions
             HStack(spacing: 12) {
@@ -297,6 +304,14 @@ struct ImportKeySheet: View {
                 let result = try await viewModel.importYubiKeyStubs()
                 yubiKeyImportResult = result
                 isImporting = false
+                if shouldAutoMoveToKeyserverAfterURLFetch(result) {
+                    moveToKeyserverImport(
+                        suggestedQuery: result.pendingPublicKeyFingerprints.first ?? result.importedStubs.first?.fingerprint
+                    )
+                    showAutomaticKeyserverGuidanceAlert(result)
+                } else {
+                    showYubiKeyPublicKeyGuidanceAlertIfNeeded(result)
+                }
             } catch {
                 isImporting = false
                 showImportErrorAlert(error)
@@ -321,6 +336,171 @@ struct ImportKeySheet: View {
             context: .importKey,
             error: error
         )
+    }
+
+    private func showYubiKeyPublicKeyGuidanceAlertIfNeeded(_ result: SmartCardLearnResult) {
+        guard shouldShowYubiKeyPublicKeyGuidance(result) else {
+            return
+        }
+
+        var messageLines: [String] = []
+        if result.pendingPublicKeyCount > 0 {
+            messageLines.append(
+                String(
+                    format: String(localized: "yubikey_import_completion_counts"),
+                    locale: Locale.current,
+                    Int64(result.completedPublicKeyCount),
+                    Int64(result.pendingPublicKeyCount)
+                )
+            )
+        }
+        messageLines.append(contentsOf: result.completionIssues.map(yubiKeyCompletionIssueMessage(for:)))
+        if messageLines.isEmpty {
+            messageLines.append(String(localized: "yubikey_import_result_no_stubs"))
+        }
+        let message = messageLines.joined(separator: "\n")
+
+        promptAlert = PromptAlertContent(
+            title: yubiKeyCompletionGuidanceTitle(for: result.publicKeyCompletionLevel),
+            message: message,
+            actionTitle: "action_ok",
+            actionRole: .cancel,
+            onAcknowledge: nil,
+            secondaryActionTitle: "import_mode_from_keyserver",
+            secondaryActionRole: nil,
+            onSecondaryAction: {
+                moveToKeyserverImport(
+                    suggestedQuery: result.pendingPublicKeyFingerprints.first ?? result.importedStubs.first?.fingerprint
+                )
+            }
+        )
+    }
+
+    private func shouldAutoMoveToKeyserverAfterURLFetch(_ result: SmartCardLearnResult) -> Bool {
+        result.urlFetchTried && !result.urlFetchSucceeded && result.pendingPublicKeyCount > 0
+    }
+
+    private func showAutomaticKeyserverGuidanceAlert(_ result: SmartCardLearnResult) {
+        var messageLines: [String] = [
+            String(localized: "yubikey_import_completion_issue_url_fetch_failed")
+        ]
+        messageLines.append(
+            String(
+                format: String(localized: "yubikey_import_completion_counts"),
+                locale: Locale.current,
+                Int64(result.completedPublicKeyCount),
+                Int64(result.pendingPublicKeyCount)
+            )
+        )
+        let message = messageLines.joined(separator: "\n")
+
+        promptAlert = PromptAlertContent(
+            title: LocalizedStringKey("yubikey_import_completion_partial_title"),
+            message: message,
+            actionTitle: "action_ok",
+            actionRole: .cancel,
+            onAcknowledge: nil
+        )
+    }
+
+    private func shouldShowYubiKeyPublicKeyGuidance(_ result: SmartCardLearnResult) -> Bool {
+        if result.publicKeyCompletionLevel != .complete {
+            return true
+        }
+        return !result.completionIssues.isEmpty
+    }
+
+    private func moveToKeyserverImport(suggestedQuery: String?) {
+        if let suggestedQuery {
+            let normalizedQuery = suggestedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !normalizedQuery.isEmpty {
+                keyserverQuery = normalizedQuery
+            }
+        }
+        importMode = .keyserver
+    }
+
+    private func yubiKeyCompletionGuidanceTitle(
+        for completionLevel: SmartCardPublicKeyCompletionLevel
+    ) -> LocalizedStringKey {
+        switch completionLevel {
+        case .complete:
+            return LocalizedStringKey("yubikey_import_completion_complete_title")
+        case .partial:
+            return LocalizedStringKey("yubikey_import_completion_partial_title")
+        case .stubOnly:
+            return LocalizedStringKey("yubikey_import_completion_stub_only_title")
+        }
+    }
+
+    private func yubiKeyCompletionIssueMessage(for issue: SmartCardPublicKeyCompletionIssue) -> String {
+        switch issue {
+        case .missingPublicKeyURL:
+            return String(localized: "yubikey_import_completion_issue_missing_public_key_url")
+        case .urlFetchFailed:
+            return String(localized: "yubikey_import_completion_issue_url_fetch_failed")
+        case .keyserverUnreachable:
+            return String(localized: "yubikey_import_completion_issue_keyserver_unreachable")
+        case .keyserverFetchFailed:
+            return String(localized: "yubikey_import_completion_issue_keyserver_fetch_failed")
+        }
+    }
+
+    private func completionTint(for completionLevel: SmartCardPublicKeyCompletionLevel) -> Color {
+        switch completionLevel {
+        case .complete:
+            return Color.moaiySuccess
+        case .partial:
+            return Color.moaiyInfo
+        case .stubOnly:
+            return Color.moaiyWarning
+        }
+    }
+
+    private func smartCardCompletionGuidanceBar(for result: SmartCardLearnResult) -> some View {
+        HStack(alignment: .center, spacing: MoaiyUI.Spacing.md) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(yubiKeyCompletionGuidanceTitle(for: result.publicKeyCompletionLevel))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color.moaiyTextPrimary)
+
+                Text(yubiKeyGuidanceSummaryText(for: result))
+                    .font(.caption)
+                    .foregroundStyle(Color.moaiyTextSecondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: MoaiyUI.Spacing.sm)
+
+            Button {
+                moveToKeyserverImport(
+                    suggestedQuery: result.pendingPublicKeyFingerprints.first ?? result.importedStubs.first?.fingerprint
+                )
+            } label: {
+                Label("import_mode_from_keyserver", systemImage: "globe")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(Color.moaiyAccentV2)
+        }
+        .padding(MoaiyUI.Spacing.md)
+        .moaiyBannerStyle(tint: completionTint(for: result.publicKeyCompletionLevel))
+    }
+
+    private func yubiKeyGuidanceSummaryText(for result: SmartCardLearnResult) -> String {
+        if result.pendingPublicKeyCount > 0 {
+            return String(
+                format: String(localized: "yubikey_import_completion_counts"),
+                locale: Locale.current,
+                Int64(result.completedPublicKeyCount),
+                Int64(result.pendingPublicKeyCount)
+            )
+        }
+        if let issue = result.completionIssues.first {
+            return yubiKeyCompletionIssueMessage(for: issue)
+        }
+        return String(localized: "yubikey_import_result_no_stubs")
     }
 }
 
@@ -358,6 +538,7 @@ struct YubiKeyImportCard: View {
 
 struct YubiKeyImportResultCard: View {
     let result: SmartCardLearnResult
+    var onGuideToKeyserver: ((String?) -> Void)? = nil
 
     private var visibleStubs: [ImportedStubDescriptor] {
         Array(result.importedStubs.prefix(5))
@@ -365,6 +546,21 @@ struct YubiKeyImportResultCard: View {
 
     private var hiddenCount: Int {
         max(result.importedStubs.count - visibleStubs.count, 0)
+    }
+
+    private var completionTint: Color {
+        switch result.publicKeyCompletionLevel {
+        case .complete:
+            return Color.moaiySuccess
+        case .partial:
+            return Color.moaiyInfo
+        case .stubOnly:
+            return Color.moaiyWarning
+        }
+    }
+
+    private var preferredGuidanceQuery: String? {
+        result.pendingPublicKeyFingerprints.first ?? result.importedStubs.first?.fingerprint
     }
 
     var body: some View {
@@ -383,6 +579,55 @@ struct YubiKeyImportResultCard: View {
             )
             .font(.caption)
             .foregroundStyle(Color.moaiyTextSecondary)
+
+            VStack(alignment: .leading, spacing: MoaiyUI.Spacing.xs) {
+                Text(completionTitleKey())
+                    .font(.caption)
+                    .foregroundStyle(Color.moaiyTextPrimary)
+
+                Text(
+                    String(
+                        format: String(localized: "yubikey_import_completion_counts"),
+                        locale: Locale.current,
+                        Int64(result.completedPublicKeyCount),
+                        Int64(result.pendingPublicKeyCount)
+                    )
+                )
+                .font(.caption2)
+                .foregroundStyle(Color.moaiyTextSecondary)
+
+                if let keyserverUsed = result.keyserverUsed {
+                    Text(
+                        String(
+                            format: String(localized: "yubikey_import_completion_keyserver_used"),
+                            locale: Locale.current,
+                            keyserverUsed
+                        )
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(Color.moaiyTextSecondary)
+                }
+
+                if result.publicKeyCompletionLevel != .complete || !result.completionIssues.isEmpty {
+                    Button {
+                        onGuideToKeyserver?(preferredGuidanceQuery)
+                    } label: {
+                        Label("import_mode_from_keyserver", systemImage: "globe")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(Color.moaiyAccentV2)
+                }
+
+                ForEach(result.completionIssues, id: \.self) { issue in
+                    Text(localizationKey(for: issue))
+                        .font(.caption2)
+                        .foregroundStyle(Color.moaiyTextSecondary)
+                }
+            }
+            .padding(MoaiyUI.Spacing.sm)
+            .moaiyBannerStyle(tint: completionTint)
 
             if visibleStubs.isEmpty {
                 Text("yubikey_import_result_no_stubs")
@@ -448,7 +693,7 @@ struct YubiKeyImportResultCard: View {
             }
         }
         .padding(MoaiyUI.Spacing.md)
-        .moaiyBannerStyle(tint: Color.moaiySuccess)
+        .moaiyBannerStyle(tint: completionTint)
     }
 
     private func displayName(for descriptor: ImportedStubDescriptor) -> String {
@@ -468,6 +713,30 @@ struct YubiKeyImportResultCard: View {
     private func shortFingerprint(_ fingerprint: String) -> String {
         guard fingerprint.count > 16 else { return fingerprint }
         return String(fingerprint.suffix(16))
+    }
+
+    private func completionTitleKey() -> LocalizedStringKey {
+        switch result.publicKeyCompletionLevel {
+        case .complete:
+            return LocalizedStringKey("yubikey_import_completion_complete_title")
+        case .partial:
+            return LocalizedStringKey("yubikey_import_completion_partial_title")
+        case .stubOnly:
+            return LocalizedStringKey("yubikey_import_completion_stub_only_title")
+        }
+    }
+
+    private func localizationKey(for issue: SmartCardPublicKeyCompletionIssue) -> LocalizedStringKey {
+        switch issue {
+        case .missingPublicKeyURL:
+            return LocalizedStringKey("yubikey_import_completion_issue_missing_public_key_url")
+        case .urlFetchFailed:
+            return LocalizedStringKey("yubikey_import_completion_issue_url_fetch_failed")
+        case .keyserverUnreachable:
+            return LocalizedStringKey("yubikey_import_completion_issue_keyserver_unreachable")
+        case .keyserverFetchFailed:
+            return LocalizedStringKey("yubikey_import_completion_issue_keyserver_fetch_failed")
+        }
     }
 
     private func displayCardSerial(for descriptor: ImportedStubDescriptor) -> String? {
