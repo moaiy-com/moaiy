@@ -175,7 +175,9 @@ final class KeyManagementViewModel {
                         isSecret: true,
                         createdAt: secretKey.createdAt,
                         expiresAt: secretKey.expiresAt,
-                        trustLevel: secretKey.trustLevel
+                        trustLevel: secretKey.trustLevel,
+                        secretMaterial: secretKey.secretMaterial,
+                        cardSerialNumber: secretKey.cardSerialNumber
                     )
                 } else {
                     allKeys.append(secretKey)
@@ -305,6 +307,23 @@ final class KeyManagementViewModel {
                 query: query,
                 keyserver: keyserver
             )
+            await loadKeys()
+            return result
+        } catch {
+            setError(error, context: .importKey)
+            isLoading = false
+            throw error
+        }
+    }
+
+    /// Learn smart-card (YubiKey/OpenPGP Card) shadow key stubs and refresh list.
+    @discardableResult
+    func importYubiKeyStubs() async throws -> SmartCardLearnResult {
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            let result = try await gpgService.learnSmartCardStubs()
             await loadKeys()
             return result
         } catch {

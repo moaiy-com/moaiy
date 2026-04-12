@@ -190,7 +190,7 @@ struct UploadToKeyserverSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .moaiyBannerStyle(tint: Color.moaiyInfo, cornerRadius: MoaiyUI.Radius.md)
             
-            Button("done") {
+            Button("action_ok") {
                 onSuccess()
             }
             .buttonStyle(.borderedProminent)

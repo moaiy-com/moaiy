@@ -910,8 +910,8 @@ final class GPGService {
 
         let result = try await executeGPG(arguments: arguments, input: input)
         if result.exitCode != 0 {
-            if isBadPassphrase(result) {
-                throw GPGError.invalidPassphrase
+            if let credentialError = credentialFailureError(from: result) {
+                throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
         }
@@ -949,8 +949,8 @@ final class GPGService {
 
         let result = try await executeGPG(arguments: arguments, input: input)
         if result.exitCode != 0 {
-            if isBadPassphrase(result) {
-                throw GPGError.invalidPassphrase
+            if let credentialError = credentialFailureError(from: result) {
+                throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
         }
@@ -974,8 +974,8 @@ final class GPGService {
             if result.exitCode == 0 {
                 return
             }
-            if isBadPassphrase(result) {
-                throw GPGError.invalidPassphrase
+            if let credentialError = credentialFailureError(from: result) {
+                throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
         }
@@ -986,7 +986,7 @@ final class GPGService {
         if unprotectedResult.exitCode == 0 {
             return
         }
-        if !isBadPassphrase(unprotectedResult) {
+        if credentialFailureError(from: unprotectedResult) == nil {
             throw GPGError.executionFailed(unprotectedResult.stderr ?? "Exit code \(unprotectedResult.exitCode)")
         }
 
@@ -995,8 +995,8 @@ final class GPGService {
         if protectedResult.exitCode == 0 {
             return
         }
-        if isBadPassphrase(protectedResult) {
-            throw GPGError.invalidPassphrase
+        if let credentialError = credentialFailureError(from: protectedResult) {
+            throw credentialError
         }
         throw GPGError.executionFailed(protectedResult.stderr ?? "Exit code \(protectedResult.exitCode)")
     }
@@ -1259,8 +1259,8 @@ final class GPGService {
         )
 
         if result.exitCode != 0 {
-            if isBadPassphrase(result) {
-                throw GPGError.invalidPassphrase
+            if let credentialError = credentialFailureError(from: result) {
+                throw credentialError
             }
 
             let combinedOutput = [result.stderr, result.stdout]
@@ -1365,6 +1365,139 @@ final class GPGService {
         }
     }
 
+    /// Checks whether a smart card (YubiKey/OpenPGP Card) is currently available.
+    /// Uses scdaemon SERIALNO probing to avoid mutating card state.
+    func checkSmartCardPresence() async throws -> SmartCardPresence {
+        guard let gpgConnectAgentURL else {
+            throw GPGError.smartCardUnavailable
+        }
+
+        let result = try await processExecutor.execute(
+            executableURL: gpgConnectAgentURL,
+            arguments: ["SCD SERIALNO", "/bye"],
+            environment: [:],
+            gpgHome: gpgHome,
+            input: nil,
+            timeout: 10
+        )
+
+        let output = [result.stdout, result.stderr]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if result.exitCode == 0, let serial = parseSmartCardSerial(from: output) {
+            return SmartCardPresence(serialNumber: serial)
+        }
+
+        if containsSmartCardNotPresentSignal(output) {
+            throw GPGError.smartCardNotPresent
+        }
+        if containsSmartCardUnavailableSignal(output) {
+            throw GPGError.smartCardUnavailable
+        }
+
+        throw GPGError.executionFailed(output.isEmpty ? "Failed to check smart card presence" : output)
+    }
+
+    /// Learns smart-card shadow key stubs and reports newly imported/updated descriptors.
+    func learnSmartCardStubs() async throws -> SmartCardLearnResult {
+        let presence = try await checkSmartCardPresence()
+        let beforeKeys = try await listKeys(secretOnly: true)
+
+        guard let gpgConnectAgentURL else {
+            throw GPGError.smartCardUnavailable
+        }
+
+        let learnResult = try await processExecutor.execute(
+            executableURL: gpgConnectAgentURL,
+            arguments: ["SCD LEARN --force", "/bye"],
+            environment: [:],
+            gpgHome: gpgHome,
+            input: nil,
+            timeout: 20
+        )
+
+        let learnOutput = [learnResult.stdout, learnResult.stderr]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if learnResult.exitCode != 0 {
+            if containsSmartCardNotPresentSignal(learnOutput) {
+                throw GPGError.smartCardNotPresent
+            }
+            if containsSmartCardUnavailableSignal(learnOutput) {
+                throw GPGError.smartCardUnavailable
+            }
+            throw GPGError.executionFailed(learnOutput.isEmpty ? "Failed to learn smart card stubs" : learnOutput)
+        }
+
+        let afterKeys = try await listKeys(secretOnly: true)
+        let learnedFingerprints = Set(parseLearnedCardFingerprints(from: learnOutput))
+        let beforeFingerprintPairs: [(String, GPGKey)] = beforeKeys.compactMap { key in
+                guard let normalizedFingerprint = normalizeKeyReference(key.fingerprint) else {
+                    return nil
+                }
+                return (normalizedFingerprint, key)
+            }
+        let beforeByFingerprint = Dictionary(uniqueKeysWithValues: beforeFingerprintPairs)
+        let normalizedCardSerial = normalizeCardSerial(presence.serialNumber)
+
+        let currentCardCandidates = uniqueKeysByNormalizedFingerprint(
+            afterKeys.filter { key in
+                let matchesCardSerial = normalizeCardSerial(key.cardSerialNumber) == normalizedCardSerial
+                let matchesLearnedFingerprint: Bool
+                if let normalizedFingerprint = normalizeKeyReference(key.fingerprint) {
+                    matchesLearnedFingerprint = learnedFingerprints.contains(normalizedFingerprint)
+                } else {
+                    matchesLearnedFingerprint = false
+                }
+                return matchesCardSerial || matchesLearnedFingerprint
+            }
+        )
+
+        let changedStubCandidates = currentCardCandidates.filter { afterKey in
+            guard let normalizedFingerprint = normalizeKeyReference(afterKey.fingerprint),
+                  let beforeKey = beforeByFingerprint[normalizedFingerprint] else {
+                return true
+            }
+            if beforeKey.secretMaterial != afterKey.secretMaterial {
+                return true
+            }
+            return normalizeCardSerial(beforeKey.cardSerialNumber) != normalizeCardSerial(afterKey.cardSerialNumber)
+        }
+
+        let changedStubs = changedStubCandidates
+            .map { makeImportedStubDescriptor(from: $0, fallbackCardSerial: presence.serialNumber) }
+            .sorted(by: sortImportedStubDescriptor)
+
+        let currentCardStubs = currentCardCandidates
+            .map { makeImportedStubDescriptor(from: $0, fallbackCardSerial: presence.serialNumber) }
+            .sorted(by: sortImportedStubDescriptor)
+
+        var displayedStubs = changedStubs
+        var includesExistingStubs = false
+
+        if displayedStubs.isEmpty, !currentCardStubs.isEmpty {
+            displayedStubs = currentCardStubs
+            includesExistingStubs = true
+        }
+
+        if displayedStubs.isEmpty, !learnedFingerprints.isEmpty {
+            displayedStubs = learnedFingerprints
+                .sorted()
+                .map { makeFallbackStubDescriptor(from: $0, fallbackCardSerial: presence.serialNumber) }
+        }
+
+        return SmartCardLearnResult(
+            cardSerialNumber: presence.serialNumber,
+            learnedStubCount: changedStubs.count,
+            importedStubs: displayedStubs,
+            includesExistingStubs: includesExistingStubs
+        )
+    }
+
     /// Create a detached signature for a file.
     /// - Parameters:
     ///   - sourceURL: Source file URL
@@ -1407,6 +1540,17 @@ final class GPGService {
         )
 
         if result.exitCode != 0 {
+            if let credentialError = credentialFailureError(from: result) {
+                throw credentialError
+            }
+
+            let combinedOutput = [result.stderr, result.stdout]
+                .compactMap { $0 }
+                .joined(separator: "\n")
+            if containsNoSecretKeySignal(combinedOutput) {
+                throw GPGError.keyNotFound(keyID)
+            }
+
             throw GPGError.executionFailed(result.stderr ?? "Detached signing failed")
         }
 
@@ -1941,6 +2085,16 @@ final class GPGService {
         return formatter.string(from: date)
     }
 
+    private func credentialFailureError(from result: GPGExecutionResult) -> GPGError? {
+        if isBadPIN(result) {
+            return .smartCardPinInvalid
+        }
+        if isBadPassphrase(result) {
+            return .invalidPassphrase
+        }
+        return nil
+    }
+
     private func isBadPassphrase(_ result: GPGExecutionResult) -> Bool {
         let stderr = result.stderr ?? ""
         let stdout = result.stdout ?? ""
@@ -1950,6 +2104,126 @@ final class GPGService {
             || combined.contains("invalid passphrase")
             || combined.contains("wrong passphrase")
             || combined.contains("no passphrase given")
+    }
+
+    private func isBadPIN(_ result: GPGExecutionResult) -> Bool {
+        let stderr = result.stderr ?? ""
+        let stdout = result.stdout ?? ""
+        let combined = "\(stderr)\n\(stdout)".lowercased()
+        return combined.contains("bad pin")
+            || combined.contains("invalid pin")
+            || combined.contains("wrong pin")
+    }
+
+    private func parseSmartCardSerial(from output: String) -> String? {
+        for line in output.split(separator: "\n") {
+            let trimmed = String(line).trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("S SERIALNO ") {
+                return String(trimmed.dropFirst("S SERIALNO ".count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if trimmed.hasPrefix("SERIALNO ") {
+                return String(trimmed.dropFirst("SERIALNO ".count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return nil
+    }
+
+    private func parseLearnedCardFingerprints(from output: String) -> [String] {
+        var fingerprints: [String] = []
+
+        for line in output.split(separator: "\n") {
+            let trimmed = String(line).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("S KEY-FPR ") else { continue }
+
+            let parts = trimmed.split(whereSeparator: \.isWhitespace).map(String.init)
+            guard let rawFingerprint = parts.last,
+                  let normalizedFingerprint = normalizeKeyReference(rawFingerprint) else {
+                continue
+            }
+            fingerprints.append(normalizedFingerprint)
+        }
+
+        return fingerprints
+    }
+
+    private func normalizeCardSerial(_ serial: String?) -> String? {
+        guard let serial else { return nil }
+        let normalized = serial
+            .replacingOccurrences(of: " ", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func makeImportedStubDescriptor(
+        from key: GPGKey,
+        fallbackCardSerial: String
+    ) -> ImportedStubDescriptor {
+        let trimmedName = key.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedEmail = key.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isUIDResolved = !trimmedName.isEmpty && !trimmedEmail.isEmpty
+        return ImportedStubDescriptor(
+            fingerprint: key.fingerprint,
+            keyID: key.keyID,
+            name: trimmedName,
+            email: trimmedEmail,
+            cardSerialNumber: key.cardSerialNumber ?? fallbackCardSerial,
+            isUIDResolved: isUIDResolved
+        )
+    }
+
+    private func makeFallbackStubDescriptor(
+        from normalizedFingerprint: String,
+        fallbackCardSerial: String
+    ) -> ImportedStubDescriptor {
+        let keyID = String(normalizedFingerprint.suffix(16))
+        return ImportedStubDescriptor(
+            fingerprint: normalizedFingerprint,
+            keyID: keyID,
+            name: "",
+            email: "",
+            cardSerialNumber: fallbackCardSerial,
+            isUIDResolved: false
+        )
+    }
+
+    private func uniqueKeysByNormalizedFingerprint(_ keys: [GPGKey]) -> [GPGKey] {
+        var seenFingerprints: Set<String> = []
+        var uniqueKeys: [GPGKey] = []
+
+        for key in keys {
+            let normalizedFingerprint = normalizeKeyReference(key.fingerprint)
+                ?? key.fingerprint.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            guard !seenFingerprints.contains(normalizedFingerprint) else {
+                continue
+            }
+            seenFingerprints.insert(normalizedFingerprint)
+            uniqueKeys.append(key)
+        }
+
+        return uniqueKeys
+    }
+
+    private func sortImportedStubDescriptor(_ lhs: ImportedStubDescriptor, _ rhs: ImportedStubDescriptor) -> Bool {
+        let lhsName = lhs.name.isEmpty ? lhs.keyID : lhs.name
+        let rhsName = rhs.name.isEmpty ? rhs.keyID : rhs.name
+        return lhsName.localizedCaseInsensitiveCompare(rhsName) == .orderedAscending
+    }
+
+    private func containsSmartCardNotPresentSignal(_ output: String) -> Bool {
+        let lowercased = output.lowercased()
+        return lowercased.contains("card not present")
+            || lowercased.contains("card removed")
+            || lowercased.contains("no data <scd>")
+    }
+
+    private func containsSmartCardUnavailableSignal(_ output: String) -> Bool {
+        let lowercased = output.lowercased()
+        return lowercased.contains("operation not supported by device")
+            || lowercased.contains("openpgp card not available")
+            || lowercased.contains("no smartcard daemon")
     }
 
     private func containsNoSecretKeySignal(_ output: String) -> Bool {
@@ -2189,7 +2463,7 @@ final class GPGService {
             return false
         }
 
-        if isBadPassphrase(result) {
+        if credentialFailureError(from: result) != nil {
             return true
         }
 
@@ -2523,6 +2797,9 @@ final class GPGService {
                         currentKey?.trustLevel = TrustLevel(gpgCode: fields[1]) ?? .unknown
                     }
                 }
+                if (recordType == "sec") || secretOnly {
+                    currentKey?.absorbSecretMaterialToken(fields.count > 14 ? fields[14] : nil)
+                }
                 
             case "fpr":
                 if isAwaitingPrimaryFingerprint, fields.count >= 10 {
@@ -2532,6 +2809,9 @@ final class GPGService {
             case "sub", "ssb":
                 // Ignore subkey fingerprints for key-level operations (edit uid/expiry).
                 isAwaitingPrimaryFingerprint = false
+                if recordType == "ssb" {
+                    currentKey?.absorbSecretMaterialToken(fields.count > 14 ? fields[14] : nil)
+                }
                 
             case "uid":
                 if fields.count >= 10 {
@@ -2753,6 +3033,26 @@ struct DecryptionRecipientCheckResult {
     let recipientKeyIDs: [String]
 }
 
+struct SmartCardPresence {
+    let serialNumber: String
+}
+
+struct ImportedStubDescriptor: Equatable {
+    let fingerprint: String
+    let keyID: String
+    let name: String
+    let email: String
+    let cardSerialNumber: String?
+    let isUIDResolved: Bool
+}
+
+struct SmartCardLearnResult {
+    let cardSerialNumber: String
+    let learnedStubCount: Int
+    let importedStubs: [ImportedStubDescriptor]
+    let includesExistingStubs: Bool
+}
+
 /// GPG Key trust level
 enum TrustLevel: String, CaseIterable, Identifiable {
     case unknown = "unknown"
@@ -2831,6 +3131,16 @@ enum TrustLevel: String, CaseIterable, Identifiable {
     }
 }
 
+enum SecretKeyMaterial: String, Codable {
+    case none
+    case localSecret
+    case smartCardStub
+
+    static func defaultMaterial(for isSecret: Bool) -> SecretKeyMaterial {
+        isSecret ? .localSecret : .none
+    }
+}
+
 /// GPG Key model
 struct GPGKey: Identifiable, Hashable {
     let id: String
@@ -2844,6 +3154,38 @@ struct GPGKey: Identifiable, Hashable {
     let createdAt: Date?
     let expiresAt: Date?
     let trustLevel: TrustLevel
+    let secretMaterial: SecretKeyMaterial
+    let cardSerialNumber: String?
+
+    init(
+        id: String,
+        keyID: String,
+        fingerprint: String,
+        name: String,
+        email: String,
+        algorithm: String,
+        keyLength: Int,
+        isSecret: Bool,
+        createdAt: Date?,
+        expiresAt: Date?,
+        trustLevel: TrustLevel,
+        secretMaterial: SecretKeyMaterial? = nil,
+        cardSerialNumber: String? = nil
+    ) {
+        self.id = id
+        self.keyID = keyID
+        self.fingerprint = fingerprint
+        self.name = name
+        self.email = email
+        self.algorithm = algorithm
+        self.keyLength = keyLength
+        self.isSecret = isSecret
+        self.createdAt = createdAt
+        self.expiresAt = expiresAt
+        self.trustLevel = trustLevel
+        self.secretMaterial = secretMaterial ?? SecretKeyMaterial.defaultMaterial(for: isSecret)
+        self.cardSerialNumber = cardSerialNumber
+    }
     
     /// Display-friendly key type
     var displayKeyType: String {
@@ -2859,6 +3201,14 @@ struct GPGKey: Identifiable, Hashable {
     /// Check if key is trusted enough for encryption
     var isTrusted: Bool {
         trustLevel == .full || trustLevel == .ultimate
+    }
+
+    var isSmartCardStub: Bool {
+        secretMaterial == .smartCardStub
+    }
+
+    var requiresHardwareTokenForPrivateOps: Bool {
+        isSmartCardStub
     }
 }
 
@@ -2970,9 +3320,45 @@ private class GPGKeyBuilder {
     var createdAt: Date?
     var expiresAt: Date?
     var trustLevel: TrustLevel = .unknown
+    var secretMaterial: SecretKeyMaterial = .none
+    var cardSerialNumber: String?
+
+    func absorbSecretMaterialToken(_ rawValue: String?) {
+        guard isSecret else { return }
+        guard let rawValue else { return }
+
+        let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+
+        if value == "+" {
+            if secretMaterial != .smartCardStub {
+                secretMaterial = .localSecret
+            }
+            return
+        }
+
+        if value == "#" {
+            secretMaterial = .smartCardStub
+            return
+        }
+
+        let normalizedSerial = value.replacingOccurrences(of: " ", with: "")
+        guard !normalizedSerial.isEmpty else { return }
+        secretMaterial = .smartCardStub
+        if cardSerialNumber == nil {
+            cardSerialNumber = normalizedSerial
+        }
+    }
     
     func build() -> GPGKey? {
         guard !fingerprint.isEmpty else { return nil }
+        let resolvedSecretMaterial: SecretKeyMaterial
+        if isSecret {
+            resolvedSecretMaterial = secretMaterial == .none ? .localSecret : secretMaterial
+        } else {
+            resolvedSecretMaterial = .none
+        }
+
         return GPGKey(
             id: fingerprint,
             keyID: keyID,
@@ -2984,7 +3370,9 @@ private class GPGKeyBuilder {
             isSecret: isSecret,
             createdAt: createdAt,
             expiresAt: expiresAt,
-            trustLevel: trustLevel
+            trustLevel: trustLevel,
+            secretMaterial: resolvedSecretMaterial,
+            cardSerialNumber: cardSerialNumber
         )
     }
 }

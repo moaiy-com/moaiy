@@ -94,7 +94,7 @@ struct OperationResultOverlay: View {
             
             Spacer()
             
-            Button("dismiss") {
+            Button("action_ok") {
                 withAnimation {
                     onDismiss()
                 }

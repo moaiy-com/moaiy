@@ -170,6 +170,38 @@ struct GPGServiceTests {
         #expect(keys.first?.fingerprint == "1111222233334444555566667777888899990000")
         #expect(keys.first?.keyID == "AAAABBBBCCCCDDDD")
     }
+
+    @Test("parseKeyList marks smart-card stub from subkey token serial")
+    func parseKeyList_marksSmartCardStubFromTokenSerial() {
+        let output = """
+        sec:u:255:22:80A9F21258CB1E83:1773379357:::u:::scESCA:::+::ed25519:::0:
+        fpr:::::::::50AA1EFC028475CBC64AF04980A9F21258CB1E83:
+        uid:u::::1773379357::::::Yubi User <yubi@example.com>:
+        ssb:u:255:18:21635FE639C33F67:1773379357::::::e:::D2760001240100000006198741050000::cv25519::
+        """
+
+        let keys = parseKeyListOutput(output, secretOnly: true)
+
+        #expect(keys.count == 1)
+        #expect(keys.first?.secretMaterial == .smartCardStub)
+        #expect(keys.first?.cardSerialNumber == "D2760001240100000006198741050000")
+    }
+
+    @Test("parseKeyList keeps local secret material when plus marker is present")
+    func parseKeyList_marksLocalSecretFromPlusMarker() {
+        let output = """
+        sec:u:255:22:925CB06DA0B3552D:1774184819:::u:::scESC:::+::ed25519:::0:
+        fpr:::::::::111C008D0A927B5C0023BFDE925CB06DA0B3552D:
+        uid:u::::1774184819::::::Local User <local@example.com>:
+        ssb:u:255:18:0653FAE30F7C21DC:1774184819::::::e:::+::cv25519::
+        """
+
+        let keys = parseKeyListOutput(output, secretOnly: true)
+
+        #expect(keys.count == 1)
+        #expect(keys.first?.secretMaterial == .localSecret)
+        #expect(keys.first?.cardSerialNumber == nil)
+    }
     
     // MARK: - Import Result Parsing Tests
     
@@ -387,6 +419,9 @@ private func parseKeyListOutput(_ output: String, secretOnly: Bool) -> [GPGKey] 
                     currentKey?.trustLevel = TrustLevel(gpgCode: fields[1]) ?? .unknown
                 }
             }
+            if (recordType == "sec") || secretOnly {
+                currentKey?.absorbSecretMaterialToken(fields.count > 14 ? fields[14] : nil)
+            }
             
         case "fpr":
             if isAwaitingPrimaryFingerprint, fields.count >= 10 {
@@ -395,6 +430,9 @@ private func parseKeyListOutput(_ output: String, secretOnly: Bool) -> [GPGKey] 
             }
         case "sub", "ssb":
             isAwaitingPrimaryFingerprint = false
+            if recordType == "ssb" {
+                currentKey?.absorbSecretMaterialToken(fields.count > 14 ? fields[14] : nil)
+            }
             
         case "uid":
             if fields.count >= 10 {
@@ -496,9 +534,44 @@ private class GPGKeyBuilder {
     var createdAt: Date?
     var expiresAt: Date?
     var trustLevel: TrustLevel = .unknown
+    var secretMaterial: SecretKeyMaterial = .none
+    var cardSerialNumber: String?
+
+    func absorbSecretMaterialToken(_ rawValue: String?) {
+        guard isSecret else { return }
+        guard let rawValue else { return }
+
+        let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+
+        if value == "+" {
+            if secretMaterial != .smartCardStub {
+                secretMaterial = .localSecret
+            }
+            return
+        }
+        if value == "#" {
+            secretMaterial = .smartCardStub
+            return
+        }
+
+        let normalizedSerial = value.replacingOccurrences(of: " ", with: "")
+        guard !normalizedSerial.isEmpty else { return }
+        secretMaterial = .smartCardStub
+        if cardSerialNumber == nil {
+            cardSerialNumber = normalizedSerial
+        }
+    }
     
     func build() -> GPGKey? {
         guard !fingerprint.isEmpty else { return nil }
+        let resolvedSecretMaterial: SecretKeyMaterial
+        if isSecret {
+            resolvedSecretMaterial = secretMaterial == .none ? .localSecret : secretMaterial
+        } else {
+            resolvedSecretMaterial = .none
+        }
+
         return GPGKey(
             id: fingerprint,
             keyID: keyID,
@@ -510,7 +583,9 @@ private class GPGKeyBuilder {
             isSecret: isSecret,
             createdAt: createdAt,
             expiresAt: expiresAt,
-            trustLevel: trustLevel
+            trustLevel: trustLevel,
+            secretMaterial: resolvedSecretMaterial,
+            cardSerialNumber: cardSerialNumber
         )
     }
 }
