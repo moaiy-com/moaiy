@@ -14,6 +14,7 @@ struct KeyCardView: View {
     
     @State private var isProcessing = false
     @State private var operationResults: [OperationResult] = []
+    @State private var preferredOperationForResults: OperationType?
     @State private var showingResultOverlay = false
     @State private var showingPasswordSheet = false
     @State private var showingYubiKeyPINSheet = false
@@ -45,6 +46,7 @@ struct KeyCardView: View {
         .moaiyOperationPromptHost(
             alert: $promptAlert,
             operationResults: $operationResults,
+            preferredOperation: $preferredOperationForResults,
             isShowingOperationResults: $showingResultOverlay,
             onOpenInFinder: { url in
                 NSWorkspace.shared.selectFile(
@@ -275,6 +277,7 @@ struct KeyCardView: View {
         Task { @MainActor in
             isProcessing = true
             operationResults = []
+            preferredOperationForResults = inferPreferredOperation(for: urls)
             pendingDecryptRequests = []
             decryptAllowsEmptyPassword = true
             passwordSheetFileName = ""
@@ -522,5 +525,19 @@ struct KeyCardView: View {
 
         guard panel.runModal() == .OK else { return }
         handleDroppedFiles(urls: panel.urls)
+    }
+
+    private func inferPreferredOperation(for urls: [URL]) -> OperationType? {
+        guard !urls.isEmpty else { return nil }
+        let encryptedFlags = urls.map { url in
+            Constants.File.encryptedExtensions.contains(url.pathExtension.lowercased())
+        }
+        if encryptedFlags.allSatisfy({ $0 }) {
+            return .decrypt
+        }
+        if encryptedFlags.allSatisfy({ !$0 }) {
+            return .encrypt
+        }
+        return nil
     }
 }

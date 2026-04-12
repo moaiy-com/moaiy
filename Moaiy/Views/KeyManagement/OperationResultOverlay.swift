@@ -9,6 +9,7 @@ import SwiftUI
 
 struct OperationResultOverlay: View {
     let results: [OperationResult]
+    let preferredOperation: OperationType?
     let onDismiss: () -> Void
     let onOpenInFinder: ((URL) -> Void)?
     
@@ -41,19 +42,19 @@ struct OperationResultOverlay: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.title2)
                     .foregroundStyle(Color.moaiySuccess)
-                Text("operation_all_succeeded")
+                Text(LocalizedStringKey(summary.headerTitleKey(preferredOperation: preferredOperation)))
                     .font(.headline)
             } else if summary.allFailed {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
                     .foregroundStyle(Color.moaiyError)
-                Text("operation_all_failed")
+                Text(LocalizedStringKey(summary.headerTitleKey(preferredOperation: preferredOperation)))
                     .font(.headline)
             } else {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.title2)
                     .foregroundStyle(Color.moaiyWarning)
-                Text("operation_partial_success")
+                Text(LocalizedStringKey(summary.headerTitleKey(preferredOperation: preferredOperation)))
                     .font(.headline)
             }
             
@@ -163,6 +164,7 @@ struct ResultRowView: View {
                 outputURL: URL(fileURLWithPath: "/Users/test/image.png.gpg")
             )
         ],
+        preferredOperation: .encrypt,
         onDismiss: {},
         onOpenInFinder: { _ in }
     )
@@ -181,6 +183,7 @@ struct ResultRowView: View {
                 errorMessage: "No secret key available"
             )
         ],
+        preferredOperation: nil,
         onDismiss: {},
         onOpenInFinder: { _ in }
     )

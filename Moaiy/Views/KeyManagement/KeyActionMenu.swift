@@ -443,6 +443,7 @@ struct KeyActionMenu: View {
     @State private var pendingYubiKeyPINFileName = ""
     @State private var pendingUntrustedEncryptURLs: [URL] = []
     @State private var operationResults: [OperationResult] = []
+    @State private var preferredOperationForResults: OperationType?
     @State private var showingResultOverlay = false
     @State private var promptAlert: PromptAlertContent?
 
@@ -555,6 +556,7 @@ struct KeyActionMenu: View {
         .moaiyOperationPromptHost(
             alert: $promptAlert,
             operationResults: $operationResults,
+            preferredOperation: $preferredOperationForResults,
             isShowingOperationResults: $showingResultOverlay,
             onOpenInFinder: { url in
                 NSWorkspace.shared.selectFile(
@@ -831,7 +833,8 @@ struct KeyActionMenu: View {
             allowUntrustedRecipients: allowUntrustedRecipients
         )
         showOperationResults(
-            KeyFileOperationResultMapper.encryptResults(from: outcomes)
+            KeyFileOperationResultMapper.encryptResults(from: outcomes),
+            preferredOperation: .encrypt
         )
     }
 
@@ -848,7 +851,8 @@ struct KeyActionMenu: View {
             preferredSecretKey: key.fingerprint
         )
         showOperationResults(
-            KeyFileOperationResultMapper.decryptResults(from: outcomes)
+            KeyFileOperationResultMapper.decryptResults(from: outcomes),
+            preferredOperation: .decrypt
         )
     }
 
@@ -1118,8 +1122,12 @@ struct KeyActionMenu: View {
         )
     }
 
-    private func showOperationResults(_ results: [OperationResult]) {
+    private func showOperationResults(
+        _ results: [OperationResult],
+        preferredOperation: OperationType? = nil
+    ) {
         guard !results.isEmpty else { return }
+        preferredOperationForResults = preferredOperation
         operationResults = results
         showingResultOverlay = true
     }
