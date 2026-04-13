@@ -1555,10 +1555,8 @@ final class GPGService {
         throw GPGError.executionFailed(output.isEmpty ? "Failed to check smart card presence" : output)
     }
 
-    /// Learns smart-card shadow key stubs and auto-completes public keys via URL/keyserver fallback.
-    func importSmartCardWithPublicKeyCompletion(
-        keyservers: [String] = Constants.GPG.supportedKeyservers
-    ) async throws -> SmartCardLearnResult {
+    /// Learns smart-card shadow key stubs and auto-completes public keys from card URL when available.
+    func importSmartCardWithPublicKeyCompletion() async throws -> SmartCardLearnResult {
         let presence = try await checkSmartCardPresence()
         let beforeKeys = try await listKeys(secretOnly: true)
 
@@ -1595,10 +1593,6 @@ final class GPGService {
         let beforePublicKeyFingerprints = try await listNormalizedPublicFingerprints()
         var urlFetchTried = false
         var urlFetchSucceeded = false
-        var keyserverFetchTried = false
-        var keyserverFetchSucceeded = false
-        var keyserverUsed: String?
-        var sawNetworkIssueDuringKeyserverFallback = false
         var completionIssues: Set<SmartCardPublicKeyCompletionIssue> = []
 
         let publicKeyURL = try await resolveSmartCardPublicKeyURL(learnMetadata: learnMetadata)
@@ -1676,40 +1670,7 @@ final class GPGService {
             fallback: learnedFingerprints
         )
 
-        var publicKeyFingerprints = try await listNormalizedPublicFingerprints()
-        var unresolvedFingerprints = completionTargetFingerprints.subtracting(publicKeyFingerprints)
-        let shouldAttemptAutomaticKeyserverFallback = learnMetadata.publicKeyURL == nil
-
-        if shouldAttemptAutomaticKeyserverFallback, !unresolvedFingerprints.isEmpty {
-            for keyserver in normalizedSmartCardKeyserverCandidates(keyservers) {
-                guard !unresolvedFingerprints.isEmpty else { break }
-
-                let targetFingerprints = unresolvedFingerprints.sorted()
-                for fingerprint in targetFingerprints {
-                    keyserverFetchTried = true
-                    do {
-                        _ = try await importFromKeyserver(
-                            query: fingerprint,
-                            keyserver: keyserver
-                        )
-                    } catch {
-                        if isNetworkUnavailable(error) {
-                            sawNetworkIssueDuringKeyserverFallback = true
-                        }
-                    }
-                }
-
-                publicKeyFingerprints = try await listNormalizedPublicFingerprints()
-                let previousUnresolvedCount = unresolvedFingerprints.count
-                unresolvedFingerprints = unresolvedFingerprints.filter { !publicKeyFingerprints.contains($0) }
-                if unresolvedFingerprints.count < previousUnresolvedCount {
-                    keyserverFetchSucceeded = true
-                    keyserverUsed = keyserver
-                }
-            }
-        }
-
-        publicKeyFingerprints = try await listNormalizedPublicFingerprints()
+        let publicKeyFingerprints = try await listNormalizedPublicFingerprints()
         let missingPublicKeyFingerprints = completionTargetFingerprints.subtracting(publicKeyFingerprints)
         let unresolvedUIDFingerprints: Set<String> = Set(
             currentCardCandidates.compactMap { key in
@@ -1732,11 +1693,6 @@ final class GPGService {
             pendingPublicKeyCount: pendingPublicKeyCount
         )
 
-        if keyserverFetchTried && !keyserverFetchSucceeded {
-            completionIssues.insert(
-                sawNetworkIssueDuringKeyserverFallback ? .keyserverUnreachable : .keyserverFetchFailed
-            )
-        }
         if completionLevel == .complete {
             completionIssues.removeAll()
         }
@@ -1748,13 +1704,13 @@ final class GPGService {
             includesExistingStubs: includesExistingStubs,
             urlFetchTried: urlFetchTried,
             urlFetchSucceeded: urlFetchSucceeded,
-            keyserverFetchTried: keyserverFetchTried,
-            keyserverFetchSucceeded: keyserverFetchSucceeded,
+            keyserverFetchTried: false,
+            keyserverFetchSucceeded: false,
             publicKeyCompletionLevel: completionLevel,
             completedPublicKeyCount: completedPublicKeyCount,
             pendingPublicKeyCount: pendingPublicKeyCount,
             pendingPublicKeyFingerprints: pendingPublicKeyFingerprints,
-            keyserverUsed: keyserverUsed,
+            keyserverUsed: nil,
             completionIssues: completionIssues.sorted { $0.sortOrder < $1.sortOrder },
             publicKeyCountBeforeCompletion: beforePublicKeyFingerprints.count,
             publicKeyCountAfterCompletion: publicKeyFingerprints.count
@@ -2610,12 +2566,43 @@ final class GPGService {
         )
 
         guard result.exitCode == 0 else {
-            let message = [result.stderr, result.stdout]
+            let gpgMessage = [result.stderr, result.stdout]
                 .compactMap { $0 }
                 .joined(separator: "\n")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            throw GPGError.importFailed(message.isEmpty ? "Failed to fetch keys from smartcard URL" : message)
+
+            do {
+                if try await importPublicKeyFromSmartCardURLViaKeyserver(trimmedPublicKeyURL) {
+                    return
+                }
+            } catch {
+                let fallbackMessage = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                let combined = [gpgMessage, fallbackMessage]
+                    .filter { !$0.isEmpty }
+                    .joined(separator: "\n")
+                throw GPGError.importFailed(
+                    combined.isEmpty ? "Failed to fetch keys from smartcard URL" : combined
+                )
+            }
+
+            throw GPGError.importFailed(
+                gpgMessage.isEmpty ? "Failed to fetch keys from smartcard URL" : gpgMessage
+            )
         }
+    }
+
+    private func importPublicKeyFromSmartCardURLViaKeyserver(_ publicKeyURL: String) async throws -> Bool {
+        guard let url = URL(string: publicKeyURL),
+              let host = url.host,
+              extractKeyReference(from: url) != nil else {
+            return false
+        }
+
+        _ = try await importFromKeyserver(
+            query: publicKeyURL,
+            keyserver: host
+        )
+        return true
     }
 
     private func completionTargetFingerprints(
@@ -2627,28 +2614,6 @@ final class GPGService {
             return cardFingerprints
         }
         return learnedFingerprints
-    }
-
-    private func normalizedSmartCardKeyserverCandidates(_ keyservers: [String]) -> [String] {
-        var normalized: [String] = []
-        var seen: Set<String> = []
-
-        for keyserver in keyservers {
-            let trimmed = keyserver.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else {
-                continue
-            }
-
-            let resolved = normalizedGPGKeyserver(trimmed)
-            let dedupKey = resolved.lowercased()
-            guard !seen.contains(dedupKey) else {
-                continue
-            }
-            seen.insert(dedupKey)
-            normalized.append(resolved)
-        }
-
-        return normalized
     }
 
     private func isNetworkUnavailable(_ error: Error) -> Bool {

@@ -304,11 +304,8 @@ struct ImportKeySheet: View {
                 let result = try await viewModel.importYubiKeyStubs()
                 yubiKeyImportResult = result
                 isImporting = false
-                if shouldAutoMoveToKeyserverAfterURLFetch(result) {
-                    moveToKeyserverImport(
-                        suggestedQuery: result.pendingPublicKeyFingerprints.first ?? result.importedStubs.first?.fingerprint
-                    )
-                    showAutomaticKeyserverGuidanceAlert(result)
+                if shouldDismissAfterYubiKeyImport(result) {
+                    showYubiKeyImportSuccessAlert(result)
                 } else {
                     showYubiKeyPublicKeyGuidanceAlertIfNeeded(result)
                 }
@@ -355,6 +352,9 @@ struct ImportKeySheet: View {
             )
         }
         messageLines.append(contentsOf: result.completionIssues.map(yubiKeyCompletionIssueMessage(for:)))
+        if shouldShowManualPublicKeyImportHint(for: result) {
+            messageLines.append(String(localized: "yubikey_import_manual_pubkey_required"))
+        }
         if messageLines.isEmpty {
             messageLines.append(String(localized: "yubikey_import_result_no_stubs"))
         }
@@ -376,38 +376,44 @@ struct ImportKeySheet: View {
         )
     }
 
-    private func shouldAutoMoveToKeyserverAfterURLFetch(_ result: SmartCardLearnResult) -> Bool {
-        result.urlFetchTried && !result.urlFetchSucceeded && result.pendingPublicKeyCount > 0
-    }
-
-    private func showAutomaticKeyserverGuidanceAlert(_ result: SmartCardLearnResult) {
-        var messageLines: [String] = [
-            String(localized: "yubikey_import_completion_issue_url_fetch_failed")
-        ]
-        messageLines.append(
-            String(
-                format: String(localized: "yubikey_import_completion_counts"),
-                locale: Locale.current,
-                Int64(result.completedPublicKeyCount),
-                Int64(result.pendingPublicKeyCount)
-            )
-        )
-        let message = messageLines.joined(separator: "\n")
-
-        promptAlert = PromptAlertContent(
-            title: LocalizedStringKey("yubikey_import_completion_partial_title"),
-            message: message,
-            actionTitle: "action_ok",
-            actionRole: .cancel,
-            onAcknowledge: nil
-        )
-    }
-
     private func shouldShowYubiKeyPublicKeyGuidance(_ result: SmartCardLearnResult) -> Bool {
         if result.publicKeyCompletionLevel != .complete {
             return true
         }
         return !result.completionIssues.isEmpty
+    }
+
+    private func shouldDismissAfterYubiKeyImport(_ result: SmartCardLearnResult) -> Bool {
+        result.publicKeyCompletionLevel == .complete && result.completionIssues.isEmpty
+    }
+
+    private func showYubiKeyImportSuccessAlert(_ result: SmartCardLearnResult) {
+        let summary = String(
+            format: String(localized: "yubikey_import_result_summary"),
+            locale: Locale.current,
+            Int64(result.learnedStubCount),
+            result.cardSerialNumber
+        )
+        let completion = String(
+            format: String(localized: "yubikey_import_completion_counts"),
+            locale: Locale.current,
+            Int64(result.completedPublicKeyCount),
+            Int64(result.pendingPublicKeyCount)
+        )
+
+        promptAlert = PromptAlertContent.success(
+            message: "\(summary)\n\(completion)",
+            title: LocalizedStringKey("yubikey_import_completion_complete_title"),
+            onAcknowledge: { dismiss() }
+        )
+    }
+
+    private func shouldShowManualPublicKeyImportHint(for result: SmartCardLearnResult) -> Bool {
+        guard result.pendingPublicKeyCount > 0 else {
+            return false
+        }
+        return result.completionIssues.contains(.missingPublicKeyURL)
+            || result.completionIssues.contains(.urlFetchFailed)
     }
 
     private func moveToKeyserverImport(suggestedQuery: String?) {

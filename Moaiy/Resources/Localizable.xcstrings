@@ -8801,6 +8801,23 @@
         }
       }
     },
+    "yubikey_import_manual_pubkey_required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your SmartCard public key URL is missing or auto-download failed. Please import the public key manually (From File or From Keyserver); the SmartCard key will appear in the list after the public key is imported."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "您的 SmartCard pub key URL 未定义或自动下载失败。请手动导入 pub key（From File 或 From Keyserver）后，SmartCard key 才会显示在列表中。"
+          }
+        }
+      }
+    },
     "yubikey_import_completion_keyserver_used" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8858,13 +8875,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Detect an inserted smartcard, fetch OpenPGP shadow stubs, then auto-complete public keys (URL first, keyserver fallback)."
+            "value" : "Detect an inserted smartcard, fetch OpenPGP shadow stubs, and try to auto-import public keys from the card URL."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "检测已插入智能卡，获取 OpenPGP 存根后自动补全公钥（优先 URL，失败再走 keyserver）。"
+            "value" : "检测已插入智能卡，获取 OpenPGP 存根，并尝试从卡内公钥 URL 自动导入公钥。"
           }
         }
       }
@@ -8909,13 +8926,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Best-effort completion: card URL first, then configured keyservers if needed."
+            "value" : "If card URL import fails or is missing, import the public key manually (From File or From Keyserver)."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "最佳努力补全：先尝试卡内 URL，必要时再尝试已配置 keyserver。"
+            "value" : "如果卡内 URL 导入失败或未配置，请手动导入公钥（From File 或 From Keyserver）。"
           }
         }
       }
