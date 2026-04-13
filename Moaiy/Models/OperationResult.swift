@@ -133,6 +133,12 @@ struct BatchOperationSummary {
     let results: [OperationResult]
     let startTime: Date
     let endTime: Date
+
+    enum OperationCategory {
+        case encryptOnly
+        case decryptOnly
+        case mixed
+    }
     
     var successCount: Int {
         results.filter { $0.success }.count
@@ -152,6 +158,64 @@ struct BatchOperationSummary {
     
     var hasMixedResults: Bool {
         successCount > 0 && failureCount > 0
+    }
+
+    var operationCategory: OperationCategory {
+        let operationSet = Set(results.map(\.operation))
+        if operationSet.count == 1, operationSet.contains(.encrypt) {
+            return .encryptOnly
+        }
+        if operationSet.count == 1, operationSet.contains(.decrypt) {
+            return .decryptOnly
+        }
+        return .mixed
+    }
+
+    func headerTitleKey(preferredOperation: OperationType? = nil) -> String {
+        let effectiveCategory: OperationCategory
+        if let preferredOperation {
+            switch preferredOperation {
+            case .encrypt:
+                effectiveCategory = .encryptOnly
+            case .decrypt:
+                effectiveCategory = .decryptOnly
+            default:
+                effectiveCategory = operationCategory
+            }
+        } else {
+            effectiveCategory = operationCategory
+        }
+
+        if allSucceeded {
+            switch effectiveCategory {
+            case .encryptOnly:
+                return "operation_encrypt_all_succeeded"
+            case .decryptOnly:
+                return "operation_decrypt_all_succeeded"
+            case .mixed:
+                return "operation_all_succeeded"
+            }
+        }
+
+        if allFailed {
+            switch effectiveCategory {
+            case .encryptOnly:
+                return "operation_encrypt_all_failed"
+            case .decryptOnly:
+                return "operation_decrypt_all_failed"
+            case .mixed:
+                return "operation_all_failed"
+            }
+        }
+
+        switch effectiveCategory {
+        case .encryptOnly:
+            return "operation_encrypt_partial_success"
+        case .decryptOnly:
+            return "operation_decrypt_partial_success"
+        case .mixed:
+            return "operation_partial_success"
+        }
     }
     
     init(results: [OperationResult]) {

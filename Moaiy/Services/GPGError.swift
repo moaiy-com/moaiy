@@ -25,6 +25,9 @@ enum GPGError: Error, LocalizedError {
     case trustUpdateFailed(String)
     case keySigningFailed(String)
     case keyserverUploadFailed(String)
+    case smartCardNotPresent
+    case smartCardUnavailable
+    case smartCardPinInvalid
     
     var errorDescription: String? {
         switch self {
@@ -60,6 +63,12 @@ enum GPGError: Error, LocalizedError {
             return "\(String(localized: "error_key_signing_failed")): \(message)"
         case .keyserverUploadFailed(let message):
             return "\(String(localized: "error_keyserver_upload_failed")): \(message)"
+        case .smartCardNotPresent:
+            return String(localized: "error_smartcard_not_present")
+        case .smartCardUnavailable:
+            return String(localized: "error_smartcard_unavailable")
+        case .smartCardPinInvalid:
+            return String(localized: "error_smartcard_pin_invalid")
         }
     }
     
@@ -97,6 +106,12 @@ enum GPGError: Error, LocalizedError {
             return String(localized: "error_key_signing_failed_recovery")
         case .keyserverUploadFailed:
             return String(localized: "error_keyserver_upload_failed_recovery")
+        case .smartCardNotPresent:
+            return String(localized: "error_smartcard_not_present_recovery")
+        case .smartCardUnavailable:
+            return String(localized: "error_smartcard_unavailable_recovery")
+        case .smartCardPinInvalid:
+            return String(localized: "error_smartcard_pin_invalid_recovery")
         }
     }
 }
@@ -222,6 +237,12 @@ enum UserFacingErrorMapper {
             return String(localized: "error_key_signing_failed")
         case .keyserverUploadFailed(let message):
             return mapRawMessage(message, context: .keyserverUpload)
+        case .smartCardNotPresent:
+            return String(localized: "error_smartcard_not_present")
+        case .smartCardUnavailable:
+            return String(localized: "error_smartcard_unavailable")
+        case .smartCardPinInvalid:
+            return String(localized: "error_smartcard_pin_invalid")
         case .invalidOutput(let message), .executionFailed(let message):
             return mapRawMessage(message, context: context)
         }
@@ -235,6 +256,20 @@ enum UserFacingErrorMapper {
         let lowercasedMessage = rawMessage.lowercased()
         if lowercasedMessage.contains("cancelled") {
             return String(localized: "error_operation_cancelled")
+        }
+        if lowercasedMessage.contains("card not present")
+            || lowercasedMessage.contains("card removed") {
+            return String(localized: "error_smartcard_not_present")
+        }
+        if lowercasedMessage.contains("operation not supported by device")
+            || lowercasedMessage.contains("openpgp card not available")
+            || lowercasedMessage.contains("no smartcard daemon") {
+            return String(localized: "error_smartcard_unavailable")
+        }
+        if lowercasedMessage.contains("bad pin")
+            || lowercasedMessage.contains("invalid pin")
+            || lowercasedMessage.contains("wrong pin") {
+            return String(localized: "error_smartcard_pin_invalid")
         }
         if lowercasedMessage.contains("bad passphrase")
             || lowercasedMessage.contains("invalid passphrase")

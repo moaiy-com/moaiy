@@ -14,10 +14,13 @@ struct KeyCardView: View {
     
     @State private var isProcessing = false
     @State private var operationResults: [OperationResult] = []
+    @State private var preferredOperationForResults: OperationType?
     @State private var showingResultOverlay = false
     @State private var showingPasswordSheet = false
+    @State private var showingYubiKeyPINSheet = false
     @State private var decryptAllowsEmptyPassword = true
     @State private var passwordSheetFileName = ""
+    @State private var yubiKeyPINFileName = ""
     @State private var pendingDecryptRequests: [DecryptRequest] = []
     @State private var pendingDetectedFiles: [DetectedFile] = []
     @State private var promptAlert: PromptAlertContent?
@@ -43,6 +46,7 @@ struct KeyCardView: View {
         .moaiyOperationPromptHost(
             alert: $promptAlert,
             operationResults: $operationResults,
+            preferredOperation: $preferredOperationForResults,
             isShowingOperationResults: $showingResultOverlay,
             onOpenInFinder: { url in
                 NSWorkspace.shared.selectFile(
@@ -74,6 +78,26 @@ struct KeyCardView: View {
                 }
             )
         }
+        .sheet(isPresented: $showingYubiKeyPINSheet) {
+            YubiKeyPINSheet(
+                fileName: yubiKeyPINFileName,
+                onConfirm: { pin in
+                    showingYubiKeyPINSheet = false
+                    yubiKeyPINFileName = ""
+                    Task {
+                        await performQueuedDecryptions(password: pin)
+                    }
+                },
+                onCancel: {
+                    showingYubiKeyPINSheet = false
+                    yubiKeyPINFileName = ""
+                    pendingDecryptRequests = []
+                    if !operationResults.isEmpty {
+                        showingResultOverlay = true
+                    }
+                }
+            )
+        }
         .contextMenu {
             Button(action: {
                 NSPasteboard.general.clearContents()
@@ -95,7 +119,7 @@ struct KeyCardView: View {
     private var keyInfoSection: some View {
         HStack(alignment: .center, spacing: MoaiyUI.Spacing.md) {
             HStack(spacing: MoaiyUI.Spacing.lg) {
-                Image(systemName: key.isSecret ? "key.fill" : "key")
+                Image(systemName: key.isSmartCardStub ? "memorychip.fill" : (key.isSecret ? "key.fill" : "key"))
                     .font(.title2)
                     .foregroundStyle(keyIconColor)
                     .frame(width: 40, height: 40)
@@ -133,6 +157,20 @@ struct KeyCardView: View {
                             )
                             .foregroundStyle(trustLevelColor)
                             .clipShape(Capsule())
+
+                        if key.isSmartCardStub {
+                            Text("key_type_yubikey_stub")
+                                .font(.caption)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.moaiyWarning.opacity(0.2))
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.moaiyWarning.opacity(0.35), lineWidth: 1)
+                                )
+                                .foregroundStyle(Color.moaiyWarning)
+                                .clipShape(Capsule())
+                        }
 
                         if key.isExpired {
                             Text("status_expired")
@@ -193,11 +231,17 @@ struct KeyCardView: View {
     // MARK: - Color Computed Properties
     
     private var keyIconColor: Color {
-        key.isSecret ? Color.moaiyAccentV2 : Color.moaiyTextSecondary
+        if key.isSmartCardStub {
+            return Color.moaiyWarning
+        }
+        return key.isSecret ? Color.moaiyAccentV2 : Color.moaiyTextSecondary
     }
     
     private var keyTypeBadgeColor: Color {
-        key.isSecret ? Color.moaiyAccentV2 : Color.moaiyInfo
+        if key.isSmartCardStub {
+            return Color.moaiyWarning
+        }
+        return key.isSecret ? Color.moaiyAccentV2 : Color.moaiyInfo
     }
     
     private var trustLevelColor: Color {
@@ -233,6 +277,7 @@ struct KeyCardView: View {
         Task { @MainActor in
             isProcessing = true
             operationResults = []
+            preferredOperationForResults = inferPreferredOperation(for: urls)
             pendingDecryptRequests = []
             decryptAllowsEmptyPassword = true
             passwordSheetFileName = ""
@@ -287,6 +332,24 @@ struct KeyCardView: View {
 
     @MainActor
     private func startQueuedDecryptionFlow() async {
+        if key.isSmartCardStub {
+            if let hardwareTokenError = await KeyFileCryptoCoordinator.hardwareTokenPresenceErrorMessageIfNeeded(
+                for: key,
+                context: .decrypt
+            ) {
+                promptAlert = PromptAlertContent.failure(
+                    title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
+                    message: hardwareTokenError
+                )
+                pendingDecryptRequests = []
+                return
+            }
+
+            yubiKeyPINFileName = pendingDecryptRequests.first?.sourceURL.lastPathComponent ?? ""
+            showingYubiKeyPINSheet = true
+            return
+        }
+
         let requiresPassphrase = await KeyFileCryptoCoordinator.requiresPassphrase(for: key.fingerprint)
         if requiresPassphrase {
             decryptAllowsEmptyPassword = false
@@ -355,6 +418,18 @@ struct KeyCardView: View {
             return true
 
         case .decrypt:
+            if let hardwareTokenError = await KeyFileCryptoCoordinator.hardwareTokenPresenceErrorMessageIfNeeded(
+                for: key,
+                context: .decrypt
+            ) {
+                promptAlert = PromptAlertContent.failure(
+                    title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
+                    message: hardwareTokenError
+                )
+                pendingDecryptRequests = []
+                return false
+            }
+
             if let mismatchMessage = await KeyFileCryptoCoordinator.decryptionKeyMismatchMessageIfNeeded(
                 for: [url],
                 preferredSecretKey: key.fingerprint,
@@ -450,5 +525,19 @@ struct KeyCardView: View {
 
         guard panel.runModal() == .OK else { return }
         handleDroppedFiles(urls: panel.urls)
+    }
+
+    private func inferPreferredOperation(for urls: [URL]) -> OperationType? {
+        guard !urls.isEmpty else { return nil }
+        let encryptedFlags = urls.map { url in
+            Constants.File.encryptedExtensions.contains(url.pathExtension.lowercased())
+        }
+        if encryptedFlags.allSatisfy({ $0 }) {
+            return .decrypt
+        }
+        if encryptedFlags.allSatisfy({ !$0 }) {
+            return .encrypt
+        }
+        return nil
     }
 }

@@ -175,7 +175,9 @@ final class KeyManagementViewModel {
                         isSecret: true,
                         createdAt: secretKey.createdAt,
                         expiresAt: secretKey.expiresAt,
-                        trustLevel: secretKey.trustLevel
+                        trustLevel: secretKey.trustLevel,
+                        secretMaterial: secretKey.secretMaterial,
+                        cardSerialNumber: secretKey.cardSerialNumber
                     )
                 } else {
                     allKeys.append(secretKey)
@@ -313,6 +315,23 @@ final class KeyManagementViewModel {
             throw error
         }
     }
+
+    /// Learn smart-card (YubiKey/OpenPGP Card) shadow key stubs and refresh list.
+    @discardableResult
+    func importYubiKeyStubs() async throws -> SmartCardLearnResult {
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            let result = try await gpgService.importSmartCardWithPublicKeyCompletion()
+            await loadKeys()
+            return result
+        } catch {
+            setError(error, context: .importKey)
+            isLoading = false
+            throw error
+        }
+    }
     
     /// Export a public key
     func exportPublicKey(_ key: GPGKey) async throws -> Data {
@@ -368,9 +387,21 @@ final class KeyManagementViewModel {
                 // Delete both secret and public keys
                 // Note: GPG requires deleting secret key first
                 if key.isSecret {
-                    try await gpgService.deleteKey(keyID: key.fingerprint, secret: true)
+                    do {
+                        try await gpgService.deleteKey(keyID: key.fingerprint, secret: true)
+                    } catch {
+                        guard isMissingKeyDeletionError(error) else {
+                            throw error
+                        }
+                    }
                 }
-                try await gpgService.deleteKey(keyID: key.fingerprint, secret: false)
+                do {
+                    try await gpgService.deleteKey(keyID: key.fingerprint, secret: false)
+                } catch {
+                    guard isMissingKeyDeletionError(error) else {
+                        throw error
+                    }
+                }
             }
             await loadKeys()
         } catch {
@@ -378,6 +409,13 @@ final class KeyManagementViewModel {
             isLoading = false
             throw error
         }
+    }
+
+    private func isMissingKeyDeletionError(_ error: Error) -> Bool {
+        if case GPGError.keyNotFound = error {
+            return true
+        }
+        return false
     }
     
     // MARK: - Trust Management

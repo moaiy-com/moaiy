@@ -98,7 +98,21 @@ struct KeyActionMenuAvailabilityTests {
         #expect(enabledAvailability.canSignKey)
     }
 
-    private func makeKey(isSecret: Bool) -> GPGKey {
+    @Test("Smart-card stub disables edit and private-export actions")
+    func smartCardStub_disablesEditAndPrivateExport() {
+        let availability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: true, secretMaterial: .smartCardStub),
+            isKeySigningMenuEnabled: true
+        )
+
+        #expect(availability.canDecrypt)
+        #expect(availability.canSignDetached)
+        #expect(!availability.canEdit)
+        #expect(!availability.showsExportPrivateKey)
+        #expect(!availability.canSignKey)
+    }
+
+    private func makeKey(isSecret: Bool, secretMaterial: SecretKeyMaterial? = nil) -> GPGKey {
         GPGKey(
             id: isSecret ? "secret-key-id" : "public-key-id",
             keyID: isSecret ? "SECRET123" : "PUBLIC123",
@@ -110,7 +124,8 @@ struct KeyActionMenuAvailabilityTests {
             isSecret: isSecret,
             createdAt: nil,
             expiresAt: nil,
-            trustLevel: .unknown
+            trustLevel: .unknown,
+            secretMaterial: secretMaterial
         )
     }
 }

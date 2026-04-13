@@ -159,6 +159,7 @@ private struct PromptAlertHostModifier: ViewModifier {
 private struct OperationPromptHostModifier: ViewModifier {
     @Binding var alert: PromptAlertContent?
     @Binding var operationResults: [OperationResult]
+    @Binding var preferredOperation: OperationType?
     @Binding var isShowingOperationResults: Bool
     let onOpenInFinder: ((URL) -> Void)?
 
@@ -168,9 +169,11 @@ private struct OperationPromptHostModifier: ViewModifier {
             .sheet(isPresented: $isShowingOperationResults) {
                 OperationResultOverlay(
                     results: operationResults,
+                    preferredOperation: preferredOperation,
                     onDismiss: {
                         isShowingOperationResults = false
                         operationResults = []
+                        preferredOperation = nil
                     },
                     onOpenInFinder: onOpenInFinder
                 )
@@ -186,6 +189,7 @@ extension View {
     func moaiyOperationPromptHost(
         alert: Binding<PromptAlertContent?>,
         operationResults: Binding<[OperationResult]>,
+        preferredOperation: Binding<OperationType?> = .constant(nil),
         isShowingOperationResults: Binding<Bool>,
         onOpenInFinder: ((URL) -> Void)? = nil
     ) -> some View {
@@ -193,6 +197,7 @@ extension View {
             OperationPromptHostModifier(
                 alert: alert,
                 operationResults: operationResults,
+                preferredOperation: preferredOperation,
                 isShowingOperationResults: isShowingOperationResults,
                 onOpenInFinder: onOpenInFinder
             )

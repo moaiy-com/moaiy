@@ -27,6 +27,16 @@
         }
       }
     },
+    "%@ • %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ • %2$@"
+          }
+        }
+      }
+    },
     "%lld" : {
 
     },
@@ -168,23 +178,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "图标署名"
-          }
-        }
-      }
-    },
-    "app_name_moaiy" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Moaiy"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Moaiy"
           }
         }
       }
@@ -614,40 +607,6 @@
         }
       }
     },
-    "export_private_key_success_message" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Private key exported successfully"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "私钥导出成功"
-          }
-        }
-      }
-    },
-    "export_public_key_success_message" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Public key exported successfully"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "公钥导出成功"
-          }
-        }
-      }
-    },
     "action_filters" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -937,23 +896,6 @@
         }
       }
     },
-    "action_sign_key" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sign Key"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "签名密钥"
-          }
-        }
-      }
-    },
     "action_sign_detached" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -971,19 +913,19 @@
         }
       }
     },
-    "action_verify_signature" : {
+    "action_sign_key" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Verify Signature"
+            "value" : "Sign Key"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "验证签名"
+            "value" : "签名密钥"
           }
         }
       }
@@ -1018,6 +960,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "切换到应用托管密钥库"
+          }
+        }
+      }
+    },
+    "action_verify_signature" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verify Signature"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证签名"
           }
         }
       }
@@ -1086,6 +1045,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "AES-256"
+          }
+        }
+      }
+    },
+    "app_name_moaiy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moaiy"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moaiy"
+          }
+        }
+      }
+    },
+    "backup_alert_title_failure" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Backup Not Successful"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备份未成功"
           }
         }
       }
@@ -1205,6 +1198,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未找到备份清单"
+          }
+        }
+      }
+    },
+    "backup_error_operation_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Backup wasn't completed. Please try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备份未完成，请重试。"
           }
         }
       }
@@ -1583,6 +1593,23 @@
         }
       }
     },
+    "brand_tagline_drag_and_drop" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Protect what matters with drag and drop."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过拖放守护重要内容。"
+          }
+        }
+      }
+    },
     "confirm_delete_key_message" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1749,6 +1776,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "密码安全建议"
+          }
+        }
+      }
+    },
+    "decrypt_alert_title_failure" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Decryption Not Successful"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解密未成功"
           }
         }
       }
@@ -1974,23 +2018,6 @@
         }
       }
     },
-    "dismiss" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dismiss"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关闭"
-          }
-        }
-      }
-    },
     "done" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2110,6 +2137,23 @@
         }
       }
     },
+    "edit_alert_title_failure" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update Not Successful"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新未成功"
+          }
+        }
+      }
+    },
     "edit_confirm_passphrase_placeholder" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2208,6 +2252,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "邮箱"
+          }
+        }
+      }
+    },
+    "edit_error_operation_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't apply this change. Please try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改未生效，请重试。"
           }
         }
       }
@@ -2582,6 +2643,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "还没有密钥"
+          }
+        }
+      }
+    },
+    "encrypt_alert_title_failure" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encryption Not Successful"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加密未成功"
+          }
+        }
+      }
+    },
+    "encrypt_untrusted_recipient_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This key is below full trust. Continue encryption anyway?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该密钥信任级别低于完全信任，仍要继续加密吗？"
+          }
+        }
+      }
+    },
+    "encrypt_untrusted_recipient_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recipient Is Not Fully Trusted"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接收者未完全受信任"
           }
         }
       }
@@ -3181,6 +3293,23 @@
         }
       }
     },
+    "error_operation_failed_generic" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't complete this action. Please try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "操作未完成，请重试。"
+          }
+        }
+      }
+    },
     "error_password_mismatch" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3211,6 +3340,108 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "签名验证功能暂未实现"
+          }
+        }
+      }
+    },
+    "error_smartcard_not_present" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No YubiKey detected. Please insert your YubiKey and try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未检测到 YubiKey。请先插入 YubiKey 后重试。"
+          }
+        }
+      }
+    },
+    "error_smartcard_not_present_recovery" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Insert your YubiKey, wait for recognition, then retry."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请插入 YubiKey，等待系统识别后重试。"
+          }
+        }
+      }
+    },
+    "error_smartcard_pin_invalid" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid YubiKey PIN."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YubiKey PIN 错误。"
+          }
+        }
+      }
+    },
+    "error_smartcard_pin_invalid_recovery" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verify your YubiKey PIN and try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请确认 YubiKey PIN 后重试。"
+          }
+        }
+      }
+    },
+    "error_smartcard_unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Smart card support is unavailable on this device."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前设备不支持智能卡功能。"
+          }
+        }
+      }
+    },
+    "error_smartcard_unavailable_recovery" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check GPG smart card support and device drivers, then retry."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请检查 GPG 智能卡支持与设备驱动后重试。"
           }
         }
       }
@@ -3793,6 +4024,23 @@
         }
       }
     },
+    "export_alert_title_failure" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Not Successful"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出未成功"
+          }
+        }
+      }
+    },
     "export_file_picker_message" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3823,6 +4071,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择如何导出此密钥"
+          }
+        }
+      }
+    },
+    "export_private_key_success_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Private key exported successfully"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "私钥导出成功"
+          }
+        }
+      }
+    },
+    "export_public_key_success_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Public key exported successfully"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公钥导出成功"
           }
         }
       }
@@ -4371,6 +4653,23 @@
         }
       }
     },
+    "import_alert_title_failure" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import Not Successful"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导入未成功"
+          }
+        }
+      }
+    },
     "import_file_picker_message" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4401,6 +4700,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从 Keyserver 导入"
+          }
+        }
+      }
+    },
+    "import_from_yubikey" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YubiKey"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YubiKey"
           }
         }
       }
@@ -4490,6 +4806,74 @@
         }
       }
     },
+    "import_mode_from_existing_keys" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From Existing Keys"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从已有密钥"
+          }
+        }
+      }
+    },
+    "import_mode_from_file" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From File"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从文件"
+          }
+        }
+      }
+    },
+    "import_mode_from_keyserver" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From Keyserver"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 Keyserver"
+          }
+        }
+      }
+    },
+    "import_mode_from_smartcard" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From Smartcard"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从智能卡"
+          }
+        }
+      }
+    },
     "import_success_details" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4554,6 +4938,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "密钥信息"
+          }
+        }
+      }
+    },
+    "key_list_alert_title_failure" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Load Keys"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法加载密钥"
+          }
+        }
+      }
+    },
+    "key_list_error_load_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't load your keys right now. Please try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂时无法加载密钥，请重试。"
           }
         }
       }
@@ -4690,6 +5108,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "RSA-4096"
+          }
+        }
+      }
+    },
+    "key_type_yubikey_stub" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YubiKey Stub"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YubiKey 存根"
           }
         }
       }
@@ -4948,9 +5383,6 @@
           }
         }
       }
-    },
-    "Moaiy" : {
-
     },
     "mode_decrypt" : {
       "extractionState" : "manual",
@@ -5224,6 +5656,108 @@
         }
       }
     },
+    "operation_decrypt_all_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Decryption failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解密失败"
+          }
+        }
+      }
+    },
+    "operation_decrypt_all_succeeded" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Decryption succeeded"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解密成功"
+          }
+        }
+      }
+    },
+    "operation_decrypt_partial_success" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some files failed to decrypt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分文件解密失败"
+          }
+        }
+      }
+    },
+    "operation_encrypt_all_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encryption failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加密失败"
+          }
+        }
+      }
+    },
+    "operation_encrypt_all_succeeded" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encryption succeeded"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加密成功"
+          }
+        }
+      }
+    },
+    "operation_encrypt_partial_success" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some files failed to encrypt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分文件加密失败"
+          }
+        }
+      }
+    },
     "operation_mode_title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5309,23 +5843,6 @@
         }
       }
     },
-    "operation_success_verify" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verified successfully"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "验证成功"
-          }
-        }
-      }
-    },
     "operation_success_sign_detached" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5339,6 +5856,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "分离式签名生成成功"
+          }
+        }
+      }
+    },
+    "operation_success_verify" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verified successfully"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证成功"
           }
         }
       }
@@ -5747,23 +6281,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索密钥..."
-          }
-        }
-      }
-    },
-    "brand_tagline_drag_and_drop" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Protect what matters with drag and drop."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "通过拖放守护重要内容。"
           }
         }
       }
@@ -6278,6 +6795,23 @@
         }
       }
     },
+    "sign_alert_title_failure" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signing Not Successful"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "签名未成功"
+          }
+        }
+      }
+    },
     "sign_default_key" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6291,6 +6825,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "默认密钥"
+          }
+        }
+      }
+    },
+    "sign_detached_file_picker_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select files to create detached signatures"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择要生成分离式签名的文件"
           }
         }
       }
@@ -6937,6 +7488,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "跟随系统"
+          }
+        }
+      }
+    },
+    "trust_alert_title_failure" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trust Update Not Successful"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "信任更新未成功"
           }
         }
       }
@@ -7638,6 +8206,23 @@
         }
       }
     },
+    "upload_alert_title_failure" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Upload Not Successful"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上传未成功"
+          }
+        }
+      }
+    },
     "upload_button" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7672,23 +8257,6 @@
         }
       }
     },
-    "upload_success_verification_hint" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You may receive a verification email from the keyserver. Please check your inbox to finish publishing."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "密钥服务器可能会发送验证邮件，请检查收件箱并按提示完成发布。"
-          }
-        }
-      }
-    },
     "upload_success_title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7702,6 +8270,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "上传成功"
+          }
+        }
+      }
+    },
+    "upload_success_verification_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You may receive a verification email from the keyserver. Please check your inbox to finish publishing."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥服务器可能会发送验证邮件，请检查收件箱并按提示完成发布。"
           }
         }
       }
@@ -7740,40 +8325,6 @@
         }
       }
     },
-    "verify_file_picker_message" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select the signed file or a signature file (.sig/.asc) to verify"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择已签名文件，或选择签名文件（.sig/.asc）进行验证"
-          }
-        }
-      }
-    },
-    "sign_detached_file_picker_message" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select files to create detached signatures"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择要生成分离式签名的文件"
-          }
-        }
-      }
-    },
     "verify_alert_title_failure" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7787,6 +8338,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "验证不成功"
+          }
+        }
+      }
+    },
+    "verify_file_picker_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select the signed file or a signature file (.sig/.asc) to verify"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择已签名文件，或选择签名文件（.sig/.asc）进行验证"
           }
         }
       }
@@ -7889,278 +8457,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法完成签名验证"
-          }
-        }
-      }
-    },
-    "error_operation_failed_generic" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "We couldn't complete this action. Please try again."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "操作未完成，请重试。"
-          }
-        }
-      }
-    },
-    "key_list_error_load_failed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "We couldn't load your keys right now. Please try again."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "暂时无法加载密钥，请重试。"
-          }
-        }
-      }
-    },
-    "backup_error_operation_failed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Backup wasn't completed. Please try again."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "备份未完成，请重试。"
-          }
-        }
-      }
-    },
-    "edit_error_operation_failed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "We couldn't apply this change. Please try again."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更改未生效，请重试。"
-          }
-        }
-      }
-    },
-    "key_list_alert_title_failure" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Couldn't Load Keys"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法加载密钥"
-          }
-        }
-      }
-    },
-    "encrypt_untrusted_recipient_title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recipient Is Not Fully Trusted"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "接收者未完全受信任"
-          }
-        }
-      }
-    },
-    "encrypt_untrusted_recipient_message" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This key is below full trust. Continue encryption anyway?"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "该密钥信任级别低于完全信任，仍要继续加密吗？"
-          }
-        }
-      }
-    },
-    "encrypt_alert_title_failure" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Encryption Not Successful"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "加密未成功"
-          }
-        }
-      }
-    },
-    "decrypt_alert_title_failure" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Decryption Not Successful"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "解密未成功"
-          }
-        }
-      }
-    },
-    "sign_alert_title_failure" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Signing Not Successful"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "签名未成功"
-          }
-        }
-      }
-    },
-    "backup_alert_title_failure" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Backup Not Successful"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "备份未成功"
-          }
-        }
-      }
-    },
-    "import_alert_title_failure" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Import Not Successful"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "导入未成功"
-          }
-        }
-      }
-    },
-    "export_alert_title_failure" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Export Not Successful"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "导出未成功"
-          }
-        }
-      }
-    },
-    "trust_alert_title_failure" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Trust Update Not Successful"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "信任更新未成功"
-          }
-        }
-      }
-    },
-    "edit_alert_title_failure" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Update Not Successful"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更新未成功"
-          }
-        }
-      }
-    },
-    "upload_alert_title_failure" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Upload Not Successful"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "上传未成功"
           }
         }
       }
@@ -8399,6 +8695,448 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "密码"
+          }
+        }
+      }
+    },
+    "yubikey_import_completion_complete_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Public key completion succeeded"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公钥补全成功"
+          }
+        }
+      }
+    },
+    "yubikey_import_completion_counts" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld public keys completed · %2$lld still stub-only"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已补全公钥 %1$lld 个 · 仍为存根 %2$lld 个"
+          }
+        }
+      }
+    },
+    "yubikey_import_completion_issue_keyserver_fetch_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not complete public keys from keyservers."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法通过 keyserver 补全公钥。"
+          }
+        }
+      }
+    },
+    "yubikey_import_completion_issue_keyserver_unreachable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configured keyservers are unreachable (offline or network issue)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已配置 keyserver 不可达（离线或网络异常）。"
+          }
+        }
+      }
+    },
+    "yubikey_import_completion_issue_missing_public_key_url" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Card has no public key URL configured."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "智能卡未配置公钥 URL。"
+          }
+        }
+      }
+    },
+    "yubikey_import_completion_issue_url_fetch_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to fetch from card URL."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从卡内 URL 获取失败。"
+          }
+        }
+      }
+    },
+    "yubikey_import_manual_pubkey_required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your SmartCard public key URL is missing or auto-download failed. Please import the public key manually (From File or From Keyserver); the SmartCard key will appear in the list after the public key is imported."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "您的 SmartCard pub key URL 未定义或自动下载失败。请手动导入 pub key（From File 或 From Keyserver）后，SmartCard key 才会显示在列表中。"
+          }
+        }
+      }
+    },
+    "yubikey_import_completion_keyserver_used" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fetched via keyserver: %1$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 keyserver 获取：%1$@"
+          }
+        }
+      }
+    },
+    "yubikey_import_completion_partial_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Public key completion partially succeeded"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公钥补全部分成功"
+          }
+        }
+      }
+    },
+    "yubikey_import_completion_stub_only_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only stubs imported"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅导入存根"
+          }
+        }
+      }
+    },
+    "yubikey_import_description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detect an inserted smartcard, fetch OpenPGP shadow stubs, and try to auto-import public keys from the card URL."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检测已插入智能卡，获取 OpenPGP 存根，并尝试从卡内公钥 URL 自动导入公钥。"
+          }
+        }
+      }
+    },
+    "yubikey_import_email_unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "(Email unavailable)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "（邮箱不可用）"
+          }
+        }
+      }
+    },
+    "yubikey_import_in_progress" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detecting card, fetching stubs, and completing public keys..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在检测设备、获取存根并补全公钥..."
+          }
+        }
+      }
+    },
+    "yubikey_import_info_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If card URL import fails or is missing, import the public key manually (From File or From Keyserver)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果卡内 URL 导入失败或未配置，请手动导入公钥（From File 或 From Keyserver）。"
+          }
+        }
+      }
+    },
+    "yubikey_import_name_unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "(Name unavailable)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "（名称不可用）"
+          }
+        }
+      }
+    },
+    "yubikey_import_result_card_serial" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Card %1$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "卡号 %1$@"
+          }
+        }
+      }
+    },
+    "yubikey_import_result_existing_stubs" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No new stubs were fetched. Detected %1$lld existing stubs for this card."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未获取到新的存根，已检测到该卡现有存根 %1$lld 个。"
+          }
+        }
+      }
+    },
+    "yubikey_import_result_more_items" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%1$lld more"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还有 %1$lld 项"
+          }
+        }
+      }
+    },
+    "yubikey_import_result_no_stubs" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No new stubs were added. Import matching public keys first if needed."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未新增存根。如有需要，请先导入对应公钥。"
+          }
+        }
+      }
+    },
+    "yubikey_import_result_summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld stubs fetched · Card %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld 个存根已获取 · 卡号 %2$@"
+          }
+        }
+      }
+    },
+    "yubikey_import_result_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fetched YubiKey stubs"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已获取的 YubiKey 存根"
+          }
+        }
+      }
+    },
+    "yubikey_pin_empty_error" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN is required"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入 PIN"
+          }
+        }
+      }
+    },
+    "yubikey_pin_field_label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YubiKey PIN"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YubiKey PIN"
+          }
+        }
+      }
+    },
+    "yubikey_pin_placeholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter PIN"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入 PIN"
+          }
+        }
+      }
+    },
+    "yubikey_pin_subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter your YubiKey PIN to continue this operation."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入 YubiKey PIN 以继续该操作。"
+          }
+        }
+      }
+    },
+    "yubikey_pin_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YubiKey PIN"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YubiKey PIN"
           }
         }
       }

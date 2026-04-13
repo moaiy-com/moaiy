@@ -111,6 +111,101 @@ struct PasswordInputSheet: View {
     }
 }
 
+struct YubiKeyPINSheet: View {
+    let fileName: String
+    let onConfirm: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var pin = ""
+    @State private var showError = false
+    @FocusState private var isPINFocused: Bool
+
+    var body: some View {
+        CredentialInputSheet(
+            titleKey: "yubikey_pin_title",
+            confirmButtonKey: "action_confirm",
+            isConfirmDisabled: pin.isEmpty,
+            onConfirm: submitPIN,
+            onCancel: onCancel,
+            subtitle: {
+                Text("yubikey_pin_subtitle")
+                    .font(MoaiyUI.Typography.sheetBody)
+                    .foregroundStyle(Color.moaiyTextSecondary)
+                    .multilineTextAlignment(.center)
+            },
+            input: {
+                pinInputField
+            },
+            context: AnyView(fileInfoView),
+            error: showError ? AnyView(errorBanner) : nil
+        )
+        .onAppear {
+            isPINFocused = true
+        }
+    }
+
+    private var fileInfoView: some View {
+        HStack {
+            Image(systemName: "memorychip.fill")
+                .foregroundStyle(Color.moaiyWarning)
+
+            Text(fileName)
+                .font(MoaiyUI.Typography.sheetBody)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Image(systemName: "arrow.right")
+                .foregroundStyle(Color.moaiyTextSecondary.opacity(0.75))
+
+            Image(systemName: "lock.open.fill")
+                .foregroundStyle(Color.moaiySuccess)
+        }
+        .padding(MoaiyUI.Spacing.md)
+        .moaiyBannerStyle(tint: Color.moaiyInfo)
+    }
+
+    private var pinInputField: some View {
+        VStack(alignment: .leading, spacing: MoaiyUI.Spacing.sm) {
+            Text("yubikey_pin_field_label")
+                .font(MoaiyUI.Typography.fieldLabel)
+                .foregroundStyle(Color.moaiyTextSecondary)
+
+            SecureField("yubikey_pin_placeholder", text: $pin)
+                .textFieldStyle(.roundedBorder)
+                .focused($isPINFocused)
+                .onSubmit {
+                    submitPIN()
+                }
+        }
+    }
+
+    private var errorBanner: some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Color.moaiyWarning)
+
+            Text("yubikey_pin_empty_error")
+                .font(MoaiyUI.Typography.caption)
+                .foregroundStyle(Color.moaiyTextPrimary)
+        }
+        .padding(.horizontal, MoaiyUI.Spacing.md)
+        .padding(.vertical, MoaiyUI.Spacing.sm)
+        .moaiyBannerStyle(tint: Color.moaiyWarning)
+        .transition(.opacity)
+    }
+
+    private func submitPIN() {
+        guard !pin.isEmpty else {
+            withAnimation {
+                showError = true
+            }
+            return
+        }
+
+        onConfirm(pin)
+    }
+}
+
 #Preview {
     PasswordInputSheet(
         fileName: "secret_document.pdf.gpg",

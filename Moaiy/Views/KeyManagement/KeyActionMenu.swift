@@ -209,6 +209,23 @@ enum KeyFileCryptoCoordinator {
     }
 
     @MainActor
+    static func hardwareTokenPresenceErrorMessageIfNeeded(
+        for key: GPGKey,
+        context: UserFacingErrorContext
+    ) async -> String? {
+        guard key.requiresHardwareTokenForPrivateOps else {
+            return nil
+        }
+
+        do {
+            _ = try await GPGService.shared.checkSmartCardPresence()
+            return nil
+        } catch {
+            return UserFacingErrorMapper.message(for: error, context: context)
+        }
+    }
+
+    @MainActor
     static func encrypt(
         requests: [KeyFileOperationRequest],
         recipientKey: String,
@@ -349,6 +366,7 @@ enum KeyActionAlertDecision: Equatable {
 
 struct KeyActionMenuAvailability {
     let hasSecretKey: Bool
+    let isSmartCardStub: Bool
     let isKeySigningMenuEnabled: Bool
     let isBackupRestoreMenuEnabled: Bool
 
@@ -358,6 +376,7 @@ struct KeyActionMenuAvailability {
         isBackupRestoreMenuEnabled: Bool = false
     ) {
         self.hasSecretKey = key.isSecret
+        self.isSmartCardStub = key.isSmartCardStub
         self.isKeySigningMenuEnabled = isKeySigningMenuEnabled
         self.isBackupRestoreMenuEnabled = isBackupRestoreMenuEnabled
     }
@@ -366,10 +385,10 @@ struct KeyActionMenuAvailability {
         KeyFileCryptoCoordinator.canPerform(.decrypt, keyIsSecret: hasSecretKey)
     }
     var canSignDetached: Bool { hasSecretKey }
-    var canEdit: Bool { hasSecretKey }
-    var canSignKey: Bool { hasSecretKey && isKeySigningMenuEnabled }
+    var canEdit: Bool { hasSecretKey && !isSmartCardStub }
+    var canSignKey: Bool { hasSecretKey && !isSmartCardStub && isKeySigningMenuEnabled }
     var showsSignKey: Bool { isKeySigningMenuEnabled }
-    var showsExportPrivateKey: Bool { hasSecretKey }
+    var showsExportPrivateKey: Bool { hasSecretKey && !isSmartCardStub }
     // Reserved feature: keep backup/restore implementation, hide entry for now.
     var showsBackupRestore: Bool { isBackupRestoreMenuEnabled }
 }
@@ -420,8 +439,11 @@ struct KeyActionMenu: View {
     @State private var showingEditSheet = false
     @State private var pendingPassphraseAction: PassphraseAction?
     @State private var pendingPassphraseAllowsEmpty = true
+    @State private var pendingYubiKeyPINAction: YubiKeyPINAction?
+    @State private var pendingYubiKeyPINFileName = ""
     @State private var pendingUntrustedEncryptURLs: [URL] = []
     @State private var operationResults: [OperationResult] = []
+    @State private var preferredOperationForResults: OperationType?
     @State private var showingResultOverlay = false
     @State private var promptAlert: PromptAlertContent?
 
@@ -437,6 +459,11 @@ struct KeyActionMenu: View {
         case decrypt([URL])
         case signDetached([URL])
         case exportSecret(URL)
+    }
+
+    private enum YubiKeyPINAction {
+        case decrypt([URL])
+        case signDetached([URL])
     }
 
     var body: some View {
@@ -529,6 +556,7 @@ struct KeyActionMenu: View {
         .moaiyOperationPromptHost(
             alert: $promptAlert,
             operationResults: $operationResults,
+            preferredOperation: $preferredOperationForResults,
             isShowingOperationResults: $showingResultOverlay,
             onOpenInFinder: { url in
                 NSWorkspace.shared.selectFile(
@@ -562,6 +590,33 @@ struct KeyActionMenu: View {
                 onCancel: {
                     pendingPassphraseAction = nil
                     pendingPassphraseAllowsEmpty = true
+                }
+            )
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { pendingYubiKeyPINAction != nil },
+                set: {
+                    if !$0 {
+                        pendingYubiKeyPINAction = nil
+                        pendingYubiKeyPINFileName = ""
+                    }
+                }
+            )
+        ) {
+            YubiKeyPINSheet(
+                fileName: pendingYubiKeyPINFileName,
+                onConfirm: { pin in
+                    guard let action = pendingYubiKeyPINAction else { return }
+                    pendingYubiKeyPINAction = nil
+                    pendingYubiKeyPINFileName = ""
+                    Task {
+                        await executeYubiKeyPINAction(action, pin: pin)
+                    }
+                },
+                onCancel: {
+                    pendingYubiKeyPINAction = nil
+                    pendingYubiKeyPINFileName = ""
                 }
             )
         }
@@ -637,6 +692,17 @@ struct KeyActionMenu: View {
         guard !selectedURLs.isEmpty else { return }
 
         Task { @MainActor in
+            if let hardwareTokenError = await KeyFileCryptoCoordinator.hardwareTokenPresenceErrorMessageIfNeeded(
+                for: key,
+                context: .decrypt
+            ) {
+                showError(
+                    title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
+                    message: hardwareTokenError
+                )
+                return
+            }
+
             if let mismatchMessage = await KeyFileCryptoCoordinator.decryptionKeyMismatchMessageIfNeeded(
                 for: selectedURLs,
                 preferredSecretKey: key.fingerprint,
@@ -646,6 +712,12 @@ struct KeyActionMenu: View {
                     title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
                     message: mismatchMessage
                 )
+                return
+            }
+
+            if key.isSmartCardStub {
+                pendingYubiKeyPINFileName = selectedURLs.first?.lastPathComponent ?? ""
+                pendingYubiKeyPINAction = .decrypt(selectedURLs)
                 return
             }
 
@@ -672,8 +744,27 @@ struct KeyActionMenu: View {
         let selectedURLs = panel.urls
         guard !selectedURLs.isEmpty else { return }
 
-        pendingPassphraseAllowsEmpty = true
-        pendingPassphraseAction = .signDetached(selectedURLs)
+        Task { @MainActor in
+            if let hardwareTokenError = await KeyFileCryptoCoordinator.hardwareTokenPresenceErrorMessageIfNeeded(
+                for: key,
+                context: .sign
+            ) {
+                showError(
+                    title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .sign)),
+                    message: hardwareTokenError
+                )
+                return
+            }
+
+            if key.isSmartCardStub {
+                pendingYubiKeyPINFileName = selectedURLs.first?.lastPathComponent ?? ""
+                pendingYubiKeyPINAction = .signDetached(selectedURLs)
+                return
+            }
+
+            pendingPassphraseAllowsEmpty = true
+            pendingPassphraseAction = .signDetached(selectedURLs)
+        }
     }
 
     private func verifyFromPicker() {
@@ -720,6 +811,16 @@ struct KeyActionMenu: View {
     }
 
     @MainActor
+    private func executeYubiKeyPINAction(_ action: YubiKeyPINAction, pin: String) async {
+        switch action {
+        case .decrypt(let urls):
+            await decryptFiles(urls, passphrase: pin)
+        case .signDetached(let urls):
+            await signFilesDetached(urls, passphrase: pin)
+        }
+    }
+
+    @MainActor
     private func encryptFiles(_ urls: [URL], allowUntrustedRecipients: Bool = false) async {
         let requests = collectFileOperationRequests(
             from: urls,
@@ -732,7 +833,8 @@ struct KeyActionMenu: View {
             allowUntrustedRecipients: allowUntrustedRecipients
         )
         showOperationResults(
-            KeyFileOperationResultMapper.encryptResults(from: outcomes)
+            KeyFileOperationResultMapper.encryptResults(from: outcomes),
+            preferredOperation: .encrypt
         )
     }
 
@@ -749,7 +851,8 @@ struct KeyActionMenu: View {
             preferredSecretKey: key.fingerprint
         )
         showOperationResults(
-            KeyFileOperationResultMapper.decryptResults(from: outcomes)
+            KeyFileOperationResultMapper.decryptResults(from: outcomes),
+            preferredOperation: .decrypt
         )
     }
 
@@ -1019,8 +1122,12 @@ struct KeyActionMenu: View {
         )
     }
 
-    private func showOperationResults(_ results: [OperationResult]) {
+    private func showOperationResults(
+        _ results: [OperationResult],
+        preferredOperation: OperationType? = nil
+    ) {
         guard !results.isEmpty else { return }
+        preferredOperationForResults = preferredOperation
         operationResults = results
         showingResultOverlay = true
     }

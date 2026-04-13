@@ -101,6 +101,20 @@ struct GPGErrorTests {
         #expect(error.errorDescription != nil)
         #expect(!error.errorDescription!.isEmpty)
     }
+
+    @Test("smart card errors return localized descriptions")
+    func smartCardErrors_errorDescription() {
+        let errors: [GPGError] = [
+            .smartCardNotPresent,
+            .smartCardUnavailable,
+            .smartCardPinInvalid
+        ]
+
+        for error in errors {
+            #expect(error.errorDescription != nil)
+            #expect(!(error.errorDescription ?? "").isEmpty)
+        }
+    }
     
     @Test("fileAccessDenied includes path")
     func fileAccessDenied_includesPath() {
@@ -153,7 +167,10 @@ struct GPGErrorTests {
             .fileAccessDenied("test"),
             .unsupportedKeyType("test"),
             .trustUpdateFailed("test"),
-            .keySigningFailed("test")
+            .keySigningFailed("test"),
+            .smartCardNotPresent,
+            .smartCardUnavailable,
+            .smartCardPinInvalid
         ]
         
         for error in errors {
@@ -187,5 +204,14 @@ struct GPGErrorTests {
         let error2 = GPGError.invalidPassphrase
         
         #expect(error1.localizedDescription != error2.localizedDescription)
+    }
+
+    @Test("Raw bad pin message maps to smart card pin error message")
+    func rawBadPin_mapsToSmartCardPinMessage() {
+        let mapped = UserFacingErrorMapper.message(
+            for: GPGError.executionFailed("gpg: signing failed: Bad PIN"),
+            context: .sign
+        )
+        #expect(mapped == String(localized: "error_smartcard_pin_invalid"))
     }
 }
