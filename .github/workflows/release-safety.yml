@@ -1,0 +1,94 @@
+name: Release Safety
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/release.yml"
+      - ".github/workflows/release-safety.yml"
+      - "scripts/release/**"
+      - "scripts/package_dmg.sh"
+      - "Moaiy/Moaiy.xcodeproj/project.pbxproj"
+      - "Moaiy/Resources/Assets.xcassets/**"
+      - "Moaiy/Resources/moaiy_icon.icon/**"
+      - "CHANGELOG.md"
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/release.yml"
+      - ".github/workflows/release-safety.yml"
+      - "scripts/release/**"
+      - "scripts/package_dmg.sh"
+      - "Moaiy/Moaiy.xcodeproj/project.pbxproj"
+      - "Moaiy/Resources/Assets.xcassets/**"
+      - "Moaiy/Resources/moaiy_icon.icon/**"
+      - "CHANGELOG.md"
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  release-safety:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Ensure release scripts are executable
+        run: |
+          chmod +x ./scripts/package_dmg.sh
+          chmod +x ./scripts/release/*.sh
+
+      - name: Asset catalog integrity guard
+        run: |
+          ./scripts/release/check_asset_catalog_integrity.sh
+
+      - name: Resolve release version from project
+        id: version
+        run: |
+          set -euo pipefail
+
+          PROJECT_FILE="Moaiy/Moaiy.xcodeproj/project.pbxproj"
+          mapfile -t versions < <(
+            grep -Eo 'MARKETING_VERSION = [0-9]+\.[0-9]+\.[0-9]+' "$PROJECT_FILE" \
+              | awk '{print $3}' \
+              | sort -u
+          )
+
+          if [[ "${#versions[@]}" -ne 1 ]]; then
+            echo "ERROR: expected exactly one MARKETING_VERSION, got: ${versions[*]:-<none>}"
+            exit 1
+          fi
+
+          echo "version=${versions[0]}" >> "$GITHUB_OUTPUT"
+          echo "Resolved release version: ${versions[0]}"
+
+      - name: Version sync guard (allow existing tag)
+        run: |
+          ./scripts/release/check_version_sync.sh \
+            --version "${{ steps.version.outputs.version }}" \
+            --allow-existing-tag
+
+      - name: Release smoke validation (arm64)
+        run: |
+          ./scripts/release/external_validation.sh \
+            --version "${{ steps.version.outputs.version }}" \
+            --label "ci-release-safety" \
+            --mode smoke \
+            --arch arm64
+
+      - name: Upload release safety validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-safety-validation
+          path: dist/validation
+          if-no-files-found: ignore
+          retention-days: 7

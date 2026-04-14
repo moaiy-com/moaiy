@@ -23,11 +23,10 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - name: Workaround iconcomposer crash on CI Xcode
+      - name: Asset Catalog Integrity Guard
         run: |
-          # Keep `.icon` as project icon in source, but skip compiling it in CI.
-          # Xcode 26.3 on GitHub runner can crash in CompileAssetCatalogVariant for folder.iconcomposer.icon.
-          perl -0pi -e 's/\n\s*0BAF8E632F8B923700C3ADB2 \/\* moaiy_icon\.icon in Resources \*\/,//' Moaiy/Moaiy.xcodeproj/project.pbxproj
+          chmod +x ./scripts/release/check_asset_catalog_integrity.sh
+          ./scripts/release/check_asset_catalog_integrity.sh
 
       - name: Build
         run: |
