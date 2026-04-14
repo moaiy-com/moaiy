@@ -48,6 +48,7 @@ final class KeyManagementViewModel {
     // Retry configuration
     private var retryCount = 0
     private let maxRetries = Constants.GPG.maxRetries
+    private let keyListLoadTimeout: TimeInterval = 15
     private var retryTask: Task<Void, Never>?
 
     // Expiration reminder service
@@ -153,39 +154,53 @@ final class KeyManagementViewModel {
         errorContext = .general
 
         do {
-            // Load both public and secret keys
-            let publicKeys = try await gpgService.listKeys(secretOnly: false)
+            // Load public keys first so UI can render quickly even if secret-key listing is slow.
+            let publicKeys = try await gpgService.listKeys(
+                secretOnly: false,
+                timeout: keyListLoadTimeout
+            )
             logger.info("Loaded \(publicKeys.count) public keys")
 
-            let secretKeys = try await gpgService.listKeys(secretOnly: true)
-            logger.info("Loaded \(secretKeys.count) secret keys")
+            keys = publicKeys.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+            isLoading = false
 
-            // Merge keys, marking secret ones
-            var allKeys = publicKeys
-            for secretKey in secretKeys {
-                if let index = allKeys.firstIndex(where: { $0.fingerprint == secretKey.fingerprint }) {
-                    allKeys[index] = GPGKey(
-                        id: secretKey.id,
-                        keyID: secretKey.keyID,
-                        fingerprint: secretKey.fingerprint,
-                        name: secretKey.name,
-                        email: secretKey.email,
-                        algorithm: secretKey.algorithm,
-                        keyLength: secretKey.keyLength,
-                        isSecret: true,
-                        createdAt: secretKey.createdAt,
-                        expiresAt: secretKey.expiresAt,
-                        trustLevel: secretKey.trustLevel,
-                        secretMaterial: secretKey.secretMaterial,
-                        cardSerialNumber: secretKey.cardSerialNumber
-                    )
-                } else {
-                    allKeys.append(secretKey)
+            do {
+                let secretKeys = try await gpgService.listKeys(
+                    secretOnly: true,
+                    timeout: keyListLoadTimeout
+                )
+                logger.info("Loaded \(secretKeys.count) secret keys")
+
+                // Merge keys, marking secret ones
+                var allKeys = publicKeys
+                for secretKey in secretKeys {
+                    if let index = allKeys.firstIndex(where: { $0.fingerprint == secretKey.fingerprint }) {
+                        allKeys[index] = GPGKey(
+                            id: secretKey.id,
+                            keyID: secretKey.keyID,
+                            fingerprint: secretKey.fingerprint,
+                            name: secretKey.name,
+                            email: secretKey.email,
+                            algorithm: secretKey.algorithm,
+                            keyLength: secretKey.keyLength,
+                            isSecret: true,
+                            createdAt: secretKey.createdAt,
+                            expiresAt: secretKey.expiresAt,
+                            trustLevel: secretKey.trustLevel,
+                            secretMaterial: secretKey.secretMaterial,
+                            cardSerialNumber: secretKey.cardSerialNumber
+                        )
+                    } else {
+                        allKeys.append(secretKey)
+                    }
                 }
+
+                keys = allKeys.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+                logger.info("Total keys after merge: \(self.keys.count)")
+            } catch {
+                logger.error("Failed to load secret keys, showing public keys only: \(error.localizedDescription)")
             }
 
-            keys = allKeys.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
-            logger.info("Total keys after merge: \(self.keys.count)")
             errorMessage = nil
             retryCount = 0 // Reset retry count on success
 

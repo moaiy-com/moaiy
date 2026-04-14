@@ -564,14 +564,19 @@ final class GPGService {
     // MARK: - Key Management
     
     /// List all keys (public and secret)
-    /// - Parameter secretOnly: If true, only list secret keys
+    /// - Parameters:
+    ///   - secretOnly: If true, only list secret keys
+    ///   - timeout: Command timeout in seconds
     /// - Returns: Array of GPGKey objects
-    func listKeys(secretOnly: Bool = false) async throws -> [GPGKey] {
+    func listKeys(
+        secretOnly: Bool = false,
+        timeout: TimeInterval = Constants.GPG.defaultTimeout
+    ) async throws -> [GPGKey] {
         let arguments = secretOnly
             ? ["--list-secret-keys", "--with-colons", "--fixed-list-mode"]
             : ["--list-keys", "--with-colons", "--fixed-list-mode"]
         
-        let result = try await executeGPG(arguments: arguments)
+        let result = try await executeGPG(arguments: arguments, timeout: timeout)
         
         guard let output = result.stdout else {
             // Empty keyring is a valid state for first launch in release builds.
