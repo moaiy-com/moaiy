@@ -196,8 +196,8 @@ else
   echo "Skipping x86_64 validation in fast mode."
 fi
 
-ARM64_DMG_NAME="Moaiy-${VERSION}-macos-arm64.dmg"
-X64_DMG_NAME="Moaiy-${VERSION}-macos-x86_64.dmg"
+ARM64_DMG_NAME="Moaiy-${VERSION}-macos-apple-silicon.dmg"
+X64_DMG_NAME="Moaiy-${VERSION}-macos-intel-chip.dmg"
 
 "$ROOT_DIR/scripts/package_dmg.sh" \
   --scheme Moaiy \

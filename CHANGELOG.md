@@ -12,6 +12,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Release execution checklist for v0.5.0 (`doc/v0.5.0-minimal-release-checklist.md`)
 - Core flow validation list for v0.5.0 (`doc/v0.5.0-core-flow-validation.md`)
 
+## [0.6.1] - 2026-04-14
+
+### Changed
+
+- Updated release DMG naming to use hardware-friendly labels:
+  - `Moaiy-X.Y.Z-macos-apple-silicon.dmg`
+  - `Moaiy-X.Y.Z-macos-intel-chip.dmg`
+- Bumped app marketing version from `0.6.0` to `0.6.1`.
+
 ## [0.5.3] - 2026-04-06
 
 ### Added

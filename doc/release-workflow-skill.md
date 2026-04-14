@@ -32,8 +32,8 @@ use the controlled fallback path.
 ```
 
 4. Review generated artifacts:
-   - `dist/release/vX.Y.Z-*/assets/Moaiy-X.Y.Z-macos-arm64.dmg`
-   - `dist/release/vX.Y.Z-*/assets/Moaiy-X.Y.Z-macos-x86_64.dmg`
+   - `dist/release/vX.Y.Z-*/assets/Moaiy-X.Y.Z-macos-apple-silicon.dmg`
+   - `dist/release/vX.Y.Z-*/assets/Moaiy-X.Y.Z-macos-intel-chip.dmg`
    - `dist/release/vX.Y.Z-*/SHA256SUMS.txt`
    - `dist/release/vX.Y.Z-*/release-manifest.json`
    - `dist/release/vX.Y.Z-*/release-notes.md`

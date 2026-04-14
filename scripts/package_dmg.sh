@@ -23,7 +23,7 @@ Options:
 Examples:
   ./scripts/package_dmg.sh
   ./scripts/package_dmg.sh --arch arm64 --version 0.5.3
-  ./scripts/package_dmg.sh --arch x86_64 --version 0.5.3 --artifact-name Moaiy-0.5.3-macos-x86_64.dmg
+  ./scripts/package_dmg.sh --arch x86_64 --version 0.5.3 --artifact-name Moaiy-0.5.3-macos-intel-chip.dmg
   ./scripts/package_dmg.sh --configuration Release
   ./scripts/package_dmg.sh --skip-build --open
 EOF
