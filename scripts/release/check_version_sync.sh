@@ -69,15 +69,27 @@ for path in "$PROJECT_FILE" "$CHANGELOG_FILE" "$RENDER_SCRIPT" "$TEMPLATE_FILE";
 done
 
 marketing_versions=()
-while IFS= read -r version_line; do
-  if [[ -n "$version_line" ]]; then
-    marketing_versions+=("$version_line")
-  fi
-done < <(
-  rg --no-heading -o 'MARKETING_VERSION = [0-9]+\.[0-9]+\.[0-9]+' "$PROJECT_FILE" \
-    | awk '{print $3}' \
-    | sort -u
-)
+if command -v rg >/dev/null 2>&1; then
+  while IFS= read -r version_line; do
+    if [[ -n "$version_line" ]]; then
+      marketing_versions+=("$version_line")
+    fi
+  done < <(
+    rg --no-heading -o 'MARKETING_VERSION = [0-9]+\.[0-9]+\.[0-9]+' "$PROJECT_FILE" \
+      | awk '{print $3}' \
+      | sort -u
+  )
+else
+  while IFS= read -r version_line; do
+    if [[ -n "$version_line" ]]; then
+      marketing_versions+=("$version_line")
+    fi
+  done < <(
+    grep -Eo 'MARKETING_VERSION = [0-9]+\.[0-9]+\.[0-9]+' "$PROJECT_FILE" \
+      | awk '{print $3}' \
+      | sort -u
+  )
+fi
 
 if [[ "${#marketing_versions[@]}" -eq 0 ]]; then
   echo "ERROR: no MARKETING_VERSION found in $PROJECT_FILE"
