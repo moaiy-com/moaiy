@@ -10,6 +10,7 @@ import AppKit
 
 struct SettingsView: View {
     @AppStorage("defaultKeyType") private var defaultKeyType = 0
+    @AppStorage(Constants.StorageKeys.appLanguageCode) private var appLanguageCode = AppLanguageOption.system.rawValue
     @State private var gpgVersion: String = ""
     @State private var activeGPGHomePath: String = ""
     
@@ -35,6 +36,23 @@ struct SettingsView: View {
                     Text("section_general")
                         .font(.headline)
                         .foregroundStyle(Color.moaiyTextPrimary)
+
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("setting_language")
+                            .foregroundStyle(Color.moaiyTextSecondary)
+
+                        Spacer()
+
+                        Picker("setting_language", selection: $appLanguageCode) {
+                            ForEach(AppLanguageOption.allCases, id: \.rawValue) { option in
+                                Text(languageOptionLabel(for: option))
+                                    .tag(option.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .fixedSize()
+                    }
 
                     Picker("setting_default_key_type", selection: $defaultKeyType) {
                         Text("key_type_rsa4096").tag(0)
@@ -147,9 +165,15 @@ struct SettingsView: View {
         .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 420, idealWidth: 560, maxWidth: 760)
         .task {
+            normalizeLanguageSelection()
             await loadGPGVersion()
             refreshKeyringState()
         }
+    }
+
+    @MainActor
+    private func normalizeLanguageSelection() {
+        appLanguageCode = AppLanguageOption.from(storageValue: appLanguageCode).rawValue
     }
     
     @MainActor
@@ -166,6 +190,17 @@ struct SettingsView: View {
     private func refreshKeyringState() {
         let service = GPGService.shared
         activeGPGHomePath = service.activeGPGHomePath
+    }
+
+    private func languageOptionLabel(for option: AppLanguageOption) -> LocalizedStringKey {
+        switch option {
+        case .system:
+            return "setting_language_option_system"
+        case .english:
+            return "setting_language_option_english"
+        case .chineseSimplified:
+            return "setting_language_option_chinese_simplified"
+        }
     }
 }
 

@@ -128,6 +128,9 @@ enum Constants {
         /// Security-scoped bookmark for external GPG home directory
         static let externalGPGHomeBookmark = "com.moaiy.externalGPGHomeBookmark"
 
+        /// App language preference
+        static let appLanguageCode = "appLanguageCode"
+
     }
     
     // MARK: - Backup
@@ -141,6 +144,27 @@ enum Constants {
 
         /// Maximum accepted backup key file size during restore (10 MB)
         static let maxImportFileSizeBytes = 10 * 1024 * 1024
+    }
+}
+
+enum AppLanguageOption: String, CaseIterable {
+    case system
+    case english = "en"
+    case chineseSimplified = "zh-Hans"
+
+    static func from(storageValue: String) -> AppLanguageOption {
+        AppLanguageOption(rawValue: storageValue) ?? .system
+    }
+
+    var locale: Locale {
+        switch self {
+        case .system:
+            return .autoupdatingCurrent
+        case .english:
+            return Locale(identifier: "en")
+        case .chineseSimplified:
+            return Locale(identifier: "zh-Hans")
+        }
     }
 }
 
