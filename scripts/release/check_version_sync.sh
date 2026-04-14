@@ -106,9 +106,16 @@ if [[ "${marketing_versions[0]}" != "$VERSION" ]]; then
   exit 1
 fi
 
-if ! rg -q "^## \\[$VERSION\\]" "$CHANGELOG_FILE"; then
-  echo "ERROR: CHANGELOG missing heading for $VERSION (expected: ## [$VERSION])"
-  exit 1
+if command -v rg >/dev/null 2>&1; then
+  if ! rg -q "^## \\[$VERSION\\]" "$CHANGELOG_FILE"; then
+    echo "ERROR: CHANGELOG missing heading for $VERSION (expected: ## [$VERSION])"
+    exit 1
+  fi
+else
+  if ! grep -q "^## \\[$VERSION\\]" "$CHANGELOG_FILE"; then
+    echo "ERROR: CHANGELOG missing heading for $VERSION (expected: ## [$VERSION])"
+    exit 1
+  fi
 fi
 
 required_tokens=(
