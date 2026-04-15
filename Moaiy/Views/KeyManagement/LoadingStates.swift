@@ -172,7 +172,7 @@ struct ErrorView: View {
 }
 
 #Preview("Error View") {
-    ErrorView(message: "Failed to load keys") {
+    ErrorView(message: AppLocalization.string("key_list_error_load_failed")) {
         print("Retry")
     }
 }

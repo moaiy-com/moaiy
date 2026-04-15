@@ -133,7 +133,7 @@ final class KeyManagementViewModel {
             guard gpgService.isReady else {
                 logger.error("GPGService readiness timed out")
                 errorContext = .general
-                errorMessage = String(localized: "error_gpg_not_found")
+                errorMessage = AppLocalization.string("error_gpg_not_found")
                 return
             }
 
@@ -520,11 +520,11 @@ final class KeyManagementViewModel {
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
             isLoading = false
-            throw GPGError.invalidOutput(String(localized: "error_invalid_output"))
+            throw GPGError.invalidOutput(AppLocalization.string("error_invalid_output"))
         }
         guard isValidEmail(trimmedEmail) else {
             isLoading = false
-            throw GPGError.invalidOutput(String(localized: "error_invalid_output"))
+            throw GPGError.invalidOutput(AppLocalization.string("error_invalid_output"))
         }
 
         do {
@@ -706,11 +706,11 @@ enum KeyTypeFilter: String, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .all:
-            return String(localized: "filter_all_keys")
+            return AppLocalization.string("filter_all_keys")
         case .publicOnly:
-            return String(localized: "filter_public_keys")
+            return AppLocalization.string("filter_public_keys")
         case .secretOnly:
-            return String(localized: "filter_secret_keys")
+            return AppLocalization.string("filter_secret_keys")
         }
     }
 }

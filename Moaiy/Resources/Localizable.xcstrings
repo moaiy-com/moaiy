@@ -14,6 +14,12 @@
             "state" : "new",
             "value" : "%1$@ · %2$@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$@"
+          }
         }
       }
     },
@@ -24,6 +30,12 @@
             "state" : "new",
             "value" : "%1$@ (%2$@)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ (%2$@)"
+          }
         }
       }
     },
@@ -32,6 +44,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "%1$@ • %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "%1$@ • %2$@"
           }
         }
@@ -47,6 +65,12 @@
             "state" : "new",
             "value" : "%1$lld %2$@ • %3$lld %4$@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld %2$@ • %3$lld %4$@"
+          }
         }
       }
     },
@@ -55,6 +79,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "%1$lld/%2$lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "%1$lld/%2$lld"
           }
         }
@@ -7623,7 +7653,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "完全信任"
+            "value" : "可信度较高，可正常用于验证。"
           }
         }
       }
@@ -7640,7 +7670,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "边缘信任（需要更多签名）"
+            "value" : "仅部分可信，通常还需要更多有效签名。"
           }
         }
       }
@@ -7657,7 +7687,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "不受信任"
+            "value" : "当前不信任，建议先核对指纹再使用。"
           }
         }
       }
@@ -7674,7 +7704,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "终极信任（您自己的密钥）"
+            "value" : "最高级别，通常仅用于您自己掌控的密钥。"
           }
         }
       }
@@ -7691,7 +7721,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "信任级别尚未计算"
+            "value" : "尚未完成信任评估，建议先核对来源与指纹。"
           }
         }
       }
@@ -7708,7 +7738,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "完全"
+            "value" : "已信任"
           }
         }
       }
@@ -7725,7 +7755,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "边缘"
+            "value" : "部分信任"
           }
         }
       }
@@ -7742,7 +7772,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无"
+            "value" : "不信任"
           }
         }
       }
@@ -7759,7 +7789,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "终极"
+            "value" : "最高信任"
           }
         }
       }
@@ -7776,7 +7806,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未知"
+            "value" : "未评估"
           }
         }
       }
@@ -9153,7 +9183,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "YubiKey PIN"
+            "value" : "YubiKey PIN 码"
           }
         }
       }
@@ -9204,7 +9234,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "YubiKey PIN"
+            "value" : "YubiKey PIN 码"
           }
         }
       }

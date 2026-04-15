@@ -118,7 +118,7 @@ struct SettingsView: View {
                                 .scaleEffect(0.7)
                                 .frame(width: 16, height: 16)
                         } else {
-                            Text("\(gpgVersion) · \(String(localized: "about_gpg_embedded"))")
+                            Text("\(gpgVersion) · \(AppLocalization.string("about_gpg_embedded"))")
                                 .foregroundStyle(Color.moaiyTextPrimary)
                                 .multilineTextAlignment(.trailing)
                         }
@@ -182,7 +182,7 @@ struct SettingsView: View {
         if let version = service.gpgVersion {
             gpgVersion = version
         } else {
-            gpgVersion = String(localized: "about_gpg_not_available")
+            gpgVersion = AppLocalization.string("about_gpg_not_available")
         }
     }
 

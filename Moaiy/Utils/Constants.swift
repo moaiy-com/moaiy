@@ -168,6 +168,44 @@ enum AppLanguageOption: String, CaseIterable {
     }
 }
 
+enum AppLocalization {
+    static var selectedLanguage: AppLanguageOption {
+        let storedLanguage = UserDefaults.standard.string(forKey: Constants.StorageKeys.appLanguageCode)
+            ?? AppLanguageOption.system.rawValue
+        return AppLanguageOption.from(storageValue: storedLanguage)
+    }
+
+    static var locale: Locale {
+        selectedLanguage.locale
+    }
+
+    static func string(_ key: String.LocalizationValue) -> String {
+        String(localized: key, bundle: localizedBundle, locale: locale)
+    }
+
+    static func localizedString(forKey key: String) -> String {
+        localizedBundle.localizedString(forKey: key, value: nil, table: nil)
+    }
+
+    private static var localizedBundle: Bundle {
+        switch selectedLanguage {
+        case .system:
+            return .main
+        case .english:
+            return bundle(for: "en") ?? .main
+        case .chineseSimplified:
+            return bundle(for: "zh-Hans") ?? .main
+        }
+    }
+
+    private static func bundle(for languageIdentifier: String) -> Bundle? {
+        guard let path = Bundle.main.path(forResource: languageIdentifier, ofType: "lproj") else {
+            return nil
+        }
+        return Bundle(path: path)
+    }
+}
+
 enum SecureTempStorage {
     private static let fileManager = FileManager.default
     private static let rootDirectoryName = "com.moaiy.secure-temp"

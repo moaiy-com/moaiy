@@ -180,7 +180,7 @@ struct ResultRowView: View {
             OperationResult.failure(
                 fileURL: URL(fileURLWithPath: "/Users/test/secret.txt"),
                 operation: .decrypt,
-                errorMessage: "No secret key available"
+                errorMessage: AppLocalization.string("error_decryption_requires_private_key")
             )
         ],
         preferredOperation: nil,

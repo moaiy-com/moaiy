@@ -212,6 +212,26 @@ struct GPGErrorTests {
             for: GPGError.executionFailed("gpg: signing failed: Bad PIN"),
             context: .sign
         )
-        #expect(mapped == String(localized: "error_smartcard_pin_invalid"))
+        #expect(mapped == AppLocalization.string("error_smartcard_pin_invalid"))
+    }
+
+    @Test("App localization string follows selected app language")
+    func appLocalization_stringFollowsSelectedLanguage() {
+        let defaults = UserDefaults.standard
+        let key = Constants.StorageKeys.appLanguageCode
+        let originalValue = defaults.string(forKey: key)
+        defer {
+            if let originalValue {
+                defaults.set(originalValue, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        defaults.set(AppLanguageOption.chineseSimplified.rawValue, forKey: key)
+        #expect(AppLocalization.string("operation_success_sign_detached") == "分离式签名生成成功")
+
+        defaults.set(AppLanguageOption.english.rawValue, forKey: key)
+        #expect(AppLocalization.string("operation_success_sign_detached") == "Detached signature created successfully")
     }
 }

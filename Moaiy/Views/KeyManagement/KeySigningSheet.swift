@@ -176,8 +176,8 @@ struct KeySigningSheet: View {
                     trustLevel: setTrustAfterSigning ? selectedTrustLevel : nil
                 )
                 let successMessage = setTrustAfterSigning
-                    ? String(localized: "sign_success_message")
-                    : String(localized: "sign_success_message_no_trust_update")
+                    ? AppLocalization.string("sign_success_message")
+                    : AppLocalization.string("sign_success_message_no_trust_update")
                 promptAlert = PromptAlertContent.success(
                     message: successMessage,
                     onAcknowledge: { dismiss() }

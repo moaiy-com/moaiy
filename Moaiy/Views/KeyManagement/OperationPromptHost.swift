@@ -137,7 +137,9 @@ private struct PromptAlertHostModifier: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        content.alert(alert?.title ?? "operation_success", isPresented: isAlertPresented) {
+        content
+            .environment(\.locale, AppLocalization.locale)
+            .alert(alert?.title ?? "operation_success", isPresented: isAlertPresented) {
             if let secondaryActionTitle = alert?.secondaryActionTitle {
                 Button(secondaryActionTitle, role: alert?.secondaryActionRole) {
                     let secondaryAction = alert?.onSecondaryAction
@@ -150,9 +152,9 @@ private struct PromptAlertHostModifier: ViewModifier {
                 alert = nil
                 action?()
             }
-        } message: {
-            Text(alert?.message ?? "")
-        }
+            } message: {
+                Text(alert?.message ?? "")
+            }
     }
 }
 
@@ -177,6 +179,7 @@ private struct OperationPromptHostModifier: ViewModifier {
                     },
                     onOpenInFinder: onOpenInFinder
                 )
+                .environment(\.locale, AppLocalization.locale)
             }
     }
 }

@@ -83,10 +83,10 @@ struct CreateKeyView: View {
 
             Form {
                 Section {
-                    TextField(String(localized: "field_key_name"), text: $name)
+                    TextField(AppLocalization.string("field_key_name"), text: $name)
                         .textContentType(.name)
 
-                    TextField(String(localized: "field_email"), text: $email)
+                    TextField(AppLocalization.string("field_email"), text: $email)
                         .textContentType(.emailAddress)
                         .autocorrectionDisabled()
 
@@ -200,7 +200,7 @@ struct CreateKeyView: View {
         if password.isEmpty {
             promptAlert = PromptAlertContent.destructiveConfirmation(
                 title: "create_key_empty_passphrase_title",
-                message: String(localized: "create_key_empty_passphrase_message"),
+                message: AppLocalization.string("create_key_empty_passphrase_message"),
                 confirmTitle: "create_key_empty_passphrase_confirm",
                 onConfirm: { createKey() }
             )

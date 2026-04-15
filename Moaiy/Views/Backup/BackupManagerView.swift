@@ -203,7 +203,7 @@ struct BackupManagerView: View {
     private func createBackup() {
         // Create save panel
         let savePanel = NSSavePanel()
-        savePanel.title = String(localized: "backup_create_section")
+        savePanel.title = AppLocalization.string("backup_create_section")
         savePanel.nameFieldStringValue = "Moaiy_Backup_\(Date().formatted(date: .abbreviated, time: .omitted)).zip"
         savePanel.allowedContentTypes = [.zip]
         savePanel.canCreateDirectories = true
@@ -247,7 +247,7 @@ struct BackupManagerView: View {
                 saveBackupHistory()
 
                 promptAlert = PromptAlertContent.success(
-                    message: String(localized: "backup_success_message")
+                    message: AppLocalization.string("backup_success_message")
                 )
             } catch {
                 promptAlert = PromptAlertContent.failure(
@@ -374,7 +374,7 @@ struct BackupManagerView: View {
             do {
                 // Create open panel
                 let openPanel = NSOpenPanel()
-                openPanel.title = String(localized: "backup_restore_section")
+                openPanel.title = AppLocalization.string("backup_restore_section")
                 openPanel.allowedContentTypes = [.folder, .zip]
                 openPanel.canChooseDirectories = true
                 openPanel.canChooseFiles = true
@@ -389,8 +389,8 @@ struct BackupManagerView: View {
 
                 if summary.failedFiles.isEmpty {
                     let restoreSuccessMessage = summary.usedLegacyRestrictedPath
-                        ? String(localized: "restore_success_message_legacy_restricted")
-                        : String(localized: "restore_success_message")
+                        ? AppLocalization.string("restore_success_message_legacy_restricted")
+                        : AppLocalization.string("restore_success_message")
                     promptAlert = PromptAlertContent.success(
                         message: restoreSuccessMessage
                     )
@@ -734,7 +734,7 @@ enum BackupIntegrityError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidManifest, .fileSetMismatch, .fileHashMismatch, .unsafeFile:
-            return String(localized: "backup_error_invalid_format")
+            return AppLocalization.string("backup_error_invalid_format")
         }
     }
 }
@@ -894,11 +894,11 @@ private enum BackupError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .manifestNotFound:
-            return String(localized: "backup_error_manifest_not_found")
+            return AppLocalization.string("backup_error_manifest_not_found")
         case .invalidBackupFormat:
-            return String(localized: "backup_error_invalid_format")
+            return AppLocalization.string("backup_error_invalid_format")
         case .secretKeyExportIncomplete(let summary):
-            let firstError = summary.firstSecretKeyExportError ?? String(localized: "error_export_failed")
+            let firstError = summary.firstSecretKeyExportError ?? AppLocalization.string("error_export_failed")
             return "\(firstError) (\(summary.exportedSecretKeyCount)/\(summary.requestedSecretKeyCount))"
         }
     }
@@ -925,8 +925,8 @@ struct BackupStatusCard: View {
                 if let date = lastBackupDate {
                     Text(
                         String(
-                            format: String(localized: "backup_status_last"),
-                            locale: Locale.current,
+                            format: AppLocalization.string("backup_status_last"),
+                            locale: AppLocalization.locale,
                             date.formatted(date: .long, time: .shortened)
                         )
                     )
@@ -1011,12 +1011,12 @@ struct BackupHistoryRow: View {
             let exportedSecretKeyCount = record.exportedSecretKeyCount
         {
             if record.includeSecretKeys {
-                return "\(exportedPublicKeyCount) \(String(localized: "key_type_public")) • \(exportedSecretKeyCount) \(String(localized: "backup_keys_secret"))"
+                return "\(exportedPublicKeyCount) \(AppLocalization.string("key_type_public")) • \(exportedSecretKeyCount) \(AppLocalization.string("backup_keys_secret"))"
             }
-            return "\(exportedPublicKeyCount) \(String(localized: "key_type_public"))"
+            return "\(exportedPublicKeyCount) \(AppLocalization.string("key_type_public"))"
         }
 
-        return "\(record.keyCount) \(String(localized: "backup_keys_total")) • \(record.includeSecretKeys ? String(localized: "backup_include_secret") : String(localized: "key_type_public"))"
+        return "\(record.keyCount) \(AppLocalization.string("backup_keys_total")) • \(record.includeSecretKeys ? AppLocalization.string("backup_include_secret") : AppLocalization.string("key_type_public"))"
     }
 }
 

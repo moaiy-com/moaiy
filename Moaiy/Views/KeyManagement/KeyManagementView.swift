@@ -76,10 +76,12 @@ struct KeyManagementView: View {
         .sheet(isPresented: $showingCreateKey) {
             CreateKeyView()
                 .environment(viewModel)
+                .environment(\.locale, AppLocalization.locale)
         }
         .sheet(isPresented: $showingImportKey) {
             ImportKeySheet()
                 .environment(viewModel)
+                .environment(\.locale, AppLocalization.locale)
         }
         .moaiyPromptAlertHost(alert: $promptAlert)
         .onAppear {
@@ -109,8 +111,8 @@ struct KeyManagementView: View {
         PromptAlertContent.destructiveConfirmation(
             title: "confirm_delete_key_title",
             message: String(
-                format: String(localized: "confirm_delete_key_message"),
-                locale: Locale.current,
+                format: AppLocalization.string("confirm_delete_key_message"),
+                locale: AppLocalization.locale,
                 key.name
             ),
             confirmTitle: "action_delete",

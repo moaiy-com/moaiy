@@ -257,7 +257,7 @@ struct ExpirationEditView: View {
                     passphrase: passphrase.isEmpty ? nil : passphrase
                 )
                 passphrase = ""
-                onSuccess(String(localized: "edit_expiration_success"))
+                onSuccess(AppLocalization.string("edit_expiration_success"))
             } catch {
                 promptAlert = PromptAlertContent.failure(
                     context: .keyEdit,
@@ -376,7 +376,7 @@ struct UserIDsEditView: View {
                 newUserName = ""
                 newUserEmail = ""
                 passphrase = ""
-                onSuccess(String(localized: "edit_userid_success"))
+                onSuccess(AppLocalization.string("edit_userid_success"))
             } catch {
                 promptAlert = PromptAlertContent.failure(
                     context: .keyEdit,
@@ -470,7 +470,7 @@ struct PassphraseEditView: View {
                 currentPassphrase = ""
                 newPassphrase = ""
                 confirmPassphrase = ""
-                onSuccess(String(localized: "edit_passphrase_success"))
+                onSuccess(AppLocalization.string("edit_passphrase_success"))
             } catch {
                 promptAlert = PromptAlertContent.failure(
                     context: .keyEdit,

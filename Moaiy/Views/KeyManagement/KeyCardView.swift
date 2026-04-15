@@ -265,7 +265,7 @@ struct KeyCardView: View {
         if let expiresAt = key.expiresAt {
             expirationText = expiresAt.formatted(date: .abbreviated, time: .omitted)
         } else {
-            expirationText = String(localized: "statistics_no_expiration")
+            expirationText = AppLocalization.string("statistics_no_expiration")
         }
 
         return "\(createdText) - \(expirationText)"
@@ -378,7 +378,7 @@ struct KeyCardView: View {
         pendingDetectedFiles = detectedFiles
         promptAlert = PromptAlertContent.destructiveConfirmation(
             title: "encrypt_untrusted_recipient_title",
-            message: String(localized: "encrypt_untrusted_recipient_message"),
+            message: AppLocalization.string("encrypt_untrusted_recipient_message"),
             onConfirm: {
                 let files = pendingDetectedFiles
                 pendingDetectedFiles = []
@@ -412,7 +412,7 @@ struct KeyCardView: View {
                 OperationResult.failure(
                     fileURL: url,
                     operation: .decrypt,
-                    errorMessage: String(localized: "error_decryption_requires_private_key")
+                    errorMessage: AppLocalization.string("error_decryption_requires_private_key")
                 )
             )
             return true
@@ -520,8 +520,8 @@ struct KeyCardView: View {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
         panel.resolvesAliases = true
-        panel.message = String(localized: "action_select_files")
-        panel.prompt = String(localized: "action_select_files")
+        panel.message = AppLocalization.string("action_select_files")
+        panel.prompt = AppLocalization.string("action_select_files")
 
         guard panel.runModal() == .OK else { return }
         handleDroppedFiles(urls: panel.urls)
