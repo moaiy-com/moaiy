@@ -9,6 +9,10 @@ Language policy:
 
 ## Core Architecture & Product Engineering
 
+### [Project Info](./project-info.md)
+- Current release status and repository references
+- Localization strategy and supported UI languages
+
 ### [Technical Architecture](./technical-architecture.md)
 - Layered system design
 - Core services and data models
@@ -25,6 +29,15 @@ Language policy:
 ### [Xcode Integration Guide](./xcode-integration-guide.md)
 - Project integration notes
 - Build and configuration guidance
+
+## Release Operations
+
+### [Release Workflow Guide](./release-workflow-skill.md)
+- Tracked release process specification
+- Workflow split, publish gate, and fallback policy
+
+### [Notification Permission Regression Script (v0.6.0)](./v0.6.0-notification-permission-regression-script.md)
+- Manual runbook for reminder permission regression validation
 
 ## Compliance & Security Engineering
 
@@ -56,7 +69,7 @@ Language policy:
 ### [Export Compliance Mapping](./app-store/export-compliance.md)
 ### [Privacy Manifest Mapping](./app-store/privacy-manifest-mapping.md)
 
-## Release Documentation (v0.5.0)
+## Historical Release Documentation (v0.5.0)
 
 ### [Minimal Release Checklist](./v0.5.0-minimal-release-checklist.md)
 ### [Core Flow Validation](./v0.5.0-core-flow-validation.md)
@@ -66,18 +79,15 @@ Language policy:
 ### [External Validation Pack](./v0.5.0-external-validation-pack.md)
 ### [v0.5.0 Release Notes](./v0.5.0-release-notes.md)
 
-## Release Documentation (v0.6.0)
-
-### [Notification Permission Regression Script](./v0.6.0-notification-permission-regression-script.md)
-
 ## Root-Level References
 
 - [Project README](../README.md)
 - [Contribution Guide](../CONTRIBUTING.md)
 - [Security Policy](../SECURITY.md)
 - [Changelog](../CHANGELOG.md)
+- [Latest Release (v0.6.5)](https://github.com/moaiy-com/moaiy/releases/tag/v0.6.5)
 - [Disclaimer](../DISCLAIMER.md)
 
 ---
 
-Last updated: 2026-04-11
+Last updated: 2026-04-15

@@ -8,6 +8,8 @@ Moaiy is an open-source macOS app for encryption and recovery workflows, designe
 
 **[Chinese Version](./README_CN.md)**
 
+Latest stable release: `v0.6.5`
+
 ## App Screenshot
 
 ![Moaiy main key management view](./doc/images/moaiy-main-ui.png)
@@ -107,12 +109,11 @@ moaiy/
 
 - [Contributing Guide](./CONTRIBUTING.md)
 - [Documentation Index](./doc/README.md)
+- [Release Workflow Guide](./doc/release-workflow-skill.md)
 - [Technical Architecture](./doc/technical-architecture.md)
+- [Technical Validation Status](./doc/technical-validation-status.md)
 - [Xcode Integration Guide](./doc/xcode-integration-guide.md)
 - [Bundled GPG Summary](./doc/bundled-gpg-summary.md)
-- [v0.5.0 Minimal Release Checklist](./doc/v0.5.0-minimal-release-checklist.md)
-- [v0.5.0 Core Flow Validation](./doc/v0.5.0-core-flow-validation.md)
-- [v0.5.0 Release Blockers](./doc/v0.5.0-release-blockers.md)
 - [Changelog](./CHANGELOG.md)
 
 ## Localization
