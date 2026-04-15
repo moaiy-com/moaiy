@@ -433,7 +433,16 @@
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				ar,
+				de,
 				en,
+				es,
+				fr,
+				hi,
+				ja,
+				ko,
+				"pt-BR",
+				ru,
 				Base,
 				"zh-Hans",
 			);

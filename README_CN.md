@@ -117,7 +117,7 @@ moaiy/
 
 ## 本地化
 
-- UI 语言：English + 简体中文
+- UI 语言：English、简体中文、西班牙语、葡萄牙语（巴西）、印地语、阿拉伯语、法语、德语、日语、韩语、俄语
 - 字符串资源：`Moaiy/Resources/Localizable.xcstrings`
 
 ## 安全

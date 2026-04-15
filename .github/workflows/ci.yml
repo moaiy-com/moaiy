@@ -28,6 +28,11 @@ jobs:
           chmod +x ./scripts/release/check_asset_catalog_integrity.sh
           ./scripts/release/check_asset_catalog_integrity.sh
 
+      - name: Localization Integrity Guard
+        run: |
+          chmod +x ./scripts/check_localization.py
+          ./scripts/check_localization.py --catalog Moaiy/Resources/Localizable.xcstrings
+
       - name: Build
         run: |
           xcodebuild -project Moaiy/Moaiy.xcodeproj \

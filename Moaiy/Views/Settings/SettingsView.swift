@@ -45,7 +45,7 @@ struct SettingsView: View {
 
                         Picker("setting_language", selection: $appLanguageCode) {
                             ForEach(AppLanguageOption.allCases, id: \.rawValue) { option in
-                                Text(languageOptionLabel(for: option))
+                                Text(LocalizedStringKey(option.settingsDisplayKey))
                                     .tag(option.rawValue)
                             }
                         }
@@ -190,17 +190,6 @@ struct SettingsView: View {
     private func refreshKeyringState() {
         let service = GPGService.shared
         activeGPGHomePath = service.activeGPGHomePath
-    }
-
-    private func languageOptionLabel(for option: AppLanguageOption) -> LocalizedStringKey {
-        switch option {
-        case .system:
-            return "setting_language_option_system"
-        case .english:
-            return "setting_language_option_english"
-        case .chineseSimplified:
-            return "setting_language_option_chinese_simplified"
-        }
     }
 }
 
