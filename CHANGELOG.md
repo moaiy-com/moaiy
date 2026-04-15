@@ -12,6 +12,25 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Release execution checklist for v0.5.0 (`doc/v0.5.0-minimal-release-checklist.md`)
 - Core flow validation list for v0.5.0 (`doc/v0.5.0-core-flow-validation.md`)
 
+## [0.6.5] - 2026-04-15
+
+### Added
+
+- Expanded in-app language options to 11 locales (`en`, `zh-Hans`, `es`, `pt-BR`, `hi`, `ar`, `fr`, `de`, `ja`, `ko`, `ru`) while keeping default `Follow System`.
+- Added localization integrity automation (`scripts/check_localization.py`) and CI hard-fail gate for missing keys/placeholder mismatches.
+
+### Changed
+
+- Refactored language metadata and dynamic bundle resolution for app-level localization selection in Settings.
+- Updated project locale declarations (`knownRegions`) and completed string catalog coverage for newly supported locales.
+- Bumped app marketing version from `0.6.1` to `0.6.5`.
+
+### Fixed
+
+- Fixed runtime language switching so main UI text updates immediately without app restart.
+- Fixed Key Edit sheet layout overflow for long localized content (notably Japanese/Russian) with adaptive tab presentation.
+- Right-aligned the Settings `Default Key Type` control for consistent form alignment.
+
 ## [0.6.1] - 2026-04-14
 
 ### Changed
