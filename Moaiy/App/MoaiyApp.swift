@@ -28,6 +28,7 @@ struct MoaiyApp: App {
     var body: some Scene {
         WindowGroup {
             MainView()
+                .id("main-\(appLanguageCode)")
                 .frame(
                     minWidth: Constants.UI.minWindowWidth,
                     minHeight: Constants.UI.minWindowHeight
@@ -57,6 +58,7 @@ struct MoaiyApp: App {
         #if os(macOS)
         Settings {
             SettingsView()
+                .id("settings-\(appLanguageCode)")
                 .environment(\.locale, appLocale)
         }
         #endif
