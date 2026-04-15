@@ -60,7 +60,7 @@ struct ExpirationReminderSettingsView: View {
             guard isShowing else { return }
             promptAlert = PromptAlertContent.info(
                 title: "expiration_permission_title",
-                message: String(localized: "expiration_permission_message"),
+                message: AppLocalization.string("expiration_permission_message"),
                 onAcknowledge: {
                     showingPermissionAlert = false
                 },
@@ -202,8 +202,8 @@ struct ExpirationReminderSettingsView: View {
                 }) {
                     Label(
                         String(
-                            format: String(localized: "expiration_notify_expired"),
-                            locale: Locale.current,
+                            format: AppLocalization.string("expiration_notify_expired"),
+                            locale: AppLocalization.locale,
                             Int64(reminderService.expiredKeys.count)
                         ),
                         systemImage: "exclamationmark.triangle.fill"
@@ -220,8 +220,8 @@ struct ExpirationReminderSettingsView: View {
                 }) {
                     Label(
                         String(
-                            format: String(localized: "expiration_notify_expiring"),
-                            locale: Locale.current,
+                            format: AppLocalization.string("expiration_notify_expiring"),
+                            locale: AppLocalization.locale,
                             Int64(reminderService.expiringSoonKeys.count)
                         ),
                         systemImage: "clock.fill"

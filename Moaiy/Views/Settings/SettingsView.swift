@@ -10,6 +10,7 @@ import AppKit
 
 struct SettingsView: View {
     @AppStorage("defaultKeyType") private var defaultKeyType = 0
+    @AppStorage(Constants.StorageKeys.appLanguageCode) private var appLanguageCode = AppLanguageOption.system.rawValue
     @State private var gpgVersion: String = ""
     @State private var activeGPGHomePath: String = ""
     
@@ -36,12 +37,38 @@ struct SettingsView: View {
                         .font(.headline)
                         .foregroundStyle(Color.moaiyTextPrimary)
 
-                    Picker("setting_default_key_type", selection: $defaultKeyType) {
-                        Text("key_type_rsa4096").tag(0)
-                        Text("key_type_rsa2048").tag(1)
-                        Text("key_type_ecc_curve25519").tag(2)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("setting_language")
+                            .foregroundStyle(Color.moaiyTextSecondary)
+
+                        Spacer()
+
+                        Picker("setting_language", selection: $appLanguageCode) {
+                            ForEach(AppLanguageOption.allCases, id: \.rawValue) { option in
+                                Text(LocalizedStringKey(option.settingsDisplayKey))
+                                    .tag(option.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .fixedSize()
                     }
-                    .pickerStyle(.segmented)
+
+                    HStack(alignment: .center) {
+                        Text("setting_default_key_type")
+                            .foregroundStyle(Color.moaiyTextSecondary)
+
+                        Spacer()
+
+                        Picker("setting_default_key_type", selection: $defaultKeyType) {
+                            Text("key_type_rsa4096").tag(0)
+                            Text("key_type_rsa2048").tag(1)
+                            Text("key_type_ecc_curve25519").tag(2)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(minWidth: 260, idealWidth: 340, maxWidth: 380, alignment: .trailing)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .moaiyModalCard()
@@ -100,7 +127,7 @@ struct SettingsView: View {
                                 .scaleEffect(0.7)
                                 .frame(width: 16, height: 16)
                         } else {
-                            Text("\(gpgVersion) · \(String(localized: "about_gpg_embedded"))")
+                            Text("\(gpgVersion) · \(AppLocalization.string("about_gpg_embedded"))")
                                 .foregroundStyle(Color.moaiyTextPrimary)
                                 .multilineTextAlignment(.trailing)
                         }
@@ -147,9 +174,15 @@ struct SettingsView: View {
         .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 420, idealWidth: 560, maxWidth: 760)
         .task {
+            normalizeLanguageSelection()
             await loadGPGVersion()
             refreshKeyringState()
         }
+    }
+
+    @MainActor
+    private func normalizeLanguageSelection() {
+        appLanguageCode = AppLanguageOption.from(storageValue: appLanguageCode).rawValue
     }
     
     @MainActor
@@ -158,7 +191,7 @@ struct SettingsView: View {
         if let version = service.gpgVersion {
             gpgVersion = version
         } else {
-            gpgVersion = String(localized: "about_gpg_not_available")
+            gpgVersion = AppLocalization.string("about_gpg_not_available")
         }
     }
 

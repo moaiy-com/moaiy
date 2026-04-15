@@ -12,6 +12,8 @@ Primary path must always execute through:
 ```
 
 Then publish with GitHub `Release` workflow (`workflow_dispatch`).
+The workflow is split into `release_build` and `release_publish` jobs.
+If publish/metadata step fails, rerun failed jobs without re-running full build/package by default.
 
 Only if the `Release` workflow itself is broken (workflow defect, not product/test failure),
 use the controlled fallback path.
@@ -37,8 +39,9 @@ use the controlled fallback path.
    - `dist/release/vX.Y.Z-*/SHA256SUMS.txt`
    - `dist/release/vX.Y.Z-*/release-manifest.json`
    - `dist/release/vX.Y.Z-*/release-notes.md`
-5. Publish with GitHub workflow (`Release`) after draft verification.
-6. Verify published release state and digests:
+5. Create or verify release tag `vX.Y.Z` on `origin/main`.
+6. Publish with GitHub workflow (`Release`) after draft verification.
+7. Verify published release state and digests:
 
 ```bash
 ./scripts/release/verify_github_release.sh \
@@ -65,8 +68,23 @@ use the controlled fallback path.
 
 ## Repository Ruleset Prerequisite
 
-When `v*` tag creation is protected by rulesets, configure `RELEASE_ADMIN_TOKEN`
-in repository secrets so release workflow can push tags through admin bypass.
+When `v*` tag creation is protected by rulesets, the `Release` workflow does not create tags.
+Create `vX.Y.Z` manually on `origin/main` with an authorized account before triggering workflow dispatch.
+
+## Release Safety CI
+
+`Release Safety` workflow validates release-critical changes on PR/push when any of these paths change:
+- `.github/workflows/release.yml`
+- `scripts/release/**`
+- `scripts/package_dmg.sh`
+- `Moaiy/Moaiy.xcodeproj/project.pbxproj`
+- `Moaiy/Resources/Assets.xcassets/**`
+- `CHANGELOG.md`
+
+It enforces:
+- asset catalog integrity guard (`check_asset_catalog_integrity.sh`)
+- version sync guard (`check_version_sync.sh --allow-existing-tag`)
+- arm64 smoke external validation (`external_validation.sh --mode smoke --arch arm64`)
 
 ## Controlled Fallback (Workflow Defect Only)
 

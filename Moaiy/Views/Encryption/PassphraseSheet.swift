@@ -141,8 +141,8 @@ struct PassphraseSheet: View {
             if let keyName {
                 Text(
                     String(
-                        format: String(localized: "passphrase_subtitle"),
-                        locale: Locale.current,
+                        format: AppLocalization.string("passphrase_subtitle"),
+                        locale: AppLocalization.locale,
                         keyName
                     )
                 )

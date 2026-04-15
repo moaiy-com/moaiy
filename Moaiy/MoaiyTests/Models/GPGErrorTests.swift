@@ -212,6 +212,70 @@ struct GPGErrorTests {
             for: GPGError.executionFailed("gpg: signing failed: Bad PIN"),
             context: .sign
         )
-        #expect(mapped == String(localized: "error_smartcard_pin_invalid"))
+        #expect(mapped == AppLocalization.string("error_smartcard_pin_invalid"))
+    }
+
+    @Test("App localization string follows all supported app languages")
+    func appLocalization_stringFollowsAllSupportedLanguages() {
+        let defaults = UserDefaults.standard
+        let key = Constants.StorageKeys.appLanguageCode
+        let originalValue = defaults.string(forKey: key)
+        defer {
+            if let originalValue {
+                defaults.set(originalValue, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        let followSystemExpectations: [(AppLanguageOption, String)] = [
+            (.english, "Follow System"),
+            (.chineseSimplified, "跟随系统"),
+            (.spanish, "Seguir el sistema"),
+            (.portugueseBrazil, "Seguir sistema"),
+            (.hindi, "सिस्टम सेटिंग का पालन करें"),
+            (.arabic, "اتباع إعدادات النظام"),
+            (.french, "Suivre le système"),
+            (.german, "System folgen"),
+            (.japanese, "システムに従う"),
+            (.korean, "시스템 설정 따르기"),
+            (.russian, "Следовать системе"),
+        ]
+
+        for (language, expected) in followSystemExpectations {
+            defaults.set(language.rawValue, forKey: key)
+            #expect(AppLocalization.string("setting_language_option_system") == expected)
+        }
+    }
+
+    @Test("App language options include all planned locales")
+    func appLanguageOptions_includeAllPlannedLocales() {
+        #expect(AppLanguageOption.allCases.count == 12)
+    }
+
+    @Test("Newly added East Europe locales do not fall back to English")
+    func newlyAddedLocales_doNotFallbackToEnglish() {
+        let defaults = UserDefaults.standard
+        let key = Constants.StorageKeys.appLanguageCode
+        let originalValue = defaults.string(forKey: key)
+        defer {
+            if let originalValue {
+                defaults.set(originalValue, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        let nonEnglishLanguages: [AppLanguageOption] = [
+            .japanese,
+            .korean,
+            .russian,
+        ]
+
+        for language in nonEnglishLanguages {
+            defaults.set(language.rawValue, forKey: key)
+            #expect(AppLocalization.string("action_cancel") != "Cancel")
+            #expect(AppLocalization.string("action_confirm") != "Confirm")
+        }
     }
 }

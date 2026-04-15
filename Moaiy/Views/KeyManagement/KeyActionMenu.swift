@@ -408,7 +408,7 @@ struct KeyActionBatchResultPlanner {
             return .success(successMessage)
         }
 
-        let fallbackErrorMessage = String(localized: "error_occurred")
+        let fallbackErrorMessage = AppLocalization.string("error_occurred")
         let errorText: String
         if let firstErrorMessage, !firstErrorMessage.isEmpty {
             errorText = firstErrorMessage
@@ -592,6 +592,7 @@ struct KeyActionMenu: View {
                     pendingPassphraseAllowsEmpty = true
                 }
             )
+            .environment(\.locale, AppLocalization.locale)
         }
         .sheet(
             isPresented: Binding(
@@ -619,6 +620,7 @@ struct KeyActionMenu: View {
                     pendingYubiKeyPINFileName = ""
                 }
             )
+            .environment(\.locale, AppLocalization.locale)
         }
         .sheet(isPresented: $showingUploadSheet) {
             UploadToKeyserverSheet(
@@ -631,22 +633,27 @@ struct KeyActionMenu: View {
                 }
             )
             .environment(viewModel)
+            .environment(\.locale, AppLocalization.locale)
         }
         .sheet(isPresented: $showingSigningSheet) {
             KeySigningSheet(keyToSign: key)
                 .environment(viewModel)
+                .environment(\.locale, AppLocalization.locale)
         }
         .sheet(isPresented: $showingTrustSheet) {
             TrustManagementSheet(key: key)
                 .environment(viewModel)
+                .environment(\.locale, AppLocalization.locale)
         }
         .sheet(isPresented: $showingEditSheet) {
             KeyEditSheet(key: key)
                 .environment(viewModel)
+                .environment(\.locale, AppLocalization.locale)
         }
         .sheet(isPresented: $showingBackupSheet) {
             BackupManagerView()
                 .environment(viewModel)
+                .environment(\.locale, AppLocalization.locale)
         }
     }
 
@@ -655,7 +662,7 @@ struct KeyActionMenu: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
-        panel.message = String(localized: "drop_zone_hint")
+        panel.message = AppLocalization.string("drop_zone_hint")
 
         guard panel.runModal() == .OK else { return }
         let selectedURLs = panel.urls
@@ -685,7 +692,7 @@ struct KeyActionMenu: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
-        panel.message = String(localized: "drop_zone_hint")
+        panel.message = AppLocalization.string("drop_zone_hint")
 
         guard panel.runModal() == .OK else { return }
         let selectedURLs = panel.urls
@@ -738,7 +745,7 @@ struct KeyActionMenu: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
-        panel.message = String(localized: "sign_detached_file_picker_message")
+        panel.message = AppLocalization.string("sign_detached_file_picker_message")
 
         guard panel.runModal() == .OK else { return }
         let selectedURLs = panel.urls
@@ -772,7 +779,7 @@ struct KeyActionMenu: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
-        panel.message = String(localized: "verify_file_picker_message")
+        panel.message = AppLocalization.string("verify_file_picker_message")
 
         guard panel.runModal() == .OK else { return }
         let selectedURLs = panel.urls
@@ -900,7 +907,7 @@ struct KeyActionMenu: View {
         showBatchOperationResult(
             successCount: signedFileCount,
             failureCount: failedFileCount,
-            successMessage: String(localized: "operation_success_sign_detached"),
+            successMessage: AppLocalization.string("operation_success_sign_detached"),
             firstError: firstError,
             errorContext: .sign,
             failureTitleKey: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .sign))
@@ -956,7 +963,7 @@ struct KeyActionMenu: View {
         let decision = KeyActionBatchResultPlanner.makeAlertDecision(
             successCount: verifiedFileCount,
             failureCount: failedFileCount,
-            successMessage: String(localized: "operation_success_verify"),
+            successMessage: AppLocalization.string("operation_success_verify"),
             firstErrorMessage: firstErrorMessage
         )
 
@@ -978,7 +985,7 @@ struct KeyActionMenu: View {
         do {
             let keyData = try await viewModel.exportPublicKey(key)
             try writeDataSafely(keyData, to: outputURL)
-            showSuccess(message: String(localized: "export_public_key_success_message"))
+            showSuccess(message: AppLocalization.string("export_public_key_success_message"))
         } catch {
             showError(
                 title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .exportKey)),
@@ -992,7 +999,7 @@ struct KeyActionMenu: View {
         do {
             let keyData = try await viewModel.exportSecretKey(key, passphrase: passphrase)
             try writeDataSafely(keyData, to: outputURL)
-            showSuccess(message: String(localized: "export_private_key_success_message"))
+            showSuccess(message: AppLocalization.string("export_private_key_success_message"))
         } catch {
             showError(
                 title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .exportKey)),
@@ -1016,7 +1023,7 @@ struct KeyActionMenu: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.init(filenameExtension: "asc") ?? .data]
         panel.nameFieldStringValue = defaultFileName
-        panel.message = String(localized: "export_file_picker_message")
+        panel.message = AppLocalization.string("export_file_picker_message")
         return panel.runModal() == .OK ? panel.url : nil
     }
 
@@ -1057,7 +1064,7 @@ struct KeyActionMenu: View {
         pendingUntrustedEncryptURLs = urls
         promptAlert = PromptAlertContent.destructiveConfirmation(
             title: "encrypt_untrusted_recipient_title",
-            message: String(localized: "encrypt_untrusted_recipient_message"),
+            message: AppLocalization.string("encrypt_untrusted_recipient_message"),
             onConfirm: {
                 let selectedURLs = pendingUntrustedEncryptURLs
                 pendingUntrustedEncryptURLs = []

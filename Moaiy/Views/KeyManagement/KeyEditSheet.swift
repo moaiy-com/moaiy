@@ -48,6 +48,8 @@ struct KeyEditSheet: View {
                     Text(key.email)
                         .font(.subheadline)
                         .foregroundStyle(Color.moaiyTextSecondary)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
                 }
 
                 Spacer()
@@ -62,14 +64,10 @@ struct KeyEditSheet: View {
             .padding(24)
 
             // Tab picker
-            Picker("", selection: $selectedTab) {
-                ForEach(KeyEditTab.allCases, id: \.self) { tab in
-                    Label(tab.titleKey, systemImage: tab.icon)
-                        .tag(tab)
-                }
+            ViewThatFits(in: .horizontal) {
+                segmentedTabPicker
+                menuTabPicker
             }
-            .pickerStyle(.segmented)
-            .moaiyModalCard(cornerRadius: 10)
             .padding(.horizontal, 24)
 
             // Tab content
@@ -98,11 +96,45 @@ struct KeyEditSheet: View {
                     })
                 }
             }
-            .frame(maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .background(Color.moaiySurfaceBackground)
-        .moaiyModalAdaptiveSize(minWidth: 520, idealWidth: 620, maxWidth: 760, minHeight: 500, idealHeight: 620, maxHeight: 860)
+        .moaiyModalAdaptiveSize(minWidth: 560, idealWidth: 720, maxWidth: 980, minHeight: 500, idealHeight: 620, maxHeight: 900)
         .moaiyPromptAlertHost(alert: $promptAlert)
+    }
+
+    private var segmentedTabPicker: some View {
+        Picker("", selection: $selectedTab) {
+            ForEach(KeyEditTab.allCases, id: \.self) { tab in
+                Text(tab.titleKey)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                    .tag(tab)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .moaiyModalCard(cornerRadius: 10)
+    }
+
+    private var menuTabPicker: some View {
+        HStack(spacing: MoaiyUI.Spacing.md) {
+            Label(selectedTab.titleKey, systemImage: selectedTab.icon)
+                .foregroundStyle(Color.moaiyTextPrimary)
+                .lineLimit(2)
+
+            Spacer(minLength: 0)
+
+            Picker("", selection: $selectedTab) {
+                ForEach(KeyEditTab.allCases, id: \.self) { tab in
+                    Label(tab.titleKey, systemImage: tab.icon)
+                        .tag(tab)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+        }
+        .moaiyModalCard(cornerRadius: 10)
     }
 }
 
@@ -147,6 +179,7 @@ struct ExpirationEditView: View {
             Text("edit_expiration_description")
                 .font(.subheadline)
                 .foregroundStyle(Color.moaiyTextSecondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             // Current expiration
             if let expiresAt = key.expiresAt {
@@ -171,13 +204,15 @@ struct ExpirationEditView: View {
 
                 ForEach(ExpirationOption.allCases, id: \.self) { option in
                     Button(action: { expirationOption = option }) {
-                        HStack {
+                        HStack(alignment: .top, spacing: MoaiyUI.Spacing.sm) {
                             Image(systemName: expirationOption == option ? "checkmark.circle.fill" : "circle")
                                 .foregroundStyle(expirationOption == option ? Color.moaiyAccentV2 : Color.moaiyTextSecondary)
 
                             Text(option.titleKey)
                                 .font(.subheadline)
                                 .foregroundStyle(Color.moaiyTextPrimary)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
 
                             Spacer()
 
@@ -185,6 +220,7 @@ struct ExpirationEditView: View {
                                 Text(customDate.formatted(date: .abbreviated, time: .omitted))
                                     .font(.caption)
                                     .foregroundStyle(Color.moaiyTextSecondary)
+                                    .fixedSize()
                             }
                         }
                         .padding(.vertical, 4)
@@ -257,7 +293,7 @@ struct ExpirationEditView: View {
                     passphrase: passphrase.isEmpty ? nil : passphrase
                 )
                 passphrase = ""
-                onSuccess(String(localized: "edit_expiration_success"))
+                onSuccess(AppLocalization.string("edit_expiration_success"))
             } catch {
                 promptAlert = PromptAlertContent.failure(
                     context: .keyEdit,
@@ -287,6 +323,7 @@ struct UserIDsEditView: View {
             Text("edit_userids_description")
                 .font(.subheadline)
                 .foregroundStyle(Color.moaiyTextSecondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             // Current user IDs
             VStack(alignment: .leading, spacing: 8) {
@@ -354,6 +391,7 @@ struct UserIDsEditView: View {
                 Text("edit_userid_info")
                     .font(.caption)
                     .foregroundStyle(Color.moaiyTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(MoaiyUI.Spacing.md)
             .moaiyBannerStyle(tint: Color.moaiyInfo)
@@ -376,7 +414,7 @@ struct UserIDsEditView: View {
                 newUserName = ""
                 newUserEmail = ""
                 passphrase = ""
-                onSuccess(String(localized: "edit_userid_success"))
+                onSuccess(AppLocalization.string("edit_userid_success"))
             } catch {
                 promptAlert = PromptAlertContent.failure(
                     context: .keyEdit,
@@ -406,6 +444,7 @@ struct PassphraseEditView: View {
             Text("edit_passphrase_description")
                 .font(.subheadline)
                 .foregroundStyle(Color.moaiyTextSecondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             // Current passphrase
             VStack(alignment: .leading, spacing: 8) {
@@ -470,7 +509,7 @@ struct PassphraseEditView: View {
                 currentPassphrase = ""
                 newPassphrase = ""
                 confirmPassphrase = ""
-                onSuccess(String(localized: "edit_passphrase_success"))
+                onSuccess(AppLocalization.string("edit_passphrase_success"))
             } catch {
                 promptAlert = PromptAlertContent.failure(
                     context: .keyEdit,

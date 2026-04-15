@@ -152,7 +152,7 @@ actor GPGProcessExecutor {
                 } else {
                     timeoutMessage = nil
                 }
-                let fallbackMessage = String(localized: "error_operation_failed_generic")
+                let fallbackMessage = AppLocalization.string("error_operation_failed_generic")
                 throw GPGError.executionFailed(timeoutMessage?.isEmpty == false ? timeoutMessage! : fallbackMessage)
             }
 
@@ -1884,7 +1884,7 @@ final class GPGService {
         if fileExtension == "sig" || fileExtension == "asc" {
             let signedFileURL = fileURL.deletingPathExtension()
             guard fileManager.fileExists(atPath: signedFileURL.path) else {
-                throw GPGError.executionFailed(String(localized: "verify_signature_error_missing_original"))
+                throw GPGError.executionFailed(AppLocalization.string("verify_signature_error_missing_original"))
             }
             return try await verifyDetachedSignatureFile(
                 signatureURL: fileURL,
@@ -2006,26 +2006,26 @@ final class GPGService {
         if combinedOutput.contains("badsig")
             || combinedOutput.contains("errsig")
             || combinedOutput.contains("bad signature") {
-            return String(localized: "verify_signature_error_bad_signature")
+            return AppLocalization.string("verify_signature_error_bad_signature")
         }
         if combinedOutput.contains("we couldn't verify this signature")
             || combinedOutput.contains("please check the selected files and try again") {
-            return String(localized: "verify_signature_error_bad_signature")
+            return AppLocalization.string("verify_signature_error_bad_signature")
         }
         if combinedOutput.contains("no_pubkey") || combinedOutput.contains("no public key") {
-            return String(localized: "verify_signature_error_missing_public_key")
+            return AppLocalization.string("verify_signature_error_missing_public_key")
         }
         if combinedOutput.contains("nodata")
             || combinedOutput.contains("no signature found")
             || combinedOutput.contains("no valid openpgp data found") {
-            return String(localized: "verify_signature_error_no_signature")
+            return AppLocalization.string("verify_signature_error_no_signature")
         }
         if combinedOutput.contains("can't open signed data")
             || combinedOutput.contains("no such file or directory")
             || combinedOutput.contains("should be the first file") {
-            return String(localized: "verify_signature_error_missing_original")
+            return AppLocalization.string("verify_signature_error_missing_original")
         }
-        return String(localized: "verify_signature_error_bad_signature")
+        return AppLocalization.string("verify_signature_error_bad_signature")
     }
     
     // MARK: - Trust Management
@@ -3123,14 +3123,14 @@ final class GPGService {
     private func parseKeyserverImportQuery(_ query: String) throws -> KeyserverImportQueryKind {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            throw GPGError.importFailed(String(localized: "import_keyserver_empty_query"))
+            throw GPGError.importFailed(AppLocalization.string("import_keyserver_empty_query"))
         }
 
         if let url = URL(string: trimmed), url.scheme != nil {
             if let keyFromURL = extractKeyReference(from: url) {
                 return keyFromURL
             }
-            throw GPGError.importFailed(String(localized: "import_keyserver_invalid_query"))
+            throw GPGError.importFailed(AppLocalization.string("import_keyserver_invalid_query"))
         }
 
         if trimmed.contains("@") {
@@ -3141,7 +3141,7 @@ final class GPGService {
             return .keyReference(normalized)
         }
 
-        throw GPGError.importFailed(String(localized: "import_keyserver_invalid_query"))
+        throw GPGError.importFailed(AppLocalization.string("import_keyserver_invalid_query"))
     }
 
     private func extractKeyReference(from url: URL) -> KeyserverImportQueryKind? {
@@ -3701,22 +3701,22 @@ enum TrustLevel: String, CaseIterable, Identifiable {
     /// Localized name for UI
     var localizedName: String {
         switch self {
-        case .unknown: return String(localized: "trust_level_unknown")
-        case .none: return String(localized: "trust_level_none")
-        case .marginal: return String(localized: "trust_level_marginal")
-        case .full: return String(localized: "trust_level_full")
-        case .ultimate: return String(localized: "trust_level_ultimate")
+        case .unknown: return AppLocalization.string("trust_level_unknown")
+        case .none: return AppLocalization.string("trust_level_none")
+        case .marginal: return AppLocalization.string("trust_level_marginal")
+        case .full: return AppLocalization.string("trust_level_full")
+        case .ultimate: return AppLocalization.string("trust_level_ultimate")
     }
     }
     
     /// Localized description of trust level
     var localizedDescription: String {
         switch self {
-        case .unknown: return String(localized: "trust_desc_unknown")
-        case .none: return String(localized: "trust_desc_none")
-        case .marginal: return String(localized: "trust_desc_marginal")
-        case .full: return String(localized: "trust_desc_full")
-        case .ultimate: return String(localized: "trust_desc_ultimate")
+        case .unknown: return AppLocalization.string("trust_desc_unknown")
+        case .none: return AppLocalization.string("trust_desc_none")
+        case .marginal: return AppLocalization.string("trust_desc_marginal")
+        case .full: return AppLocalization.string("trust_desc_full")
+        case .ultimate: return AppLocalization.string("trust_desc_ultimate")
         }
     }
 }

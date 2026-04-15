@@ -162,8 +162,12 @@ class ExpirationReminderService {
         guard isEnabled, !expiredKeys.isEmpty else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = NSLocalizedString("notification_expired_keys_title", comment: "")
-        content.body = String(format: NSLocalizedString("notification_expired_keys_body", comment: ""), expiredKeys.count)
+        content.title = AppLocalization.string("notification_expired_keys_title")
+        content.body = String(
+            format: AppLocalization.string("notification_expired_keys_body"),
+            locale: AppLocalization.locale,
+            expiredKeys.count
+        )
         content.sound = .default
         content.badge = NSNumber(value: expiredKeys.count)
 
@@ -186,8 +190,12 @@ class ExpirationReminderService {
         guard isEnabled, !expiringSoonKeys.isEmpty else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = NSLocalizedString("notification_expiring_soon_title", comment: "")
-        content.body = String(format: NSLocalizedString("notification_expiring_soon_body", comment: ""), expiringSoonKeys.count)
+        content.title = AppLocalization.string("notification_expiring_soon_title")
+        content.body = String(
+            format: AppLocalization.string("notification_expiring_soon_body"),
+            locale: AppLocalization.locale,
+            expiringSoonKeys.count
+        )
         content.sound = .default
 
         let request = UNNotificationRequest(
@@ -248,9 +256,10 @@ class ExpirationReminderService {
 
     private func scheduleReminder(for key: GPGKey, at date: Date) async {
         let content = UNMutableNotificationContent()
-        content.title = NSLocalizedString("notification_key_expiring_title", comment: "")
+        content.title = AppLocalization.string("notification_key_expiring_title")
         content.body = String(
-            format: NSLocalizedString("notification_key_expiring_body", comment: ""),
+            format: AppLocalization.string("notification_key_expiring_body"),
+            locale: AppLocalization.locale,
             key.name,
             date.formatted(date: .abbreviated, time: .omitted)
         )

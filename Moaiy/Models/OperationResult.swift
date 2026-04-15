@@ -91,7 +91,7 @@ struct OperationResult: Identifiable, Hashable {
 
     var displayMessage: String {
         guard isLocalizedMessageKey else { return message }
-        return NSLocalizedString(message, comment: "")
+        return AppLocalization.localizedString(forKey: message)
     }
     
     static func successEncrypt(fileURL: URL, outputURL: URL? = nil) -> OperationResult {

@@ -262,8 +262,8 @@ struct ImportKeySheet: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.directoryURL = GPGService.shared.systemGPGHomeURL.deletingLastPathComponent()
-        panel.message = String(localized: "migration_keyring_picker_message")
-        panel.prompt = String(localized: "action_select_external_keyring")
+        panel.message = AppLocalization.string("migration_keyring_picker_message")
+        panel.prompt = AppLocalization.string("action_select_external_keyring")
 
         guard panel.runModal() == .OK, let url = panel.url else {
             return
@@ -318,13 +318,13 @@ struct ImportKeySheet: View {
 
     private func showImportSuccessAlert(_ result: KeyImportResult) {
         let details = String(
-            format: String(localized: "import_success_details"),
-            locale: Locale.current,
+            format: AppLocalization.string("import_success_details"),
+            locale: AppLocalization.locale,
             Int64(result.imported),
             Int64(result.unchanged)
         )
         promptAlert = PromptAlertContent.success(
-            message: "\(String(localized: "import_success_message"))\n\(details)"
+            message: "\(AppLocalization.string("import_success_message"))\n\(details)"
         )
     }
 
@@ -344,8 +344,8 @@ struct ImportKeySheet: View {
         if result.pendingPublicKeyCount > 0 {
             messageLines.append(
                 String(
-                    format: String(localized: "yubikey_import_completion_counts"),
-                    locale: Locale.current,
+                    format: AppLocalization.string("yubikey_import_completion_counts"),
+                    locale: AppLocalization.locale,
                     Int64(result.completedPublicKeyCount),
                     Int64(result.pendingPublicKeyCount)
                 )
@@ -353,10 +353,10 @@ struct ImportKeySheet: View {
         }
         messageLines.append(contentsOf: result.completionIssues.map(yubiKeyCompletionIssueMessage(for:)))
         if shouldShowManualPublicKeyImportHint(for: result) {
-            messageLines.append(String(localized: "yubikey_import_manual_pubkey_required"))
+            messageLines.append(AppLocalization.string("yubikey_import_manual_pubkey_required"))
         }
         if messageLines.isEmpty {
-            messageLines.append(String(localized: "yubikey_import_result_no_stubs"))
+            messageLines.append(AppLocalization.string("yubikey_import_result_no_stubs"))
         }
         let message = messageLines.joined(separator: "\n")
 
@@ -389,14 +389,14 @@ struct ImportKeySheet: View {
 
     private func showYubiKeyImportSuccessAlert(_ result: SmartCardLearnResult) {
         let summary = String(
-            format: String(localized: "yubikey_import_result_summary"),
-            locale: Locale.current,
+            format: AppLocalization.string("yubikey_import_result_summary"),
+            locale: AppLocalization.locale,
             Int64(result.learnedStubCount),
             result.cardSerialNumber
         )
         let completion = String(
-            format: String(localized: "yubikey_import_completion_counts"),
-            locale: Locale.current,
+            format: AppLocalization.string("yubikey_import_completion_counts"),
+            locale: AppLocalization.locale,
             Int64(result.completedPublicKeyCount),
             Int64(result.pendingPublicKeyCount)
         )
@@ -442,13 +442,13 @@ struct ImportKeySheet: View {
     private func yubiKeyCompletionIssueMessage(for issue: SmartCardPublicKeyCompletionIssue) -> String {
         switch issue {
         case .missingPublicKeyURL:
-            return String(localized: "yubikey_import_completion_issue_missing_public_key_url")
+            return AppLocalization.string("yubikey_import_completion_issue_missing_public_key_url")
         case .urlFetchFailed:
-            return String(localized: "yubikey_import_completion_issue_url_fetch_failed")
+            return AppLocalization.string("yubikey_import_completion_issue_url_fetch_failed")
         case .keyserverUnreachable:
-            return String(localized: "yubikey_import_completion_issue_keyserver_unreachable")
+            return AppLocalization.string("yubikey_import_completion_issue_keyserver_unreachable")
         case .keyserverFetchFailed:
-            return String(localized: "yubikey_import_completion_issue_keyserver_fetch_failed")
+            return AppLocalization.string("yubikey_import_completion_issue_keyserver_fetch_failed")
         }
     }
 
@@ -497,8 +497,8 @@ struct ImportKeySheet: View {
     private func yubiKeyGuidanceSummaryText(for result: SmartCardLearnResult) -> String {
         if result.pendingPublicKeyCount > 0 {
             return String(
-                format: String(localized: "yubikey_import_completion_counts"),
-                locale: Locale.current,
+                format: AppLocalization.string("yubikey_import_completion_counts"),
+                locale: AppLocalization.locale,
                 Int64(result.completedPublicKeyCount),
                 Int64(result.pendingPublicKeyCount)
             )
@@ -506,7 +506,7 @@ struct ImportKeySheet: View {
         if let issue = result.completionIssues.first {
             return yubiKeyCompletionIssueMessage(for: issue)
         }
-        return String(localized: "yubikey_import_result_no_stubs")
+        return AppLocalization.string("yubikey_import_result_no_stubs")
     }
 }
 
@@ -577,8 +577,8 @@ struct YubiKeyImportResultCard: View {
 
             Text(
                 String(
-                    format: String(localized: "yubikey_import_result_summary"),
-                    locale: Locale.current,
+                    format: AppLocalization.string("yubikey_import_result_summary"),
+                    locale: AppLocalization.locale,
                     Int64(result.learnedStubCount),
                     result.cardSerialNumber
                 )
@@ -593,8 +593,8 @@ struct YubiKeyImportResultCard: View {
 
                 Text(
                     String(
-                        format: String(localized: "yubikey_import_completion_counts"),
-                        locale: Locale.current,
+                        format: AppLocalization.string("yubikey_import_completion_counts"),
+                        locale: AppLocalization.locale,
                         Int64(result.completedPublicKeyCount),
                         Int64(result.pendingPublicKeyCount)
                     )
@@ -605,8 +605,8 @@ struct YubiKeyImportResultCard: View {
                 if let keyserverUsed = result.keyserverUsed {
                     Text(
                         String(
-                            format: String(localized: "yubikey_import_completion_keyserver_used"),
-                            locale: Locale.current,
+                            format: AppLocalization.string("yubikey_import_completion_keyserver_used"),
+                            locale: AppLocalization.locale,
                             keyserverUsed
                         )
                     )
@@ -644,8 +644,8 @@ struct YubiKeyImportResultCard: View {
                     if result.includesExistingStubs {
                         Text(
                             String(
-                                format: String(localized: "yubikey_import_result_existing_stubs"),
-                                locale: Locale.current,
+                                format: AppLocalization.string("yubikey_import_result_existing_stubs"),
+                                locale: AppLocalization.locale,
                                 Int64(result.importedStubs.count)
                             )
                         )
@@ -672,8 +672,8 @@ struct YubiKeyImportResultCard: View {
                                 if let cardSerial = displayCardSerial(for: stub) {
                                     Text(
                                         String(
-                                            format: String(localized: "yubikey_import_result_card_serial"),
-                                            locale: Locale.current,
+                                            format: AppLocalization.string("yubikey_import_result_card_serial"),
+                                            locale: AppLocalization.locale,
                                             cardSerial
                                         )
                                     )
@@ -687,8 +687,8 @@ struct YubiKeyImportResultCard: View {
                     if hiddenCount > 0 {
                         Text(
                             String(
-                                format: String(localized: "yubikey_import_result_more_items"),
-                                locale: Locale.current,
+                                format: AppLocalization.string("yubikey_import_result_more_items"),
+                                locale: AppLocalization.locale,
                                 Int64(hiddenCount)
                             )
                         )
@@ -706,14 +706,14 @@ struct YubiKeyImportResultCard: View {
         if descriptor.isUIDResolved, !descriptor.name.isEmpty {
             return descriptor.name
         }
-        return String(localized: "yubikey_import_name_unavailable")
+        return AppLocalization.string("yubikey_import_name_unavailable")
     }
 
     private func displayEmail(for descriptor: ImportedStubDescriptor) -> String {
         if descriptor.isUIDResolved, !descriptor.email.isEmpty {
             return descriptor.email
         }
-        return String(localized: "yubikey_import_email_unavailable")
+        return AppLocalization.string("yubikey_import_email_unavailable")
     }
 
     private func shortFingerprint(_ fingerprint: String) -> String {
@@ -808,8 +808,8 @@ struct MigrationResultCard: View {
 
             Text(
                 String(
-                    format: String(localized: "import_success_details"),
-                    locale: Locale.current,
+                    format: AppLocalization.string("import_success_details"),
+                    locale: AppLocalization.locale,
                     Int64(result.imported),
                     Int64(result.unchanged)
                 )
@@ -818,7 +818,7 @@ struct MigrationResultCard: View {
             .foregroundStyle(Color.moaiyTextSecondary)
 
             Text(
-                "\(result.sourcePublicKeyCount) \(String(localized: "key_type_public")) • \(result.sourceSecretKeyCount) \(String(localized: "backup_keys_secret"))"
+                "\(result.sourcePublicKeyCount) \(AppLocalization.string("key_type_public")) • \(result.sourceSecretKeyCount) \(AppLocalization.string("backup_keys_secret"))"
             )
             .font(.caption)
             .foregroundStyle(Color.moaiyTextSecondary)
@@ -926,7 +926,7 @@ struct DropZoneView: View {
             .init(filenameExtension: "gpg") ?? .item,
             .init(filenameExtension: "pgp") ?? .item
         ]
-        panel.message = String(localized: "import_file_picker_message")
+        panel.message = AppLocalization.string("import_file_picker_message")
         
         if panel.runModal() == .OK, let url = panel.url {
             onFileSelected(url)

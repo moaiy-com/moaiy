@@ -16,6 +16,8 @@ private let logger = Logger(subsystem: "com.moaiy.app", category: "App")
 
 @main
 struct MoaiyApp: App {
+    @AppStorage(Constants.StorageKeys.appLanguageCode) private var appLanguageCode = AppLanguageOption.system.rawValue
+
     init() {
         SecureTempStorage.cleanupStaleDirectories()
         AppFontRegistrar.registerBundledFonts()
@@ -26,10 +28,12 @@ struct MoaiyApp: App {
     var body: some Scene {
         WindowGroup {
             MainView()
+                .id("main-\(appLanguageCode)")
                 .frame(
                     minWidth: Constants.UI.minWindowWidth,
                     minHeight: Constants.UI.minWindowHeight
                 )
+                .environment(\.locale, appLocale)
                 .onAppear {
                     logger.notice("MainView appeared")
                     logger.notice("GPGService.isReady after view appear: \(GPGService.shared.isReady)")
@@ -54,8 +58,14 @@ struct MoaiyApp: App {
         #if os(macOS)
         Settings {
             SettingsView()
+                .id("settings-\(appLanguageCode)")
+                .environment(\.locale, appLocale)
         }
         #endif
+    }
+
+    private var appLocale: Locale {
+        AppLanguageOption.from(storageValue: appLanguageCode).locale
     }
 
     #if os(macOS)

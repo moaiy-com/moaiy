@@ -242,17 +242,17 @@ extension GPGFileType {
     var localizedDescription: String {
         switch self {
         case .encrypted:
-            return String(localized: "gpg_file_type_encrypted")
+            return AppLocalization.string("gpg_file_type_encrypted")
         case .publicKey:
-            return String(localized: "gpg_file_type_public_key")
+            return AppLocalization.string("gpg_file_type_public_key")
         case .privateKey:
-            return String(localized: "gpg_file_type_private_key")
+            return AppLocalization.string("gpg_file_type_private_key")
         case .signature:
-            return String(localized: "gpg_file_type_signature")
+            return AppLocalization.string("gpg_file_type_signature")
         case .notGPG:
-            return String(localized: "gpg_file_type_not_gpg")
+            return AppLocalization.string("gpg_file_type_not_gpg")
         case .unknown:
-            return String(localized: "gpg_file_type_unknown")
+            return AppLocalization.string("gpg_file_type_unknown")
         }
     }
 }

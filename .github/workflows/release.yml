@@ -45,9 +45,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  release_build:
     runs-on: macos-latest
     timeout-minutes: 120
+    outputs:
+      release_tag: ${{ steps.release.outputs.release_tag }}
+      target_commit: ${{ steps.release.outputs.target_commit }}
+      release_dir_name: ${{ steps.bundle.outputs.release_dir_name }}
+      arm64_dmg_name: ${{ steps.bundle.outputs.arm64_dmg_name }}
+      x86_64_dmg_name: ${{ steps.bundle.outputs.x86_64_dmg_name }}
+      sha256_name: ${{ steps.bundle.outputs.sha256_name }}
+      manifest_name: ${{ steps.bundle.outputs.manifest_name }}
+      notes_name: ${{ steps.bundle.outputs.notes_name }}
+      bundle_archive_name: ${{ steps.bundle.outputs.bundle_archive_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -74,15 +84,30 @@ jobs:
         run: |
           set -euo pipefail
 
+          TAG="v${{ github.event.inputs.version }}"
           git fetch origin main --prune
           MAIN_SHA="$(git rev-parse origin/main)"
           HEAD_SHA="$(git rev-parse HEAD)"
 
           echo "origin/main: $MAIN_SHA"
           echo "HEAD       : $HEAD_SHA"
+          echo "tag        : $TAG"
 
           if [[ "$HEAD_SHA" != "$MAIN_SHA" ]]; then
             echo "Release must run on the latest origin/main commit."
+            exit 1
+          fi
+
+          REMOTE_TAG_SHA="$(git ls-remote --tags origin "refs/tags/$TAG" | awk '{print $1}' | head -n 1 || true)"
+          if [[ -z "$REMOTE_TAG_SHA" ]]; then
+            echo "Release tag $TAG does not exist on origin."
+            echo "Create $TAG on origin/main ($MAIN_SHA) before running the Release workflow."
+            exit 1
+          fi
+
+          if [[ "$REMOTE_TAG_SHA" != "$MAIN_SHA" ]]; then
+            echo "Release tag $TAG points to $REMOTE_TAG_SHA, expected $MAIN_SHA (origin/main)."
+            echo "Move $TAG to origin/main or rerun workflow for the tagged commit."
             exit 1
           fi
 
@@ -108,35 +133,120 @@ jobs:
             --allow-existing-tag \
             --github-output "$GITHUB_OUTPUT"
 
-      - name: Ensure and push release tag
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_ADMIN_TOKEN != '' && secrets.RELEASE_ADMIN_TOKEN || github.token }}
+      - name: Prepare release bundle metadata
+        id: bundle
         run: |
           set -euo pipefail
-          gh auth setup-git
 
-          TAG="v${{ github.event.inputs.version }}"
-          TARGET_SHA="${{ steps.release.outputs.target_commit }}"
-          TARGET_SHA="${TARGET_SHA:-$(git rev-parse HEAD)}"
+          RELEASE_DIR="${{ steps.release.outputs.release_dir }}"
+          ARM64_DMG_PATH="${{ steps.release.outputs.arm64_dmg_path }}"
+          X64_DMG_PATH="${{ steps.release.outputs.x86_64_dmg_path }}"
+          SHA256_PATH="${{ steps.release.outputs.release_sha256_path }}"
+          MANIFEST_PATH="${{ steps.release.outputs.release_manifest_path }}"
+          NOTES_PATH="${{ steps.release.outputs.release_notes_path }}"
 
-          LOCAL_TAG_SHA="$(git rev-parse -q --verify "refs/tags/$TAG" || true)"
-          if [[ -n "$LOCAL_TAG_SHA" && "$LOCAL_TAG_SHA" != "$TARGET_SHA" ]]; then
-            echo "Local tag $TAG points to $LOCAL_TAG_SHA, expected $TARGET_SHA"
+          if [[ ! -d "$RELEASE_DIR" ]]; then
+            echo "ERROR: release directory missing: $RELEASE_DIR"
             exit 1
           fi
 
-          if [[ -z "$LOCAL_TAG_SHA" ]]; then
-            git tag "$TAG" "$TARGET_SHA"
+          echo "release_dir_name=$(basename "$RELEASE_DIR")" >> "$GITHUB_OUTPUT"
+          echo "arm64_dmg_name=$(basename "$ARM64_DMG_PATH")" >> "$GITHUB_OUTPUT"
+          echo "x86_64_dmg_name=$(basename "$X64_DMG_PATH")" >> "$GITHUB_OUTPUT"
+          echo "sha256_name=$(basename "$SHA256_PATH")" >> "$GITHUB_OUTPUT"
+          echo "manifest_name=$(basename "$MANIFEST_PATH")" >> "$GITHUB_OUTPUT"
+          echo "notes_name=$(basename "$NOTES_PATH")" >> "$GITHUB_OUTPUT"
+          echo "bundle_archive_name=$(basename "$RELEASE_DIR").tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Archive release bundle
+        id: archive
+        run: |
+          set -euo pipefail
+
+          RELEASE_DIR="${{ steps.release.outputs.release_dir }}"
+          ARCHIVE_NAME="${{ steps.bundle.outputs.bundle_archive_name }}"
+          ARCHIVE_PATH="$RUNNER_TEMP/$ARCHIVE_NAME"
+
+          tar -C "$(dirname "$RELEASE_DIR")" -czf "$ARCHIVE_PATH" "$(basename "$RELEASE_DIR")"
+          echo "archive_path=$ARCHIVE_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle-${{ github.event.inputs.version }}
+          path: ${{ steps.archive.outputs.archive_path }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release_publish:
+    needs: release_build
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download release bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-bundle-${{ github.event.inputs.version }}
+          path: ${{ runner.temp }}/release-bundle
+
+      - name: Extract release bundle and resolve paths
+        id: paths
+        run: |
+          set -euo pipefail
+
+          ARCHIVE_PATH="${{ runner.temp }}/release-bundle/${{ needs.release_build.outputs.bundle_archive_name }}"
+          if [[ ! -f "$ARCHIVE_PATH" ]]; then
+            echo "ERROR: release bundle archive missing: $ARCHIVE_PATH"
+            ls -la "${{ runner.temp }}/release-bundle" || true
+            exit 1
           fi
 
+          mkdir -p "$GITHUB_WORKSPACE/dist/release"
+          tar -C "$GITHUB_WORKSPACE/dist/release" -xzf "$ARCHIVE_PATH"
+
+          RELEASE_DIR="$GITHUB_WORKSPACE/dist/release/${{ needs.release_build.outputs.release_dir_name }}"
+          ASSET_DIR="$RELEASE_DIR/assets"
+          ARM64_DMG_PATH="$ASSET_DIR/${{ needs.release_build.outputs.arm64_dmg_name }}"
+          X64_DMG_PATH="$ASSET_DIR/${{ needs.release_build.outputs.x86_64_dmg_name }}"
+          SHA256_PATH="$RELEASE_DIR/${{ needs.release_build.outputs.sha256_name }}"
+          MANIFEST_PATH="$RELEASE_DIR/${{ needs.release_build.outputs.manifest_name }}"
+          NOTES_PATH="$RELEASE_DIR/${{ needs.release_build.outputs.notes_name }}"
+
+          for path in "$ARM64_DMG_PATH" "$X64_DMG_PATH" "$SHA256_PATH" "$MANIFEST_PATH" "$NOTES_PATH"; do
+            if [[ ! -f "$path" ]]; then
+              echo "ERROR: expected release file missing: $path"
+              exit 1
+            fi
+          done
+
+          echo "release_dir=$RELEASE_DIR" >> "$GITHUB_OUTPUT"
+          echo "arm64_dmg_path=$ARM64_DMG_PATH" >> "$GITHUB_OUTPUT"
+          echo "x86_64_dmg_path=$X64_DMG_PATH" >> "$GITHUB_OUTPUT"
+          echo "sha256_path=$SHA256_PATH" >> "$GITHUB_OUTPUT"
+          echo "manifest_path=$MANIFEST_PATH" >> "$GITHUB_OUTPUT"
+          echo "notes_path=$NOTES_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag still matches release commit
+        run: |
+          set -euo pipefail
+
+          TAG="${{ needs.release_build.outputs.release_tag }}"
+          EXPECTED_SHA="${{ needs.release_build.outputs.target_commit }}"
           REMOTE_TAG_SHA="$(git ls-remote --tags origin "refs/tags/$TAG" | awk '{print $1}' | head -n 1 || true)"
-          if [[ -n "$REMOTE_TAG_SHA" && "$REMOTE_TAG_SHA" != "$TARGET_SHA" ]]; then
-            echo "Remote tag $TAG points to $REMOTE_TAG_SHA, expected $TARGET_SHA"
-            exit 1
-          fi
 
           if [[ -z "$REMOTE_TAG_SHA" ]]; then
-            git push origin "refs/tags/$TAG"
+            echo "ERROR: release tag not found on origin: $TAG"
+            exit 1
+          fi
+
+          if [[ "$REMOTE_TAG_SHA" != "$EXPECTED_SHA" ]]; then
+            echo "ERROR: release tag $TAG points to $REMOTE_TAG_SHA, expected $EXPECTED_SHA"
+            exit 1
           fi
 
       - name: Ensure draft release exists
@@ -147,7 +257,7 @@ jobs:
 
           TAG="v${{ github.event.inputs.version }}"
           REPO="${{ github.repository }}"
-          NOTES="${{ steps.release.outputs.release_notes_path }}"
+          NOTES="${{ steps.paths.outputs.notes_path }}"
 
           if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
             gh release create "$TAG" \
@@ -167,12 +277,13 @@ jobs:
           TAG="v${{ github.event.inputs.version }}"
           REPO="${{ github.repository }}"
 
-          ARM64_DMG="${{ steps.release.outputs.arm64_dmg_path }}"
-          X64_DMG="${{ steps.release.outputs.x86_64_dmg_path }}"
-          CHECKSUMS="${{ steps.release.outputs.release_sha256_path }}"
-          MANIFEST="${{ steps.release.outputs.release_manifest_path }}"
-
-          gh release upload "$TAG" "$ARM64_DMG" "$X64_DMG" "$CHECKSUMS" "$MANIFEST" --repo "$REPO" --clobber
+          gh release upload "$TAG" \
+            "${{ steps.paths.outputs.arm64_dmg_path }}" \
+            "${{ steps.paths.outputs.x86_64_dmg_path }}" \
+            "${{ steps.paths.outputs.sha256_path }}" \
+            "${{ steps.paths.outputs.manifest_path }}" \
+            --repo "$REPO" \
+            --clobber
 
       - name: Finalize release metadata
         env:
@@ -183,8 +294,7 @@ jobs:
           TAG="v${{ github.event.inputs.version }}"
           MODE="${{ github.event.inputs.mode }}"
           REPO="${{ github.repository }}"
-
-          NOTES="${{ steps.release.outputs.release_notes_path }}"
+          NOTES="${{ steps.paths.outputs.notes_path }}"
 
           if [[ "$MODE" == "draft" ]]; then
             gh release edit "$TAG" --repo "$REPO" --title "$TAG" --notes-file "$NOTES" --draft
@@ -202,9 +312,9 @@ jobs:
             --repo "${{ github.repository }}" \
             --tag "v${{ github.event.inputs.version }}" \
             --mode "${{ github.event.inputs.mode }}" \
-            --arm64-dmg-path "${{ steps.release.outputs.arm64_dmg_path }}" \
-            --x86-64-dmg-path "${{ steps.release.outputs.x86_64_dmg_path }}" \
-            --sha256-path "${{ steps.release.outputs.release_sha256_path }}" \
-            --manifest-path "${{ steps.release.outputs.release_manifest_path }}" \
+            --arm64-dmg-path "${{ steps.paths.outputs.arm64_dmg_path }}" \
+            --x86-64-dmg-path "${{ steps.paths.outputs.x86_64_dmg_path }}" \
+            --sha256-path "${{ steps.paths.outputs.sha256_path }}" \
+            --manifest-path "${{ steps.paths.outputs.manifest_path }}" \
             --wait-seconds 180 \
             --poll-interval 5

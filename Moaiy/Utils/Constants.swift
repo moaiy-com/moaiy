@@ -128,6 +128,9 @@ enum Constants {
         /// Security-scoped bookmark for external GPG home directory
         static let externalGPGHomeBookmark = "com.moaiy.externalGPGHomeBookmark"
 
+        /// App language preference
+        static let appLanguageCode = "appLanguageCode"
+
     }
     
     // MARK: - Backup
@@ -141,6 +144,120 @@ enum Constants {
 
         /// Maximum accepted backup key file size during restore (10 MB)
         static let maxImportFileSizeBytes = 10 * 1024 * 1024
+    }
+}
+
+enum AppLanguageOption: String, CaseIterable {
+    case system
+    case english = "en"
+    case chineseSimplified = "zh-Hans"
+    case spanish = "es"
+    case portugueseBrazil = "pt-BR"
+    case hindi = "hi"
+    case arabic = "ar"
+    case french = "fr"
+    case german = "de"
+    case japanese = "ja"
+    case korean = "ko"
+    case russian = "ru"
+
+    private struct Metadata {
+        let localeIdentifier: String?
+        let settingsDisplayKey: String
+    }
+
+    static func from(storageValue: String) -> AppLanguageOption {
+        AppLanguageOption(rawValue: storageValue) ?? .system
+    }
+
+    var settingsDisplayKey: String {
+        metadata.settingsDisplayKey
+    }
+
+    var localizationCode: String? {
+        metadata.localeIdentifier
+    }
+
+    var locale: Locale {
+        guard let localeIdentifier = metadata.localeIdentifier else {
+            return .autoupdatingCurrent
+        }
+        return Locale(identifier: localeIdentifier)
+    }
+
+    private var metadata: Metadata {
+        switch self {
+        case .system:
+            return Metadata(localeIdentifier: nil, settingsDisplayKey: "setting_language_option_system")
+        case .english:
+            return Metadata(localeIdentifier: "en", settingsDisplayKey: "setting_language_option_english")
+        case .chineseSimplified:
+            return Metadata(localeIdentifier: "zh-Hans", settingsDisplayKey: "setting_language_option_chinese_simplified")
+        case .spanish:
+            return Metadata(localeIdentifier: "es", settingsDisplayKey: "setting_language_option_spanish")
+        case .portugueseBrazil:
+            return Metadata(localeIdentifier: "pt-BR", settingsDisplayKey: "setting_language_option_portuguese_brazil")
+        case .hindi:
+            return Metadata(localeIdentifier: "hi", settingsDisplayKey: "setting_language_option_hindi")
+        case .arabic:
+            return Metadata(localeIdentifier: "ar", settingsDisplayKey: "setting_language_option_arabic")
+        case .french:
+            return Metadata(localeIdentifier: "fr", settingsDisplayKey: "setting_language_option_french")
+        case .german:
+            return Metadata(localeIdentifier: "de", settingsDisplayKey: "setting_language_option_german")
+        case .japanese:
+            return Metadata(localeIdentifier: "ja", settingsDisplayKey: "setting_language_option_japanese")
+        case .korean:
+            return Metadata(localeIdentifier: "ko", settingsDisplayKey: "setting_language_option_korean")
+        case .russian:
+            return Metadata(localeIdentifier: "ru", settingsDisplayKey: "setting_language_option_russian")
+        }
+    }
+}
+
+enum AppLocalization {
+    static var selectedLanguage: AppLanguageOption {
+        let storedLanguage = UserDefaults.standard.string(forKey: Constants.StorageKeys.appLanguageCode)
+            ?? AppLanguageOption.system.rawValue
+        return AppLanguageOption.from(storageValue: storedLanguage)
+    }
+
+    static var locale: Locale {
+        selectedLanguage.locale
+    }
+
+    static func string(_ key: String.LocalizationValue) -> String {
+        String(localized: key, bundle: localizedBundle, locale: locale)
+    }
+
+    static func localizedString(forKey key: String) -> String {
+        localizedBundle.localizedString(forKey: key, value: nil, table: nil)
+    }
+
+    private static var localizedBundle: Bundle {
+        guard let languageCode = selectedLanguage.localizationCode else {
+            return .main
+        }
+
+        return bundle(for: languageCode)
+            ?? fallbackBundle(for: languageCode)
+            ?? .main
+    }
+
+    private static func bundle(for languageIdentifier: String) -> Bundle? {
+        guard let path = Bundle.main.path(forResource: languageIdentifier, ofType: "lproj") else {
+            return nil
+        }
+        return Bundle(path: path)
+    }
+
+    private static func fallbackBundle(for languageIdentifier: String) -> Bundle? {
+        let normalizedLanguageIdentifier = languageIdentifier.replacingOccurrences(of: "_", with: "-")
+        let parts = normalizedLanguageIdentifier.split(separator: "-")
+        guard parts.count > 1, let baseLanguageCode = parts.first else {
+            return nil
+        }
+        return bundle(for: String(baseLanguageCode))
     }
 }
 

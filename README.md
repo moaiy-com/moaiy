@@ -117,7 +117,7 @@ moaiy/
 
 ## Localization
 
-- UI: English + Chinese (Simplified)
+- UI: English, Chinese (Simplified), Spanish, Portuguese (Brazil), Hindi, Arabic, French, German, Japanese, Korean, Russian
 - String catalog: `Moaiy/Resources/Localizable.xcstrings`
 
 ## Security
