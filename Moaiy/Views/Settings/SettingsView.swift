@@ -54,12 +54,21 @@ struct SettingsView: View {
                         .fixedSize()
                     }
 
-                    Picker("setting_default_key_type", selection: $defaultKeyType) {
-                        Text("key_type_rsa4096").tag(0)
-                        Text("key_type_rsa2048").tag(1)
-                        Text("key_type_ecc_curve25519").tag(2)
+                    HStack(alignment: .center) {
+                        Text("setting_default_key_type")
+                            .foregroundStyle(Color.moaiyTextSecondary)
+
+                        Spacer()
+
+                        Picker("setting_default_key_type", selection: $defaultKeyType) {
+                            Text("key_type_rsa4096").tag(0)
+                            Text("key_type_rsa2048").tag(1)
+                            Text("key_type_ecc_curve25519").tag(2)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(minWidth: 260, idealWidth: 340, maxWidth: 380, alignment: .trailing)
                     }
-                    .pickerStyle(.segmented)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .moaiyModalCard()
