@@ -330,7 +330,11 @@ final class SubkeyManagementViewModel {
     var isApplyingChanges = false
     var errorMessage: String?
 
-    init(service: SubkeyManaging = GPGService.shared) {
+    init() {
+        self.service = GPGService.shared
+    }
+
+    init(service: SubkeyManaging) {
         self.service = service
     }
 
