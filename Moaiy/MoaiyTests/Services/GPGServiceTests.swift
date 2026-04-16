@@ -330,6 +330,67 @@ struct GPGServiceTests {
         #expect(lines[5] == "y")
     }
 
+    @Test("Subkey expiration update command uses quick-set-expire arguments")
+    func commandBuilder_updateSubkeyExpirationArguments() {
+        let arguments = GPGCommandBuilder.updateSubkeyExpirationArguments(
+            primaryKeyID: "PRIMARY",
+            expirationToken: "seconds=1",
+            subkeyFingerprint: "SUBKEY"
+        )
+
+        #expect(arguments == [
+            "--batch",
+            "--yes",
+            "--no-tty",
+            "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0",
+            "--quick-set-expire",
+            "--",
+            "PRIMARY",
+            "seconds=1",
+            "SUBKEY"
+        ])
+    }
+
+    @Test("Subkey revoke command uses edit-key batch arguments")
+    func commandBuilder_revokeSubkeyArguments() {
+        let arguments = GPGCommandBuilder.revokeSubkeyArguments(primaryKeyID: "PRIMARY")
+
+        #expect(arguments == [
+            "--batch",
+            "--yes",
+            "--no-tty",
+            "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0",
+            "--command-fd", "0",
+            "--edit-key",
+            "--",
+            "PRIMARY"
+        ])
+    }
+
+    @Test("Subkey revoke command input includes subkey selection and save")
+    func commandBuilder_revokeSubkeyInputContainsSequence() {
+        let input = GPGCommandBuilder.revokeSubkeyCommandInput(
+            subkeyIndex: 2,
+            reason: .keyReplaced,
+            description: "line1\r\nline2",
+            passphrase: "secret-pass"
+        )
+
+        let lines = input.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        #expect(lines.count >= 10)
+        #expect(lines[0] == "key 2")
+        #expect(lines[1] == "revkey")
+        #expect(lines[2] == "y")
+        #expect(lines[3] == "2")
+        #expect(lines[4] == "line1  line2")
+        #expect(lines[5].isEmpty)
+        #expect(lines[6] == "y")
+        #expect(lines[7] == "secret-pass")
+        #expect(lines[8] == "save")
+    }
+
     @Test("parse smartcard LEARN output extracts fingerprints and public key URL")
     func parseSmartCardLearnOutput_extractsFingerprintsAndURL() {
         let output = """

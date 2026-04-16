@@ -39,6 +39,8 @@ use the controlled fallback path.
    - `dist/release/vX.Y.Z-*/SHA256SUMS.txt`
    - `dist/release/vX.Y.Z-*/release-manifest.json`
    - `dist/release/vX.Y.Z-*/release-notes.md`
+   - `release-notes.md` must include a detailed change list for the target version
+     (auto-extracted from `CHANGELOG.md`, not only packaging metadata)
 5. Create or verify release tag `vX.Y.Z` on `origin/main`.
 6. Publish with GitHub workflow (`Release`) after draft verification.
 7. Verify published release state and digests:
@@ -52,6 +54,18 @@ use the controlled fallback path.
   --x86-64-dmg-path <path> \
   --sha256-path <path> \
   --manifest-path <path>
+```
+
+## Release Note Policy
+
+- Release notes must contain version-specific detailed updates (Added/Changed/Fixed/Security, etc.).
+- The source of truth for detailed updates is `CHANGELOG.md` section `## [X.Y.Z]`.
+- Packaging metadata (assets, hashes, gate/signing mode) is supplementary and cannot replace detailed updates.
+- During release review, compare generated `release-notes.md` against the corresponding changelog section before publish.
+- If a published release note is incomplete, patch it with:
+
+```bash
+gh release edit vX.Y.Z --repo moaiy-com/moaiy --notes-file <release-notes.md>
 ```
 
 ## Gate Policy

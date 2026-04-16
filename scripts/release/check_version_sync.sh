@@ -126,6 +126,8 @@ required_tokens=(
   "{{SIGNING_MODE}}"
   "{{ASSET_TABLE}}"
   "{{KNOWN_ISSUES}}"
+  "{{DETAILED_UPDATES_EN}}"
+  "{{DETAILED_UPDATES_ZH}}"
 )
 
 for token in "${required_tokens[@]}"; do

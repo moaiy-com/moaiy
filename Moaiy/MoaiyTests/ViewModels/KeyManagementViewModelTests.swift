@@ -512,6 +512,60 @@ struct SubkeyManagementViewModelTests {
         #expect(mockService.listCallCount == 1)
     }
 
+    @Test("revokeSubkey triggers mutation and refresh")
+    func revokeSubkey_triggersRefresh() async throws {
+        let mockService = MockSubkeyService()
+        mockService.stubbedSubkeys = [makeSubkey(fingerprint: "SUBKEY-R")]
+        let viewModel = SubkeyManagementViewModel(service: mockService)
+        let key = makeSecretKey()
+
+        try await viewModel.revokeSubkey(
+            for: key,
+            subkeyFingerprint: "SUBKEY-R",
+            reason: .noLongerUsed,
+            description: "rotation",
+            passphrase: "test-passphrase"
+        )
+
+        #expect(mockService.revokeCallCount == 1)
+        #expect(mockService.listCallCount == 1)
+    }
+
+    @Test("disableSubkey triggers mutation and refresh")
+    func disableSubkey_triggersRefresh() async throws {
+        let mockService = MockSubkeyService()
+        mockService.stubbedSubkeys = [makeSubkey(fingerprint: "SUBKEY-D")]
+        let viewModel = SubkeyManagementViewModel(service: mockService)
+        let key = makeSecretKey()
+
+        try await viewModel.disableSubkey(
+            for: key,
+            subkeyFingerprint: "SUBKEY-D",
+            passphrase: nil
+        )
+
+        #expect(mockService.disableCallCount == 1)
+        #expect(mockService.listCallCount == 1)
+    }
+
+    @Test("enableSubkey triggers mutation and refresh")
+    func enableSubkey_triggersRefresh() async throws {
+        let mockService = MockSubkeyService()
+        mockService.stubbedSubkeys = [makeSubkey(fingerprint: "SUBKEY-E")]
+        let viewModel = SubkeyManagementViewModel(service: mockService)
+        let key = makeSecretKey()
+
+        try await viewModel.enableSubkey(
+            for: key,
+            subkeyFingerprint: "SUBKEY-E",
+            expiresAt: Date(),
+            passphrase: nil
+        )
+
+        #expect(mockService.enableCallCount == 1)
+        #expect(mockService.listCallCount == 1)
+    }
+
     @Test("addSubkey rejects concurrent mutation")
     func addSubkey_rejectsConcurrentMutation() async throws {
         let mockService = MockSubkeyService()
@@ -590,6 +644,9 @@ private final class MockSubkeyService: SubkeyManaging {
     var listCallCount = 0
     var addCallCount = 0
     var updateCallCount = 0
+    var revokeCallCount = 0
+    var disableCallCount = 0
+    var enableCallCount = 0
 
     func listSubkeys(primaryKeyID: String) async throws -> [GPGSubkey] {
         listCallCount += 1
@@ -621,6 +678,51 @@ private final class MockSubkeyService: SubkeyManaging {
         passphrase: String?
     ) async throws {
         updateCallCount += 1
+        if shouldDelayMutation {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        if let stubbedError {
+            throw stubbedError
+        }
+    }
+
+    func revokeSubkey(
+        primaryKeyID: String,
+        subkeyFingerprint: String,
+        reason: RevocationReason,
+        description: String,
+        passphrase: String?
+    ) async throws {
+        revokeCallCount += 1
+        if shouldDelayMutation {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        if let stubbedError {
+            throw stubbedError
+        }
+    }
+
+    func disableSubkey(
+        primaryKeyID: String,
+        subkeyFingerprint: String,
+        passphrase: String?
+    ) async throws {
+        disableCallCount += 1
+        if shouldDelayMutation {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        if let stubbedError {
+            throw stubbedError
+        }
+    }
+
+    func enableSubkey(
+        primaryKeyID: String,
+        subkeyFingerprint: String,
+        expiresAt: Date?,
+        passphrase: String?
+    ) async throws {
+        enableCallCount += 1
         if shouldDelayMutation {
             try? await Task.sleep(nanoseconds: 250_000_000)
         }

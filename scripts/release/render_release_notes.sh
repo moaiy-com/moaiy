@@ -5,10 +5,11 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/release/render_release_notes.sh --version X.Y.Z --manifest <path> --output <path>
+  ./scripts/release/render_release_notes.sh --version X.Y.Z --manifest <path> --output <path> [--changelog <path>]
 
 Description:
-  Renders bilingual (EN + ZH-Hans) release notes from release manifest metadata.
+  Renders bilingual (EN + ZH-Hans) release notes from release manifest metadata
+  and detailed version changes extracted from CHANGELOG.md.
 EOF
 }
 
@@ -16,6 +17,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VERSION=""
 MANIFEST_PATH=""
 OUTPUT_PATH=""
+CHANGELOG_PATH="$ROOT_DIR/CHANGELOG.md"
 TEMPLATE_PATH="$ROOT_DIR/scripts/release/templates/release-notes.md.tmpl"
 
 while [[ $# -gt 0 ]]; do
@@ -30,6 +32,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --output)
       OUTPUT_PATH="${2:-}"
+      shift 2
+      ;;
+    --changelog)
+      CHANGELOG_PATH="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -57,6 +63,10 @@ fi
 
 if [[ ! -f "$TEMPLATE_PATH" ]]; then
   echo "ERROR: template not found: $TEMPLATE_PATH"
+  exit 1
+fi
+if [[ ! -f "$CHANGELOG_PATH" ]]; then
+  echo "ERROR: changelog not found: $CHANGELOG_PATH"
   exit 1
 fi
 
@@ -96,6 +106,31 @@ if [[ "$gate_mode" == "balanced" ]]; then
 - Balanced gate: x86_64 uses build + smoke fallback when Intel physical hardware is unavailable."
 fi
 
+changelog_section="$(
+  awk -v version="$VERSION" '
+    $0 ~ "^## \\[" version "\\]" { in_section=1; next }
+    in_section && $0 ~ "^## \\[" { exit }
+    in_section { print }
+  ' "$CHANGELOG_PATH"
+)"
+
+if [[ -z "${changelog_section//[[:space:]]/}" ]]; then
+  echo "ERROR: changelog section content is empty for version $VERSION"
+  exit 1
+fi
+
+detailed_updates_en="$(printf '%s\n' "$changelog_section" | sed '/./,$!d')"
+detailed_updates_zh="$(
+  printf '%s\n' "$detailed_updates_en" \
+    | sed \
+      -e 's/^### Added$/### 新增/' \
+      -e 's/^### Changed$/### 变更/' \
+      -e 's/^### Fixed$/### 修复/' \
+      -e 's/^### Removed$/### 移除/' \
+      -e 's/^### Security$/### 安全/' \
+      -e 's/^### Deprecated$/### 弃用/'
+)"
+
 mkdir -p "$(dirname "$OUTPUT_PATH")"
 
 while IFS= read -r line || [[ -n "$line" ]]; do
@@ -105,6 +140,12 @@ while IFS= read -r line || [[ -n "$line" ]]; do
       ;;
     *"{{KNOWN_ISSUES}}"*)
       printf '%s\n' "$known_issues"
+      ;;
+    *"{{DETAILED_UPDATES_EN}}"*)
+      printf '%s\n' "$detailed_updates_en"
+      ;;
+    *"{{DETAILED_UPDATES_ZH}}"*)
+      printf '%s\n' "$detailed_updates_zh"
       ;;
     *)
       line="${line//\{\{VERSION\}\}/$VERSION}"
