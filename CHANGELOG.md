@@ -12,6 +12,24 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Release execution checklist for v0.5.0 (`doc/v0.5.0-minimal-release-checklist.md`)
 - Core flow validation list for v0.5.0 (`doc/v0.5.0-core-flow-validation.md`)
 
+## [0.7.1] - 2026-04-16
+
+### Added
+
+- Expanded subkey lifecycle operations in the management sheet: revoke subkey, disable subkey, and re-enable subkey.
+- Added subkey risk/rotation UX: high-risk and expiring indicators, filter and sort controls, and rotation guidance panel.
+- Added service-layer APIs for subkey revoke/disable/enable and command-builder coverage for these paths.
+- Added subkey lifecycle regression coverage in hardening flow tests (add/update/disable/enable/revoke end-to-end).
+
+### Changed
+
+- Refactored subkey management view model mutation flow to a unified lifecycle mutation pipeline with refresh-on-success.
+- Updated release-note rendering flow to require detailed changelog-derived update sections in generated notes.
+
+### Fixed
+
+- Fixed subkey management passphrase handling and batch command sequencing for non-interactive subkey revocation.
+
 ## [0.7.0] - 2026-04-16
 
 ### Added

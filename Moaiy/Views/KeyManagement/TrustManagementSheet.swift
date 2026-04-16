@@ -392,6 +392,68 @@ final class SubkeyManagementViewModel {
         expiresAt: Date?,
         passphrase: String?
     ) async throws {
+        try await performMutation(for: key) {
+            try await service.updateSubkeyExpiration(
+                primaryKeyID: key.fingerprint,
+                subkeyFingerprint: subkeyFingerprint,
+                expiresAt: expiresAt,
+                passphrase: passphrase
+            )
+        }
+    }
+
+    func revokeSubkey(
+        for key: GPGKey,
+        subkeyFingerprint: String,
+        reason: RevocationReason,
+        description: String,
+        passphrase: String?
+    ) async throws {
+        try await performMutation(for: key) {
+            try await service.revokeSubkey(
+                primaryKeyID: key.fingerprint,
+                subkeyFingerprint: subkeyFingerprint,
+                reason: reason,
+                description: description,
+                passphrase: passphrase
+            )
+        }
+    }
+
+    func disableSubkey(
+        for key: GPGKey,
+        subkeyFingerprint: String,
+        passphrase: String?
+    ) async throws {
+        try await performMutation(for: key) {
+            try await service.disableSubkey(
+                primaryKeyID: key.fingerprint,
+                subkeyFingerprint: subkeyFingerprint,
+                passphrase: passphrase
+            )
+        }
+    }
+
+    func enableSubkey(
+        for key: GPGKey,
+        subkeyFingerprint: String,
+        expiresAt: Date?,
+        passphrase: String?
+    ) async throws {
+        try await performMutation(for: key) {
+            try await service.enableSubkey(
+                primaryKeyID: key.fingerprint,
+                subkeyFingerprint: subkeyFingerprint,
+                expiresAt: expiresAt,
+                passphrase: passphrase
+            )
+        }
+    }
+
+    private func performMutation(
+        for key: GPGKey,
+        operation: () async throws -> Void
+    ) async throws {
         guard key.isSecret, !key.isSmartCardStub else {
             throw GPGError.keyNotFound(key.fingerprint)
         }
@@ -402,12 +464,7 @@ final class SubkeyManagementViewModel {
         isApplyingChanges = true
         defer { isApplyingChanges = false }
 
-        try await service.updateSubkeyExpiration(
-            primaryKeyID: key.fingerprint,
-            subkeyFingerprint: subkeyFingerprint,
-            expiresAt: expiresAt,
-            passphrase: passphrase
-        )
+        try await operation()
         await loadSubkeys(for: key)
     }
 }
@@ -421,17 +478,35 @@ struct SubkeyManagementSheet: View {
     @State private var newSubkeyExpirationPreset: SubkeyExpirationPreset = .oneYear
     @State private var newSubkeyCustomDate = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
     @State private var addSubkeyPassphrase = ""
+    @State private var selectedFilter: SubkeyFilterOption = .all
+    @State private var selectedSort: SubkeySortOption = .createdNewest
 
     @State private var selectedSubkeyFingerprint: String?
     @State private var updateExpirationPreset: SubkeyExpirationPreset = .oneYear
     @State private var updateCustomDate = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
     @State private var updatePassphrase = ""
+    @State private var revokeReason: RevocationReason = .noLongerUsed
+    @State private var revokeDescription = ""
 
     @State private var promptAlert: PromptAlertContent?
 
     private var selectedSubkey: GPGSubkey? {
         guard let selectedSubkeyFingerprint else { return nil }
         return viewModel.subkeys.first(where: { $0.fingerprint == selectedSubkeyFingerprint })
+    }
+
+    private var filteredSubkeys: [GPGSubkey] {
+        selectedSort.sortedSubkeys(
+            from: viewModel.subkeys.filter { selectedFilter.matches($0) }
+        )
+    }
+
+    private var highRiskCount: Int {
+        viewModel.subkeys.filter(\.isHighRisk).count
+    }
+
+    private var expiringSoonCount: Int {
+        viewModel.subkeys.filter { $0.isExpiringSoon(withinDays: 30) }.count
     }
 
     var body: some View {
@@ -471,6 +546,24 @@ struct SubkeyManagementSheet: View {
                         Text("subkey_list_title")
                             .font(.headline)
 
+                        HStack(spacing: 12) {
+                            Picker("filter_title", selection: $selectedFilter) {
+                                ForEach(SubkeyFilterOption.allCases) { option in
+                                    Text(LocalizedStringKey(option.titleKey))
+                                        .tag(option)
+                                }
+                            }
+                            .pickerStyle(.menu)
+
+                            Picker("subkey_sort_title", selection: $selectedSort) {
+                                ForEach(SubkeySortOption.allCases) { option in
+                                    Text(LocalizedStringKey(option.titleKey))
+                                        .tag(option)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                        }
+
                         if viewModel.isLoading {
                             HStack(spacing: 12) {
                                 ProgressView()
@@ -488,8 +581,15 @@ struct SubkeyManagementSheet: View {
                                 .padding(MoaiyUI.Spacing.md)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .moaiyCardStyle()
+                        } else if filteredSubkeys.isEmpty {
+                            Text("subkey_empty_state")
+                                .font(.subheadline)
+                                .foregroundStyle(Color.moaiyTextSecondary)
+                                .padding(MoaiyUI.Spacing.md)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .moaiyCardStyle()
                         } else {
-                            ForEach(viewModel.subkeys) { subkey in
+                            ForEach(filteredSubkeys) { subkey in
                                 SubkeyRowView(
                                     subkey: subkey,
                                     onEditExpiration: {
@@ -501,6 +601,28 @@ struct SubkeyManagementSheet: View {
                             }
                         }
                     }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("subkey_rotation_guidance_title")
+                            .font(.headline)
+
+                        if highRiskCount > 0 {
+                            Text("subkey_rotation_guidance_high_risk")
+                            .foregroundStyle(Color.moaiyError)
+                        }
+
+                        if expiringSoonCount > 0 {
+                            Text("subkey_rotation_guidance_expiring")
+                            .foregroundStyle(Color.moaiyWarning)
+                        }
+
+                        Text("subkey_rotation_guidance_default")
+                            .foregroundStyle(Color.moaiyTextSecondary)
+                    }
+                    .font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(MoaiyUI.Spacing.md)
+                    .moaiyCardStyle()
 
                     if let errorMessage = viewModel.errorMessage, !errorMessage.isEmpty {
                         Text(errorMessage)
@@ -593,10 +715,22 @@ struct SubkeyManagementSheet: View {
                             SecureField("subkey_passphrase_placeholder", text: $updatePassphrase)
                                 .textFieldStyle(.roundedBorder)
 
+                            Picker("revocation_reason_title", selection: $revokeReason) {
+                                ForEach(RevocationReason.allCases) { reason in
+                                    Text(reason.localizedName)
+                                        .tag(reason)
+                                }
+                            }
+                            .pickerStyle(.menu)
+
+                            TextField("revocation_description_placeholder", text: $revokeDescription)
+                                .textFieldStyle(.roundedBorder)
+
                             HStack(spacing: 12) {
                                 Button("action_cancel") {
                                     selectedSubkeyFingerprint = nil
                                     updatePassphrase = ""
+                                    revokeDescription = ""
                                 }
                                 .buttonStyle(.bordered)
 
@@ -613,6 +747,26 @@ struct SubkeyManagementSheet: View {
                                 .buttonStyle(.borderedProminent)
                                 .tint(Color.moaiyAccentV2)
                                 .disabled(viewModel.isApplyingChanges)
+                            }
+
+                            HStack(spacing: 12) {
+                                Button("subkey_action_disable") {
+                                    disableSubkey(selectedSubkey)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(viewModel.isApplyingChanges || selectedSubkey.isHighRisk)
+
+                                Button("subkey_action_enable") {
+                                    enableSubkey(selectedSubkey)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(viewModel.isApplyingChanges || !selectedSubkey.canEnableLifecycleOperation)
+
+                                Button("subkey_action_revoke", role: .destructive) {
+                                    revokeSubkey(selectedSubkey)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(viewModel.isApplyingChanges || selectedSubkey.status == .revoked)
                             }
                         }
                         .padding(MoaiyUI.Spacing.md)
@@ -665,6 +819,129 @@ struct SubkeyManagementSheet: View {
             }
         }
     }
+
+    private func disableSubkey(_ subkey: GPGSubkey) {
+        Task {
+            do {
+                try await viewModel.disableSubkey(
+                    for: key,
+                    subkeyFingerprint: subkey.fingerprint,
+                    passphrase: updatePassphrase.isEmpty ? nil : updatePassphrase
+                )
+                promptAlert = PromptAlertContent.success(message: AppLocalization.string("subkey_update_expiration_success"))
+            } catch {
+                promptAlert = PromptAlertContent.failure(context: .keyEdit, error: error)
+            }
+        }
+    }
+
+    private func enableSubkey(_ subkey: GPGSubkey) {
+        Task {
+            do {
+                try await viewModel.enableSubkey(
+                    for: key,
+                    subkeyFingerprint: subkey.fingerprint,
+                    expiresAt: updateExpirationPreset.resolveDate(customDate: updateCustomDate),
+                    passphrase: updatePassphrase.isEmpty ? nil : updatePassphrase
+                )
+                promptAlert = PromptAlertContent.success(message: AppLocalization.string("subkey_update_expiration_success"))
+            } catch {
+                promptAlert = PromptAlertContent.failure(context: .keyEdit, error: error)
+            }
+        }
+    }
+
+    private func revokeSubkey(_ subkey: GPGSubkey) {
+        Task {
+            do {
+                try await viewModel.revokeSubkey(
+                    for: key,
+                    subkeyFingerprint: subkey.fingerprint,
+                    reason: revokeReason,
+                    description: revokeDescription,
+                    passphrase: updatePassphrase.isEmpty ? nil : updatePassphrase
+                )
+                selectedSubkeyFingerprint = nil
+                updatePassphrase = ""
+                revokeDescription = ""
+                promptAlert = PromptAlertContent.success(message: AppLocalization.string("subkey_revoke_success"))
+            } catch {
+                promptAlert = PromptAlertContent.failure(context: .keyEdit, error: error)
+            }
+        }
+    }
+}
+
+private enum SubkeyFilterOption: String, CaseIterable, Identifiable {
+    case all
+    case active
+    case expiringSoon
+    case highRisk
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .all:
+            return "filter_all_keys"
+        case .active:
+            return "subkey_filter_active"
+        case .expiringSoon:
+            return "expiring"
+        case .highRisk:
+            return "subkey_filter_high_risk"
+        }
+    }
+
+    func matches(_ subkey: GPGSubkey) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .active:
+            return !subkey.isHighRisk
+        case .expiringSoon:
+            return subkey.isExpiringSoon(withinDays: 30)
+        case .highRisk:
+            return subkey.isHighRisk
+        }
+    }
+}
+
+private enum SubkeySortOption: String, CaseIterable, Identifiable {
+    case createdNewest
+    case createdOldest
+    case expirationSoonest
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .createdNewest:
+            return "subkey_sort_created_newest"
+        case .createdOldest:
+            return "subkey_sort_created_oldest"
+        case .expirationSoonest:
+            return "subkey_sort_expiration_soonest"
+        }
+    }
+
+    func sortedSubkeys(from subkeys: [GPGSubkey]) -> [GPGSubkey] {
+        switch self {
+        case .createdNewest:
+            return subkeys.sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
+        case .createdOldest:
+            return subkeys.sorted { ($0.createdAt ?? .distantFuture) < ($1.createdAt ?? .distantFuture) }
+        case .expirationSoonest:
+            return subkeys.sorted {
+                let left = $0.expiresAt ?? .distantFuture
+                let right = $1.expiresAt ?? .distantFuture
+                if left == right {
+                    return ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast)
+                }
+                return left < right
+            }
+        }
+    }
 }
 
 private struct SubkeyRowView: View {
@@ -708,6 +985,14 @@ private struct SubkeyRowView: View {
                 }
             }
 
+            HStack(spacing: 8) {
+                if subkey.isHighRisk {
+                    riskBadge(symbol: "exclamationmark.triangle.fill", color: Color.moaiyError)
+                } else if let remainingDays = subkey.remainingDaysUntilExpiration, remainingDays <= 30 {
+                    riskBadge(symbol: "clock.badge.exclamationmark.fill", color: Color.moaiyWarning)
+                }
+            }
+
             HStack(spacing: 6) {
                 Text("\(AppLocalization.string("subkey_key_length_label")) \(subkey.keyLength)")
 
@@ -728,8 +1013,18 @@ private struct SubkeyRowView: View {
             .truncationMode(.tail)
         }
         .padding(.horizontal, MoaiyUI.Spacing.md)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .moaiyCardStyle()
+    }
+
+    private func riskBadge(symbol: String, color: Color) -> some View {
+        Image(systemName: symbol)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.14))
+            .foregroundStyle(color)
+            .clipShape(Capsule())
     }
 
     private var metadataDot: some View {
@@ -765,6 +1060,34 @@ private struct SubkeyRowView: View {
         case .unknown:
             return Color.moaiyTextSecondary
         }
+    }
+}
+
+private extension GPGSubkey {
+    var isHighRisk: Bool {
+        switch status {
+        case .revoked, .disabled, .invalid:
+            return true
+        case .expired:
+            return true
+        case .valid, .unknown:
+            return isExpired
+        }
+    }
+
+    var canEnableLifecycleOperation: Bool {
+        status == .expired || status == .disabled || isExpired
+    }
+
+    func isExpiringSoon(withinDays days: Int) -> Bool {
+        guard let remainingDaysUntilExpiration else { return false }
+        return remainingDaysUntilExpiration >= 0 && remainingDaysUntilExpiration <= days && !isExpired
+    }
+
+    var remainingDaysUntilExpiration: Int? {
+        guard let expiresAt else { return nil }
+        let interval = expiresAt.timeIntervalSinceNow
+        return Int((interval / 86_400).rounded(.down))
     }
 }
 

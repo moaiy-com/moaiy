@@ -598,8 +598,8 @@ struct SecurityHardeningFlowTests {
         }
     }
 
-    @Test("Subkey lifecycle supports add and expiration update")
-    func subkeyLifecycle_addAndUpdateExpiration() async throws {
+    @Test("Subkey lifecycle supports add update disable enable and revoke")
+    func subkeyLifecycle_addUpdateDisableEnableAndRevoke() async throws {
         let service = GPGService.shared
         try await waitForServiceReady(service)
 
@@ -660,6 +660,50 @@ struct SecurityHardeningFlowTests {
                 formatter.string(from: updatedSubkey.expiresAt ?? .distantPast)
                     == formatter.string(from: updatedExpiresAt)
             )
+
+            try await service.disableSubkey(
+                primaryKeyID: fingerprint,
+                subkeyFingerprint: newSubkey.fingerprint,
+                passphrase: identity.passphrase
+            )
+
+            let afterDisableSubkeys = try await service.listSubkeys(primaryKeyID: fingerprint)
+            guard let disabledSubkey = afterDisableSubkeys.first(where: { $0.fingerprint == newSubkey.fingerprint }) else {
+                Issue.record("Disabled subkey should remain listed")
+                return
+            }
+            #expect(disabledSubkey.status == .expired || disabledSubkey.isExpired)
+
+            let enabledExpiresAt = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
+            try await service.enableSubkey(
+                primaryKeyID: fingerprint,
+                subkeyFingerprint: newSubkey.fingerprint,
+                expiresAt: enabledExpiresAt,
+                passphrase: identity.passphrase
+            )
+
+            let afterEnableSubkeys = try await service.listSubkeys(primaryKeyID: fingerprint)
+            guard let enabledSubkey = afterEnableSubkeys.first(where: { $0.fingerprint == newSubkey.fingerprint }) else {
+                Issue.record("Enabled subkey should remain listed")
+                return
+            }
+            #expect(enabledSubkey.status != .revoked)
+            #expect(!enabledSubkey.isExpired)
+
+            try await service.revokeSubkey(
+                primaryKeyID: fingerprint,
+                subkeyFingerprint: newSubkey.fingerprint,
+                reason: .noLongerUsed,
+                description: "integration revoke",
+                passphrase: identity.passphrase
+            )
+
+            let afterRevokeSubkeys = try await service.listSubkeys(primaryKeyID: fingerprint)
+            guard let revokedSubkey = afterRevokeSubkeys.first(where: { $0.fingerprint == newSubkey.fingerprint }) else {
+                Issue.record("Revoked subkey should remain listed")
+                return
+            }
+            #expect(revokedSubkey.status == .revoked)
         } catch {
             if let generatedFingerprint {
                 await cleanupKey(fingerprint: generatedFingerprint, service: service)

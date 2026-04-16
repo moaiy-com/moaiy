@@ -41,6 +41,24 @@ protocol SubkeyManaging {
         expiresAt: Date?,
         passphrase: String?
     ) async throws
+    func revokeSubkey(
+        primaryKeyID: String,
+        subkeyFingerprint: String,
+        reason: RevocationReason,
+        description: String,
+        passphrase: String?
+    ) async throws
+    func disableSubkey(
+        primaryKeyID: String,
+        subkeyFingerprint: String,
+        passphrase: String?
+    ) async throws
+    func enableSubkey(
+        primaryKeyID: String,
+        subkeyFingerprint: String,
+        expiresAt: Date?,
+        passphrase: String?
+    ) async throws
 }
 
 // MARK: - GPG Process Actor
@@ -1257,22 +1275,111 @@ final class GPGService: SubkeyManaging {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedSubkeyFingerprint = normalizeKeyReference(subkeyFingerprint) ?? subkeyFingerprint
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let expiration = formatExpirationDate(expiresAt)
-        let input = (passphrase ?? "") + "\n"
+        try await updateSubkeyExpirationToken(
+            primaryKeyID: normalizedPrimaryKeyID,
+            subkeyFingerprint: normalizedSubkeyFingerprint,
+            expirationToken: formatExpirationDate(expiresAt),
+            passphrase: passphrase
+        )
+    }
+
+    func revokeSubkey(
+        primaryKeyID: String,
+        subkeyFingerprint: String,
+        reason: RevocationReason,
+        description: String,
+        passphrase: String?
+    ) async throws {
+        try await ensureGPGAgentRunningIfNeeded()
+
+        let normalizedPrimaryKeyID = normalizeKeyReference(primaryKeyID) ?? primaryKeyID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedSubkeyFingerprint = normalizeKeyReference(subkeyFingerprint) ?? subkeyFingerprint
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let subkeyIndex = try await resolveSubkeyIndex(
+            primaryKeyID: normalizedPrimaryKeyID,
+            subkeyFingerprint: normalizedSubkeyFingerprint
+        )
+
+        let requiresPassphrase = try await probeSecretKeyPassphraseRequirement(keyID: normalizedPrimaryKeyID)
+        let sanitizedPassphrase = sanitizeBatchPassphrase(passphrase ?? "")
+        if requiresPassphrase && sanitizedPassphrase.isEmpty {
+            throw GPGError.invalidPassphrase
+        }
+
+        let input = GPGCommandBuilder.revokeSubkeyCommandInput(
+            subkeyIndex: subkeyIndex,
+            reason: reason,
+            description: description,
+            passphrase: requiresPassphrase ? sanitizedPassphrase : nil
+        )
 
         let result = try await executeGPG(
-            arguments: [
-                "--batch",
-                "--yes",
-                "--no-tty",
-                "--pinentry-mode", "loopback",
-                "--passphrase-fd", "0",
-                "--quick-set-expire",
-                "--",
-                normalizedPrimaryKeyID,
-                expiration,
-                normalizedSubkeyFingerprint
-            ],
+            arguments: GPGCommandBuilder.revokeSubkeyArguments(primaryKeyID: normalizedPrimaryKeyID),
+            input: input,
+            timeout: 60
+        )
+
+        if result.exitCode != 0 {
+            if let credentialError = credentialFailureError(from: result) {
+                throw credentialError
+            }
+            throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
+        }
+    }
+
+    func disableSubkey(
+        primaryKeyID: String,
+        subkeyFingerprint: String,
+        passphrase: String?
+    ) async throws {
+        try await ensureGPGAgentRunningIfNeeded()
+
+        let normalizedPrimaryKeyID = normalizeKeyReference(primaryKeyID) ?? primaryKeyID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedSubkeyFingerprint = normalizeKeyReference(subkeyFingerprint) ?? subkeyFingerprint
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        try await updateSubkeyExpirationToken(
+            primaryKeyID: normalizedPrimaryKeyID,
+            subkeyFingerprint: normalizedSubkeyFingerprint,
+            expirationToken: "seconds=1",
+            passphrase: passphrase
+        )
+    }
+
+    func enableSubkey(
+        primaryKeyID: String,
+        subkeyFingerprint: String,
+        expiresAt: Date?,
+        passphrase: String?
+    ) async throws {
+        try await ensureGPGAgentRunningIfNeeded()
+
+        let normalizedPrimaryKeyID = normalizeKeyReference(primaryKeyID) ?? primaryKeyID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedSubkeyFingerprint = normalizeKeyReference(subkeyFingerprint) ?? subkeyFingerprint
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        try await updateSubkeyExpirationToken(
+            primaryKeyID: normalizedPrimaryKeyID,
+            subkeyFingerprint: normalizedSubkeyFingerprint,
+            expirationToken: formatExpirationDate(expiresAt),
+            passphrase: passphrase
+        )
+    }
+
+    private func updateSubkeyExpirationToken(
+        primaryKeyID: String,
+        subkeyFingerprint: String,
+        expirationToken: String,
+        passphrase: String?
+    ) async throws {
+        let input = sanitizeBatchPassphrase(passphrase ?? "") + "\n"
+        let result = try await executeGPG(
+            arguments: GPGCommandBuilder.updateSubkeyExpirationArguments(
+                primaryKeyID: primaryKeyID,
+                expirationToken: expirationToken,
+                subkeyFingerprint: subkeyFingerprint
+            ),
             input: input
         )
 
@@ -1282,6 +1389,27 @@ final class GPGService: SubkeyManaging {
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
         }
+    }
+
+    private func resolveSubkeyIndex(
+        primaryKeyID: String,
+        subkeyFingerprint: String
+    ) async throws -> Int {
+        let subkeys = try await listSubkeys(primaryKeyID: primaryKeyID)
+        guard !subkeys.isEmpty else {
+            throw GPGError.keyNotFound(subkeyFingerprint)
+        }
+
+        for (index, subkey) in subkeys.enumerated() {
+            guard let normalizedCandidate = normalizeKeyReference(subkey.fingerprint) else {
+                continue
+            }
+            if keyReferencesMatch(expected: subkeyFingerprint, actual: normalizedCandidate) {
+                return index + 1
+            }
+        }
+
+        throw GPGError.keyNotFound(subkeyFingerprint)
     }
     
     // MARK: - Keyserver Operations
@@ -4189,8 +4317,72 @@ enum GPGCommandBuilder {
         ["--batch", "--yes", "--import", "--", filePath]
     }
 
+    static func updateSubkeyExpirationArguments(
+        primaryKeyID: String,
+        expirationToken: String,
+        subkeyFingerprint: String
+    ) -> [String] {
+        [
+            "--batch",
+            "--yes",
+            "--no-tty",
+            "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0",
+            "--quick-set-expire",
+            "--",
+            primaryKeyID,
+            expirationToken,
+            subkeyFingerprint
+        ]
+    }
+
+    static func revokeSubkeyArguments(primaryKeyID: String) -> [String] {
+        [
+            "--batch",
+            "--yes",
+            "--no-tty",
+            "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0",
+            "--command-fd", "0",
+            "--edit-key",
+            "--",
+            primaryKeyID
+        ]
+    }
+
     static func updateTrustDatabaseArguments() -> [String] {
         ["--batch", "--yes", "--no-tty", "--update-trustdb"]
+    }
+
+    static func revokeSubkeyCommandInput(
+        subkeyIndex: Int,
+        reason: RevocationReason,
+        description: String,
+        passphrase: String?
+    ) -> String {
+        let sanitizedDescription = description
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitizedPassphrase = passphrase?
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: "\n", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var lines = [
+            "key \(subkeyIndex)",
+            "revkey",
+            "y",
+            reason.gpgReasonCode,
+            sanitizedDescription,
+            "",
+            "y"
+        ]
+        if let sanitizedPassphrase, !sanitizedPassphrase.isEmpty {
+            lines.append(sanitizedPassphrase)
+        }
+        lines.append("save")
+        return lines.joined(separator: "\n") + "\n"
     }
 
     static func revocationCommandInput(
