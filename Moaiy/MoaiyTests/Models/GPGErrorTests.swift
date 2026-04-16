@@ -224,6 +224,15 @@ struct GPGErrorTests {
         #expect(mapped == AppLocalization.string("error_invalid_passphrase"))
     }
 
+    @Test("Ownertrust raw failures fall back to trust update message")
+    func ownertrustRawFailure_mapsToTrustUpdateMessage() {
+        let mapped = UserFacingErrorMapper.message(
+            for: GPGError.executionFailed("gpg: error in ownertrust values"),
+            context: .trust
+        )
+        #expect(mapped == AppLocalization.string("error_trust_update_failed"))
+    }
+
     @Test("App localization string follows all supported app languages")
     func appLocalization_stringFollowsAllSupportedLanguages() {
         let defaults = UserDefaults.standard

@@ -2209,7 +2209,7 @@ final class GPGService: SubkeyManaging {
         }
 
         let trustDBResult = try await executeGPG(
-            arguments: ["--batch", "--yes", "--no-tty", "--update-trustdb"]
+            arguments: GPGCommandBuilder.updateTrustDatabaseArguments()
         )
 
         if trustDBResult.exitCode != 0 {
@@ -2223,6 +2223,99 @@ final class GPGService: SubkeyManaging {
         
         if result.exitCode != 0 {
             throw GPGError.trustUpdateFailed(result.stderr ?? "Unknown error")
+        }
+    }
+
+    /// Export ownertrust records for backup or migration.
+    func exportOwnerTrust() async throws -> Data {
+        let result = try await executeGPG(arguments: GPGCommandBuilder.exportOwnerTrustArguments())
+        guard result.exitCode == 0 else {
+            throw GPGError.trustUpdateFailed(result.stderr ?? "Failed to export ownertrust")
+        }
+
+        if let data = result.data, !data.isEmpty {
+            return data
+        }
+        if let stdout = result.stdout, let data = stdout.data(using: .utf8), !data.isEmpty {
+            return data
+        }
+
+        throw GPGError.trustUpdateFailed("No ownertrust data exported")
+    }
+
+    /// Import ownertrust records and refresh trust database.
+    func importOwnerTrust(from fileURL: URL) async throws {
+        let result = try await executeGPG(
+            arguments: GPGCommandBuilder.importOwnerTrustArguments(filePath: fileURL.path)
+        )
+        guard result.exitCode == 0 else {
+            throw GPGError.trustUpdateFailed(result.stderr ?? "Failed to import ownertrust")
+        }
+
+        let trustDBResult = try await executeGPG(
+            arguments: GPGCommandBuilder.updateTrustDatabaseArguments()
+        )
+        guard trustDBResult.exitCode == 0 else {
+            throw GPGError.trustUpdateFailed(trustDBResult.stderr ?? "Failed to update trust database")
+        }
+    }
+
+    /// Generate an ASCII-armored revocation certificate for a key.
+    func generateRevocationCertificate(
+        keyID: String,
+        reason: RevocationReason,
+        description: String,
+        passphrase: String?
+    ) async throws -> Data {
+        try await ensureGPGAgentRunningIfNeeded()
+
+        let stagingDirectory = try secureOperationDirectory(prefix: "revocation")
+        defer {
+            try? FileManager.default.removeItem(at: stagingDirectory)
+        }
+
+        let outputURL = stagingDirectory.appendingPathComponent("revocation.asc")
+        let result = try await executeGPG(
+            arguments: GPGCommandBuilder.generateRevocationArguments(
+                keyID: keyID,
+                outputPath: outputURL.path
+            ),
+            input: GPGCommandBuilder.revocationCommandInput(
+                passphrase: passphrase ?? "",
+                reason: reason,
+                description: description
+            ),
+            timeout: 120
+        )
+
+        if result.exitCode != 0 {
+            if let credentialError = credentialFailureError(from: result) {
+                throw credentialError
+            }
+            throw GPGError.executionFailed(result.stderr ?? "Failed to generate revocation certificate")
+        }
+
+        let data = try Data(contentsOf: outputURL)
+        guard !data.isEmpty else {
+            throw GPGError.exportFailed("No revocation certificate generated")
+        }
+        return data
+    }
+
+    /// Import a revocation certificate and refresh trust database.
+    func importRevocationCertificate(from fileURL: URL) async throws {
+        let result = try await executeGPG(
+            arguments: GPGCommandBuilder.importRevocationArguments(filePath: fileURL.path)
+        )
+        guard result.exitCode == 0 else {
+            throw GPGError.importFailed(result.stderr ?? "Failed to import revocation certificate")
+        }
+
+        let trustDBResult = try await executeGPG(
+            arguments: GPGCommandBuilder.updateTrustDatabaseArguments()
+        )
+        guard trustDBResult.exitCode == 0 else {
+            throw GPGError.trustUpdateFailed(trustDBResult.stderr ?? "Failed to update trust database")
         }
     }
     
@@ -3978,7 +4071,7 @@ enum TrustLevel: String, CaseIterable, Identifiable {
     var quickSetOwnerTrustValue: String {
         switch self {
         case .unknown: return "unknown"
-        case .none: return "none"
+        case .none: return "never"
         case .marginal: return "marginal"
         case .full: return "full"
         case .ultimate: return "ultimate"
@@ -4028,6 +4121,96 @@ enum TrustLevel: String, CaseIterable, Identifiable {
         case .full: return AppLocalization.string("trust_desc_full")
         case .ultimate: return AppLocalization.string("trust_desc_ultimate")
         }
+    }
+}
+
+enum RevocationReason: String, CaseIterable, Identifiable {
+    case noLongerUsed
+    case keyCompromised
+    case keyReplaced
+    case userIDInvalid
+
+    var id: String { rawValue }
+
+    /// GPG reason code for `--gen-revoke`.
+    var gpgReasonCode: String {
+        switch self {
+        case .noLongerUsed:
+            return "0"
+        case .keyCompromised:
+            return "1"
+        case .keyReplaced:
+            return "2"
+        case .userIDInvalid:
+            return "3"
+        }
+    }
+
+    var localizedName: String {
+        switch self {
+        case .noLongerUsed:
+            return AppLocalization.string("revocation_reason_no_longer_used")
+        case .keyCompromised:
+            return AppLocalization.string("revocation_reason_key_compromised")
+        case .keyReplaced:
+            return AppLocalization.string("revocation_reason_key_replaced")
+        case .userIDInvalid:
+            return AppLocalization.string("revocation_reason_user_id_invalid")
+        }
+    }
+}
+
+enum GPGCommandBuilder {
+    static func exportOwnerTrustArguments() -> [String] {
+        ["--export-ownertrust"]
+    }
+
+    static func importOwnerTrustArguments(filePath: String) -> [String] {
+        ["--batch", "--yes", "--import-ownertrust", "--", filePath]
+    }
+
+    static func generateRevocationArguments(keyID: String, outputPath: String) -> [String] {
+        [
+            "--yes",
+            "--no-tty",
+            "--armor",
+            "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0",
+            "--command-fd", "0",
+            "--status-fd", "1",
+            "--output", outputPath,
+            "--gen-revoke",
+            "--",
+            keyID
+        ]
+    }
+
+    static func importRevocationArguments(filePath: String) -> [String] {
+        ["--batch", "--yes", "--import", "--", filePath]
+    }
+
+    static func updateTrustDatabaseArguments() -> [String] {
+        ["--batch", "--yes", "--no-tty", "--update-trustdb"]
+    }
+
+    static func revocationCommandInput(
+        passphrase: String,
+        reason: RevocationReason,
+        description: String
+    ) -> String {
+        let sanitizedDescription = description
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return [
+            passphrase,
+            "y",
+            reason.gpgReasonCode,
+            sanitizedDescription,
+            "",
+            "y"
+        ].joined(separator: "\n") + "\n"
     }
 }
 

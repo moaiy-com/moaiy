@@ -672,63 +672,76 @@ private struct SubkeyRowView: View {
     let onEditExpiration: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(subkey.algorithm)
-                    .font(.headline)
-                    .foregroundStyle(Color.moaiyTextPrimary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(subkey.algorithm)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.moaiyTextPrimary)
 
-                Spacer()
-
-                Text(subkey.status.localizedName)
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(statusColor.opacity(0.14))
-                    .foregroundStyle(statusColor)
-                    .clipShape(Capsule())
-            }
-
-            Text(subkey.fingerprint)
-                .font(.caption.monospaced())
-                .foregroundStyle(Color.moaiyTextSecondary)
-                .textSelection(.enabled)
-
-            HStack {
-                Text("\(AppLocalization.string("subkey_key_length_label")) \(subkey.keyLength)")
-                    .font(.caption)
-                    .foregroundStyle(Color.moaiyTextSecondary)
-                Spacer()
-                Text(expirationText)
-                    .font(.caption)
-                    .foregroundStyle(Color.moaiyTextSecondary)
-            }
-
-            if !subkey.usages.isEmpty {
-                Text(subkey.usageDisplayName)
-                    .font(.caption)
-                    .foregroundStyle(Color.moaiyTextPrimary)
-            }
-
-            HStack {
-                Text(
-                    LocalizedStringKey(
-                        subkey.isSecretMaterial ? "subkey_material_local" : "subkey_material_external"
-                    )
-                )
-                    .font(.caption)
-                    .foregroundStyle(Color.moaiyTextSecondary)
-                Spacer()
-                Button("subkey_action_edit_expiration") {
-                    onEditExpiration()
+                    Text(subkey.fingerprint)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(Color.moaiyTextSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+
+                Spacer(minLength: 6)
+
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text(subkey.status.localizedName)
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(statusColor.opacity(0.14))
+                        .foregroundStyle(statusColor)
+                        .clipShape(Capsule())
+
+                    Button("subkey_action_edit_expiration") {
+                        onEditExpiration()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                }
             }
+
+            HStack(spacing: 6) {
+                Text("\(AppLocalization.string("subkey_key_length_label")) \(subkey.keyLength)")
+
+                if !subkey.usages.isEmpty {
+                    metadataDot
+                    Text(subkey.usageDisplayName)
+                }
+
+                metadataDot
+                Text(materialText)
+
+                metadataDot
+                Text(expirationText)
+            }
+            .font(.caption2)
+            .foregroundStyle(Color.moaiyTextSecondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
         }
-        .padding(MoaiyUI.Spacing.md)
+        .padding(.horizontal, MoaiyUI.Spacing.md)
+        .padding(.vertical, 10)
         .moaiyCardStyle()
+    }
+
+    private var metadataDot: some View {
+        Circle()
+            .fill(Color.moaiyTextSecondary.opacity(0.6))
+            .frame(width: 3, height: 3)
+    }
+
+    private var materialText: String {
+        AppLocalization.string(
+            subkey.isSecretMaterial ? "subkey_material_local" : "subkey_material_external"
+        )
     }
 
     private var expirationText: String {
@@ -752,5 +765,295 @@ private struct SubkeyRowView: View {
         case .unknown:
             return Color.moaiyTextSecondary
         }
+    }
+}
+
+struct OwnerTrustTransferSheet: View {
+    @Environment(KeyManagementViewModel.self) private var viewModel
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var isExporting = false
+    @State private var isImporting = false
+    @State private var promptAlert: PromptAlertContent?
+
+    var body: some View {
+        VStack(spacing: MoaiyUI.Spacing.xl) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("ownertrust_transfer_title")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.moaiyTextPrimary)
+                    Text("ownertrust_transfer_subtitle")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.moaiyTextSecondary)
+                }
+
+                Spacer()
+
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(Color.moaiyTextSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
+                Text("ownertrust_transfer_export_description")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.moaiyTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button(action: exportOwnerTrust) {
+                    if isExporting {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Label("action_export_ownertrust", systemImage: "square.and.arrow.up")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.moaiyAccentV2)
+                .disabled(isExporting || isImporting)
+            }
+            .padding(MoaiyUI.Spacing.md)
+            .moaiyCardStyle()
+
+            VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
+                Text("ownertrust_transfer_import_description")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.moaiyTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button(action: importOwnerTrust) {
+                    if isImporting {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Label("action_import_ownertrust", systemImage: "square.and.arrow.down")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.moaiyAccentV2)
+                .disabled(isExporting || isImporting)
+            }
+            .padding(MoaiyUI.Spacing.md)
+            .moaiyCardStyle()
+
+            Spacer()
+        }
+        .padding(MoaiyUI.Spacing.xxl)
+        .background(Color.moaiySurfaceBackground)
+        .moaiyModalAdaptiveSize(minWidth: 520, idealWidth: 620, maxWidth: 760, minHeight: 420, idealHeight: 520, maxHeight: 700)
+        .moaiyPromptAlertHost(alert: $promptAlert)
+    }
+
+    private func exportOwnerTrust() {
+        guard let outputURL = presentOwnerTrustSavePanel() else { return }
+
+        isExporting = true
+        Task {
+            do {
+                let data = try await viewModel.exportOwnerTrust()
+                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
+                defer {
+                    if hasOutputAccess {
+                        outputURL.stopAccessingSecurityScopedResource()
+                    }
+                }
+
+                try data.write(to: outputURL, options: .atomic)
+                promptAlert = PromptAlertContent.success(message: AppLocalization.string("ownertrust_export_success_message"))
+            } catch {
+                promptAlert = PromptAlertContent.failure(context: .trust, error: error)
+            }
+            isExporting = false
+        }
+    }
+
+    private func importOwnerTrust() {
+        guard let inputURL = presentOwnerTrustImportPanel() else { return }
+
+        isImporting = true
+        Task {
+            do {
+                try await viewModel.importOwnerTrust(from: inputURL)
+                promptAlert = PromptAlertContent.success(message: AppLocalization.string("ownertrust_import_success_message"))
+            } catch {
+                promptAlert = PromptAlertContent.failure(context: .trust, error: error)
+            }
+            isImporting = false
+        }
+    }
+
+    private func presentOwnerTrustSavePanel() -> URL? {
+        let panel = NSSavePanel()
+        panel.title = AppLocalization.string("action_export_ownertrust")
+        panel.nameFieldStringValue = "ownertrust.txt"
+        panel.canCreateDirectories = true
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    private func presentOwnerTrustImportPanel() -> URL? {
+        let panel = NSOpenPanel()
+        panel.title = AppLocalization.string("action_import_ownertrust")
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+}
+
+struct RevocationCenterSheet: View {
+    let key: GPGKey
+    @Environment(KeyManagementViewModel.self) private var viewModel
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var selectedReason: RevocationReason = .noLongerUsed
+    @State private var reasonDescription = ""
+    @State private var passphrase = ""
+    @State private var isGenerating = false
+    @State private var isImporting = false
+    @State private var promptAlert: PromptAlertContent?
+
+    var body: some View {
+        VStack(spacing: MoaiyUI.Spacing.xl) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("revocation_center_title")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.moaiyTextPrimary)
+                    Text("revocation_center_subtitle")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.moaiyTextSecondary)
+                }
+
+                Spacer()
+
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(Color.moaiyTextSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            KeyInfoCard(key: key)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("revocation_reason_title")
+                    .font(.headline)
+
+                Picker("revocation_reason_title", selection: $selectedReason) {
+                    ForEach(RevocationReason.allCases) { reason in
+                        Text(reason.localizedName)
+                            .tag(reason)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                TextField("revocation_description_placeholder", text: $reasonDescription)
+                    .textFieldStyle(.roundedBorder)
+
+                SecureField("revocation_passphrase_placeholder", text: $passphrase)
+                    .textFieldStyle(.roundedBorder)
+            }
+            .padding(MoaiyUI.Spacing.md)
+            .moaiyCardStyle()
+
+            HStack(spacing: 12) {
+                Button(action: generateRevocationCertificate) {
+                    if isGenerating {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Label("action_generate_revocation_certificate", systemImage: "shield.lefthalf.filled.slash")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.moaiyAccentV2)
+                .disabled(isGenerating || isImporting)
+
+                Button(action: importRevocationCertificate) {
+                    if isImporting {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Label("action_import_revocation_certificate", systemImage: "square.and.arrow.down")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(isGenerating || isImporting)
+            }
+
+            Spacer()
+        }
+        .padding(MoaiyUI.Spacing.xxl)
+        .background(Color.moaiySurfaceBackground)
+        .moaiyModalAdaptiveSize(minWidth: 560, idealWidth: 700, maxWidth: 860, minHeight: 480, idealHeight: 620, maxHeight: 840)
+        .moaiyPromptAlertHost(alert: $promptAlert)
+    }
+
+    private func generateRevocationCertificate() {
+        guard let outputURL = presentRevocationSavePanel() else { return }
+
+        isGenerating = true
+        Task {
+            do {
+                let certificateData = try await viewModel.generateRevocationCertificate(
+                    for: key,
+                    reason: selectedReason,
+                    description: reasonDescription,
+                    passphrase: passphrase.isEmpty ? nil : passphrase
+                )
+
+                let hasOutputAccess = outputURL.startAccessingSecurityScopedResource()
+                defer {
+                    if hasOutputAccess {
+                        outputURL.stopAccessingSecurityScopedResource()
+                    }
+                }
+
+                try certificateData.write(to: outputURL, options: .atomic)
+                promptAlert = PromptAlertContent.success(message: AppLocalization.string("revocation_success_message"))
+            } catch {
+                promptAlert = PromptAlertContent.failure(context: .keyEdit, error: error)
+            }
+            isGenerating = false
+        }
+    }
+
+    private func importRevocationCertificate() {
+        guard let inputURL = presentRevocationImportPanel() else { return }
+
+        isImporting = true
+        Task {
+            do {
+                try await viewModel.importRevocationCertificate(from: inputURL)
+                promptAlert = PromptAlertContent.success(message: AppLocalization.string("revocation_import_success_message"))
+            } catch {
+                promptAlert = PromptAlertContent.failure(context: .keyEdit, error: error)
+            }
+            isImporting = false
+        }
+    }
+
+    private func presentRevocationSavePanel() -> URL? {
+        let panel = NSSavePanel()
+        panel.title = AppLocalization.string("action_generate_revocation_certificate")
+        panel.nameFieldStringValue = "\(KeyActionFilePlanner.sanitizedKeyName(for: key.name))_revocation.asc"
+        panel.canCreateDirectories = true
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    private func presentRevocationImportPanel() -> URL? {
+        let panel = NSOpenPanel()
+        panel.title = AppLocalization.string("action_import_revocation_certificate")
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        return panel.runModal() == .OK ? panel.url : nil
     }
 }

@@ -274,6 +274,62 @@ struct GPGServiceTests {
         #expect(subkeys[1].isSecretMaterial)
     }
 
+    // MARK: - Command Builder Tests
+
+    @Test("Revocation reason codes map to expected GPG numeric values")
+    func revocationReasonCodes_matchExpectedNumbers() {
+        #expect(RevocationReason.noLongerUsed.gpgReasonCode == "0")
+        #expect(RevocationReason.keyCompromised.gpgReasonCode == "1")
+        #expect(RevocationReason.keyReplaced.gpgReasonCode == "2")
+        #expect(RevocationReason.userIDInvalid.gpgReasonCode == "3")
+    }
+
+    @Test("Ownertrust export command uses expected arguments")
+    func commandBuilder_ownertrustExportArguments() {
+        let arguments = GPGCommandBuilder.exportOwnerTrustArguments()
+        #expect(arguments == ["--export-ownertrust"])
+    }
+
+    @Test("Ownertrust import command keeps delimiter before file path")
+    func commandBuilder_ownertrustImportArguments() {
+        let filePath = "/tmp/ownertrust.txt"
+        let arguments = GPGCommandBuilder.importOwnerTrustArguments(filePath: filePath)
+
+        #expect(arguments == ["--batch", "--yes", "--import-ownertrust", "--", filePath])
+    }
+
+    @Test("Revocation generation command includes output path and key id")
+    func commandBuilder_generateRevocationArguments() {
+        let keyID = "ABCDEF1234567890ABCDEF1234567890ABCDEF12"
+        let outputPath = "/tmp/revocation.asc"
+        let arguments = GPGCommandBuilder.generateRevocationArguments(keyID: keyID, outputPath: outputPath)
+
+        #expect(arguments.contains("--gen-revoke"))
+        #expect(arguments.contains(outputPath))
+        #expect(!arguments.contains("--batch"))
+        #expect(arguments.contains("--pinentry-mode"))
+        #expect(arguments.contains("loopback"))
+        #expect(Array(arguments.suffix(2)) == ["--", keyID])
+    }
+
+    @Test("Revocation command input sanitizes multiline description")
+    func commandBuilder_revocationInputSanitizesMultilineDescription() {
+        let input = GPGCommandBuilder.revocationCommandInput(
+            passphrase: "secret-pass",
+            reason: .keyCompromised,
+            description: "line1\r\nline2\nline3"
+        )
+
+        let lines = input.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        #expect(lines.count >= 6)
+        #expect(lines[0] == "secret-pass")
+        #expect(lines[1] == "y")
+        #expect(lines[2] == "1")
+        #expect(lines[3] == "line1  line2 line3")
+        #expect(lines[4].isEmpty)
+        #expect(lines[5] == "y")
+    }
+
     @Test("parse smartcard LEARN output extracts fingerprints and public key URL")
     func parseSmartCardLearnOutput_extractsFingerprintsAndURL() {
         let output = """

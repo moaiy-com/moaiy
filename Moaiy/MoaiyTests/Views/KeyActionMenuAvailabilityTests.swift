@@ -91,6 +91,7 @@ struct KeyActionMenuAvailabilityTests {
         )
 
         #expect(availability.canManageSubkeys)
+        #expect(availability.canManageRevocation)
     }
 
     @Test("Key signing visibility follows feature flag")
@@ -120,6 +121,7 @@ struct KeyActionMenuAvailabilityTests {
         #expect(availability.canSignDetached)
         #expect(!availability.canEdit)
         #expect(!availability.canManageSubkeys)
+        #expect(!availability.canManageRevocation)
         #expect(!availability.showsExportPrivateKey)
         #expect(!availability.canSignKey)
     }
