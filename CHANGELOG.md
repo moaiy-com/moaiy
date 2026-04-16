@@ -12,6 +12,31 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Release execution checklist for v0.5.0 (`doc/v0.5.0-minimal-release-checklist.md`)
 - Core flow validation list for v0.5.0 (`doc/v0.5.0-core-flow-validation.md`)
 
+## [0.7.0] - 2026-04-16
+
+### Added
+
+- Added subkey management MVP for local secret keys (non smart-card stubs): list subkeys, add subkey, and update subkey expiration.
+- Added ownertrust transfer flow: export ownertrust to file and import ownertrust from file.
+- Added revocation management flow: generate ASCII-armored revocation certificate and import revocation certificate.
+- Added service-layer command-builder coverage for ownertrust/revocation command construction.
+- Added end-to-end hardening regression cases for ownertrust and revocation lifecycle + wrong-passphrase error mapping.
+- Added release planning/task breakdown document for 0.7.x (`doc/v0.7.x-task-breakdown.md`).
+
+### Changed
+
+- Extended key action menu with trust operations entry points for ownertrust transfer and revocation center.
+- Added Settings toggle for key-signing menu availability to reduce default action surface.
+- Adjusted subkey card layout density to reduce card height and improve information scanning.
+- Updated trust management sheet composition to host ownertrust/revocation sheets and align with actor-isolation requirements.
+- Updated string catalog with new ownertrust/revocation/settings keys and 11-locale coverage.
+
+### Fixed
+
+- Fixed `TrustManagementSheet` default parameter actor-isolation warning by removing actor-isolated singleton from default argument context.
+- Fixed ownertrust "none" downgrade command mapping to use gpg-compatible value for non-interactive trust updates.
+- Fixed revocation certificate generation flow by removing unsupported batch flag from interactive revoke command path.
+
 ## [0.6.5] - 2026-04-15
 
 ### Added
