@@ -490,6 +490,102 @@ final class KeyManagementViewModel {
         }
     }
 
+    /// Export ownertrust records for backup or migration.
+    func exportOwnerTrust() async throws -> Data {
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            let data = try await gpgService.exportOwnerTrust()
+            isLoading = false
+            return data
+        } catch {
+            setError(error, context: .trust)
+            isLoading = false
+            throw error
+        }
+    }
+
+    /// Import ownertrust records from disk.
+    func importOwnerTrust(from url: URL) async throws {
+        isLoading = true
+        errorMessage = nil
+
+        let hasSecurityScope = url.startAccessingSecurityScopedResource()
+        defer {
+            if hasSecurityScope {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        guard hasSecurityScope || FileManager.default.isReadableFile(atPath: url.path) else {
+            isLoading = false
+            throw GPGError.fileAccessDenied(url.path)
+        }
+
+        do {
+            try await gpgService.importOwnerTrust(from: url)
+            await loadKeys()
+        } catch {
+            setError(error, context: .trust)
+            isLoading = false
+            throw error
+        }
+    }
+
+    /// Generate a key revocation certificate.
+    func generateRevocationCertificate(
+        for key: GPGKey,
+        reason: RevocationReason,
+        description: String,
+        passphrase: String?
+    ) async throws -> Data {
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            let data = try await gpgService.generateRevocationCertificate(
+                keyID: key.fingerprint,
+                reason: reason,
+                description: description,
+                passphrase: passphrase
+            )
+            isLoading = false
+            return data
+        } catch {
+            setError(error, context: .keyEdit)
+            isLoading = false
+            throw error
+        }
+    }
+
+    /// Import a key revocation certificate.
+    func importRevocationCertificate(from url: URL) async throws {
+        isLoading = true
+        errorMessage = nil
+
+        let hasSecurityScope = url.startAccessingSecurityScopedResource()
+        defer {
+            if hasSecurityScope {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        guard hasSecurityScope || FileManager.default.isReadableFile(atPath: url.path) else {
+            isLoading = false
+            throw GPGError.fileAccessDenied(url.path)
+        }
+
+        do {
+            try await gpgService.importRevocationCertificate(from: url)
+            await loadKeys()
+        } catch {
+            setError(error, context: .keyEdit)
+            isLoading = false
+            throw error
+        }
+    }
+
     // MARK: - Key Edit Operations
 
     /// Update expiration date for an existing key

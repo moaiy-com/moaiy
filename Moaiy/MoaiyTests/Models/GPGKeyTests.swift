@@ -194,4 +194,59 @@ struct GPGKeyTests {
         
         #expect(key.isSecret == true)
     }
+
+    // MARK: - Subkey Model Tests
+
+    @Test("GPGSubkey isExpired returns true when status is expired")
+    func gpgSubkey_isExpired_statusExpired() {
+        let subkey = GPGSubkey(
+            fingerprint: "ABCDEF1234567890ABCDEF1234567890ABCDEF12",
+            keyID: "ABCDEF1234567890",
+            algorithm: "RSA",
+            keyLength: 4096,
+            usages: [.encrypt],
+            createdAt: Date(),
+            expiresAt: nil,
+            status: .expired,
+            isSecretMaterial: true
+        )
+
+        #expect(subkey.isExpired)
+    }
+
+    @Test("GPGSubkey isExpired returns true when expiration date is in the past")
+    func gpgSubkey_isExpired_pastDate() {
+        let subkey = GPGSubkey(
+            fingerprint: "ABCDEF1234567890ABCDEF1234567890ABCDEF12",
+            keyID: "ABCDEF1234567890",
+            algorithm: "RSA",
+            keyLength: 4096,
+            usages: [.encrypt],
+            createdAt: Date(),
+            expiresAt: Date(timeIntervalSinceNow: -3600),
+            status: .valid,
+            isSecretMaterial: true
+        )
+
+        #expect(subkey.isExpired)
+    }
+
+    @Test("GPGSubkey usage display includes all selected usages")
+    func gpgSubkey_usageDisplay_containsAllUsages() {
+        let subkey = GPGSubkey(
+            fingerprint: "ABCDEF1234567890ABCDEF1234567890ABCDEF12",
+            keyID: "ABCDEF1234567890",
+            algorithm: "EdDSA",
+            keyLength: 255,
+            usages: [.authenticate, .sign],
+            createdAt: Date(),
+            expiresAt: nil,
+            status: .valid,
+            isSecretMaterial: true
+        )
+
+        let usageDisplay = subkey.usageDisplayName
+        #expect(usageDisplay.contains(SubkeyUsage.authenticate.localizedName))
+        #expect(usageDisplay.contains(SubkeyUsage.sign.localizedName))
+    }
 }

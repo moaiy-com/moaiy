@@ -598,6 +598,264 @@ struct SecurityHardeningFlowTests {
         }
     }
 
+    @Test("Subkey lifecycle supports add and expiration update")
+    func subkeyLifecycle_addAndUpdateExpiration() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let identity = makeIdentity(seed: "subkey-lifecycle")
+        var generatedFingerprint: String?
+
+        do {
+            let fingerprint = try await service.generateKey(
+                name: identity.name,
+                email: identity.email,
+                keyType: .rsa2048,
+                passphrase: identity.passphrase
+            )
+            generatedFingerprint = fingerprint
+
+            let beforeSubkeys = try await service.listSubkeys(primaryKeyID: fingerprint)
+            let beforeFingerprints = Set(beforeSubkeys.map(\.fingerprint))
+
+            let addedExpiresAt = Calendar.current.date(byAdding: .year, value: 1, to: Date())
+            try await service.addSubkey(
+                primaryKeyID: fingerprint,
+                usage: .encrypt,
+                expiresAt: addedExpiresAt,
+                passphrase: identity.passphrase
+            )
+
+            let afterAddSubkeys = try await service.listSubkeys(primaryKeyID: fingerprint)
+            #expect(afterAddSubkeys.count == beforeSubkeys.count + 1)
+
+            guard let newSubkey = afterAddSubkeys.first(where: { !beforeFingerprints.contains($0.fingerprint) }) else {
+                Issue.record("Expected one newly added subkey")
+                return
+            }
+            #expect(newSubkey.usages.contains(.encrypt))
+
+            let updatedExpiresAt = Calendar.current.date(byAdding: .year, value: 2, to: Date()) ?? Date()
+            try await service.updateSubkeyExpiration(
+                primaryKeyID: fingerprint,
+                subkeyFingerprint: newSubkey.fingerprint,
+                expiresAt: updatedExpiresAt,
+                passphrase: identity.passphrase
+            )
+
+            let afterUpdateSubkeys = try await service.listSubkeys(primaryKeyID: fingerprint)
+            guard let updatedSubkey = afterUpdateSubkeys.first(where: { $0.fingerprint == newSubkey.fingerprint }) else {
+                Issue.record("Updated subkey should remain listed")
+                return
+            }
+
+            let formatter = DateFormatter()
+            formatter.calendar = Calendar(identifier: .gregorian)
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.dateFormat = "yyyy-MM-dd"
+
+            #expect(updatedSubkey.expiresAt != nil)
+            #expect(
+                formatter.string(from: updatedSubkey.expiresAt ?? .distantPast)
+                    == formatter.string(from: updatedExpiresAt)
+            )
+        } catch {
+            if let generatedFingerprint {
+                await cleanupKey(fingerprint: generatedFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let generatedFingerprint {
+            await cleanupKey(fingerprint: generatedFingerprint, service: service)
+        }
+    }
+
+    @Test("Subkey add wrong passphrase maps to localized invalid passphrase message")
+    func subkeyAdd_wrongPassphrase_mapsToLocalizedMessage() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let identity = makeIdentity(seed: "subkey-wrong-passphrase")
+        var generatedFingerprint: String?
+
+        do {
+            let fingerprint = try await service.generateKey(
+                name: identity.name,
+                email: identity.email,
+                keyType: .rsa2048,
+                passphrase: identity.passphrase
+            )
+            generatedFingerprint = fingerprint
+
+            do {
+                try await service.addSubkey(
+                    primaryKeyID: fingerprint,
+                    usage: .sign,
+                    expiresAt: nil,
+                    passphrase: "wrong-\(identity.passphrase)"
+                )
+                Issue.record("Expected invalid passphrase error")
+            } catch {
+                let mapped = UserFacingErrorMapper.message(for: error, context: .keyEdit)
+                #expect(mapped == AppLocalization.string("error_invalid_passphrase"))
+            }
+        } catch {
+            if let generatedFingerprint {
+                await cleanupKey(fingerprint: generatedFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let generatedFingerprint {
+            await cleanupKey(fingerprint: generatedFingerprint, service: service)
+        }
+    }
+
+    @Test("Ownertrust export and import restores trust assignment")
+    func ownertrustExportImport_roundtripRestoresTrust() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let identity = makeIdentity(seed: "ownertrust-export-import")
+        let tempDir = try makeTempDirectory(label: "ownertrust-export-import")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        var fingerprintToCleanup: String?
+
+        do {
+            let fingerprint = try await service.generateKey(
+                name: identity.name,
+                email: identity.email,
+                keyType: .ecc,
+                passphrase: identity.passphrase
+            )
+            fingerprintToCleanup = fingerprint
+
+            let publicData = try await service.exportPublicKey(keyID: fingerprint, armor: true)
+            try? await service.deleteKey(keyID: fingerprint, secret: true)
+            try? await service.deleteKey(keyID: fingerprint, secret: false)
+
+            let importURL = tempDir.appendingPathComponent("ownertrust-recipient.asc")
+            try publicData.write(to: importURL, options: .atomic)
+            _ = try await service.importKey(from: importURL)
+
+            try await service.setTrust(keyID: fingerprint, trustLevel: .full)
+            let fullTrust = try await service.checkTrust(keyID: fingerprint)
+            #expect(fullTrust == .full)
+
+            let exportedOwnerTrust = try await service.exportOwnerTrust()
+            #expect(!exportedOwnerTrust.isEmpty)
+
+            try await service.setTrust(keyID: fingerprint, trustLevel: .none)
+            let noneTrust = try await service.checkTrust(keyID: fingerprint)
+            #expect(noneTrust != .full)
+
+            let ownerTrustFileURL = tempDir.appendingPathComponent("ownertrust.txt")
+            try exportedOwnerTrust.write(to: ownerTrustFileURL, options: .atomic)
+            try await service.importOwnerTrust(from: ownerTrustFileURL)
+
+            let restoredTrust = try await service.checkTrust(keyID: fingerprint)
+            #expect(restoredTrust == .full)
+        } catch {
+            if let fingerprintToCleanup {
+                await cleanupKey(fingerprint: fingerprintToCleanup, service: service)
+            }
+            throw error
+        }
+
+        if let fingerprintToCleanup {
+            await cleanupKey(fingerprint: fingerprintToCleanup, service: service)
+        }
+    }
+
+    @Test("Revocation certificate lifecycle supports generate and import")
+    func revocationCertificate_generateAndImport() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let identity = makeIdentity(seed: "revocation-lifecycle")
+        let tempDir = try makeTempDirectory(label: "revocation-lifecycle")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        var generatedFingerprint: String?
+
+        do {
+            let fingerprint = try await service.generateKey(
+                name: identity.name,
+                email: identity.email,
+                keyType: .rsa2048,
+                passphrase: identity.passphrase
+            )
+            generatedFingerprint = fingerprint
+
+            let revocationData = try await service.generateRevocationCertificate(
+                keyID: fingerprint,
+                reason: .keyCompromised,
+                description: "integration test revocation",
+                passphrase: identity.passphrase
+            )
+            #expect(!revocationData.isEmpty)
+            let armorText = String(data: revocationData, encoding: .utf8) ?? ""
+            #expect(armorText.contains("BEGIN PGP PUBLIC KEY BLOCK"))
+
+            let revocationURL = tempDir.appendingPathComponent("revocation.asc")
+            try revocationData.write(to: revocationURL, options: .atomic)
+            try await service.importRevocationCertificate(from: revocationURL)
+        } catch {
+            if let generatedFingerprint {
+                await cleanupKey(fingerprint: generatedFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let generatedFingerprint {
+            await cleanupKey(fingerprint: generatedFingerprint, service: service)
+        }
+    }
+
+    @Test("Revocation generate wrong passphrase maps to localized invalid passphrase message")
+    func revocationGenerate_wrongPassphrase_mapsToLocalizedMessage() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let identity = makeIdentity(seed: "revocation-wrong-passphrase")
+        var generatedFingerprint: String?
+
+        do {
+            let fingerprint = try await service.generateKey(
+                name: identity.name,
+                email: identity.email,
+                keyType: .rsa2048,
+                passphrase: identity.passphrase
+            )
+            generatedFingerprint = fingerprint
+
+            do {
+                _ = try await service.generateRevocationCertificate(
+                    keyID: fingerprint,
+                    reason: .keyCompromised,
+                    description: "wrong passphrase check",
+                    passphrase: "wrong-\(identity.passphrase)"
+                )
+                Issue.record("Expected invalid passphrase error")
+            } catch {
+                let mapped = UserFacingErrorMapper.message(for: error, context: .keyEdit)
+                #expect(mapped == AppLocalization.string("error_invalid_passphrase"))
+            }
+        } catch {
+            if let generatedFingerprint {
+                await cleanupKey(fingerprint: generatedFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let generatedFingerprint {
+            await cleanupKey(fingerprint: generatedFingerprint, service: service)
+        }
+    }
+
     private func waitForServiceReady(_ service: GPGService) async throws {
         let timeoutNanoseconds: UInt64 = 30_000_000_000
         let stepNanoseconds: UInt64 = 200_000_000

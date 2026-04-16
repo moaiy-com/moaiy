@@ -386,6 +386,8 @@ struct KeyActionMenuAvailability {
     }
     var canSignDetached: Bool { hasSecretKey }
     var canEdit: Bool { hasSecretKey && !isSmartCardStub }
+    var canManageSubkeys: Bool { hasSecretKey && !isSmartCardStub }
+    var canManageRevocation: Bool { hasSecretKey && !isSmartCardStub }
     var canSignKey: Bool { hasSecretKey && !isSmartCardStub && isKeySigningMenuEnabled }
     var showsSignKey: Bool { isKeySigningMenuEnabled }
     var showsExportPrivateKey: Bool { hasSecretKey && !isSmartCardStub }
@@ -428,15 +430,17 @@ struct KeyActionMenu: View {
     var onDelete: (() -> Void)?
     @Environment(KeyManagementViewModel.self) private var viewModel
 
-    // Reserved feature: key certification/signing is kept in code but hidden from menu for now.
-    private let isKeySigningMenuEnabled = false
+    @AppStorage(Constants.StorageKeys.enableKeySigningMenu) private var isKeySigningMenuEnabled = false
     // Reserved feature: backup/restore flow is retained, only menu entry is hidden.
     private let isBackupRestoreMenuEnabled = false
     @State private var showingUploadSheet = false
     @State private var showingBackupSheet = false
     @State private var showingTrustSheet = false
     @State private var showingSigningSheet = false
+    @State private var showingOwnerTrustSheet = false
+    @State private var showingRevocationSheet = false
     @State private var showingEditSheet = false
+    @State private var showingSubkeySheet = false
     @State private var pendingPassphraseAction: PassphraseAction?
     @State private var pendingPassphraseAllowsEmpty = true
     @State private var pendingYubiKeyPINAction: YubiKeyPINAction?
@@ -498,12 +502,31 @@ struct KeyActionMenu: View {
                     Label("trust_management_title", systemImage: "checkmark.shield")
                 }
                 Button(action: {
+                    showingOwnerTrustSheet = true
+                }) {
+                    Label("action_ownertrust_transfer", systemImage: "arrow.left.arrow.right.circle")
+                }
+                Button(action: {
+                    guard availability.canManageRevocation else { return }
+                    showingRevocationSheet = true
+                }) {
+                    Label("action_manage_revocation", systemImage: "shield.lefthalf.filled.slash")
+                }
+                .disabled(!availability.canManageRevocation)
+                Button(action: {
                     guard availability.canEdit else { return }
                     showingEditSheet = true
                 }) {
                     Label("action_edit", systemImage: "pencil")
                 }
                 .disabled(!availability.canEdit)
+                Button(action: {
+                    guard availability.canManageSubkeys else { return }
+                    showingSubkeySheet = true
+                }) {
+                    Label("action_manage_subkeys", systemImage: "key.horizontal.fill")
+                }
+                .disabled(!availability.canManageSubkeys)
             }
 
             Divider()
@@ -640,6 +663,16 @@ struct KeyActionMenu: View {
                 .environment(viewModel)
                 .environment(\.locale, AppLocalization.locale)
         }
+        .sheet(isPresented: $showingOwnerTrustSheet) {
+            OwnerTrustTransferSheet()
+                .environment(viewModel)
+                .environment(\.locale, AppLocalization.locale)
+        }
+        .sheet(isPresented: $showingRevocationSheet) {
+            RevocationCenterSheet(key: key)
+                .environment(viewModel)
+                .environment(\.locale, AppLocalization.locale)
+        }
         .sheet(isPresented: $showingTrustSheet) {
             TrustManagementSheet(key: key)
                 .environment(viewModel)
@@ -648,6 +681,10 @@ struct KeyActionMenu: View {
         .sheet(isPresented: $showingEditSheet) {
             KeyEditSheet(key: key)
                 .environment(viewModel)
+                .environment(\.locale, AppLocalization.locale)
+        }
+        .sheet(isPresented: $showingSubkeySheet) {
+            SubkeyManagementSheet(key: key)
                 .environment(\.locale, AppLocalization.locale)
         }
         .sheet(isPresented: $showingBackupSheet) {

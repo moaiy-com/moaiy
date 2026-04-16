@@ -131,6 +131,9 @@ enum Constants {
         /// App language preference
         static let appLanguageCode = "appLanguageCode"
 
+        /// Feature toggle for exposing key-signing action in key menu
+        static let enableKeySigningMenu = "enableKeySigningMenu"
+
     }
     
     // MARK: - Backup

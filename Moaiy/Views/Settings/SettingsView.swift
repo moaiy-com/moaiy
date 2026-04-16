@@ -11,6 +11,7 @@ import AppKit
 struct SettingsView: View {
     @AppStorage("defaultKeyType") private var defaultKeyType = 0
     @AppStorage(Constants.StorageKeys.appLanguageCode) private var appLanguageCode = AppLanguageOption.system.rawValue
+    @AppStorage(Constants.StorageKeys.enableKeySigningMenu) private var enableKeySigningMenu = false
     @State private var gpgVersion: String = ""
     @State private var activeGPGHomePath: String = ""
     
@@ -68,6 +69,11 @@ struct SettingsView: View {
                         .labelsHidden()
                         .pickerStyle(.segmented)
                         .frame(minWidth: 260, idealWidth: 340, maxWidth: 380, alignment: .trailing)
+                    }
+
+                    Toggle(isOn: $enableKeySigningMenu) {
+                        Text("setting_enable_key_signing")
+                            .foregroundStyle(Color.moaiyTextSecondary)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
