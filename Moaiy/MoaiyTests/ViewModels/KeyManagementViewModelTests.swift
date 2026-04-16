@@ -446,3 +446,186 @@ struct KeyManagementViewModelTests {
         #expect(viewModel.searchHistory.isEmpty)
     }
 }
+
+@MainActor
+@Suite("SubkeyManagementViewModel Tests")
+struct SubkeyManagementViewModelTests {
+    @Test("loadSubkeys succeeds and populates items")
+    func loadSubkeys_succeeds() async {
+        let mockService = MockSubkeyService()
+        mockService.stubbedSubkeys = [makeSubkey(fingerprint: "A")]
+        let viewModel = SubkeyManagementViewModel(service: mockService)
+
+        await viewModel.loadSubkeys(for: makeSecretKey())
+
+        #expect(viewModel.subkeys.count == 1)
+        #expect(viewModel.errorMessage == nil)
+        #expect(mockService.listCallCount == 1)
+    }
+
+    @Test("loadSubkeys failure sets localized error")
+    func loadSubkeys_failure_setsError() async {
+        let mockService = MockSubkeyService()
+        mockService.stubbedError = GPGError.invalidPassphrase
+        let viewModel = SubkeyManagementViewModel(service: mockService)
+
+        await viewModel.loadSubkeys(for: makeSecretKey())
+
+        #expect(viewModel.subkeys.isEmpty)
+        #expect(viewModel.errorMessage == AppLocalization.string("error_invalid_passphrase"))
+    }
+
+    @Test("addSubkey triggers mutation and refresh")
+    func addSubkey_triggersRefresh() async throws {
+        let mockService = MockSubkeyService()
+        mockService.stubbedSubkeys = [makeSubkey(fingerprint: "FIRST")]
+        let viewModel = SubkeyManagementViewModel(service: mockService)
+        let key = makeSecretKey()
+
+        try await viewModel.addSubkey(
+            for: key,
+            usage: .encrypt,
+            expiresAt: nil,
+            passphrase: "test-passphrase"
+        )
+
+        #expect(mockService.addCallCount == 1)
+        #expect(mockService.listCallCount == 1)
+        #expect(viewModel.subkeys.count == 1)
+    }
+
+    @Test("updateSubkeyExpiration triggers mutation and refresh")
+    func updateSubkeyExpiration_triggersRefresh() async throws {
+        let mockService = MockSubkeyService()
+        mockService.stubbedSubkeys = [makeSubkey(fingerprint: "SUBKEY-A")]
+        let viewModel = SubkeyManagementViewModel(service: mockService)
+        let key = makeSecretKey()
+
+        try await viewModel.updateSubkeyExpiration(
+            for: key,
+            subkeyFingerprint: "SUBKEY-A",
+            expiresAt: Date(),
+            passphrase: nil
+        )
+
+        #expect(mockService.updateCallCount == 1)
+        #expect(mockService.listCallCount == 1)
+    }
+
+    @Test("addSubkey rejects concurrent mutation")
+    func addSubkey_rejectsConcurrentMutation() async throws {
+        let mockService = MockSubkeyService()
+        mockService.shouldDelayMutation = true
+        let viewModel = SubkeyManagementViewModel(service: mockService)
+        let key = makeSecretKey()
+
+        let inFlightTask = Task {
+            try await viewModel.addSubkey(
+                for: key,
+                usage: .sign,
+                expiresAt: nil,
+                passphrase: nil
+            )
+        }
+
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        do {
+            try await viewModel.addSubkey(
+                for: key,
+                usage: .authenticate,
+                expiresAt: nil,
+                passphrase: nil
+            )
+            Issue.record("Expected operationCancelled for concurrent mutation")
+        } catch let error as GPGError {
+            guard case .operationCancelled = error else {
+                Issue.record("Expected operationCancelled, got \(error)")
+                return
+            }
+        } catch {
+            Issue.record("Expected GPGError.operationCancelled, got \(error)")
+        }
+
+        _ = try? await inFlightTask.value
+    }
+
+    private func makeSecretKey() -> GPGKey {
+        GPGKey(
+            id: "PRIMARY-FP",
+            keyID: "PRIMARY-ID",
+            fingerprint: "PRIMARY-FINGERPRINT",
+            name: "Subkey User",
+            email: "subkey@example.com",
+            algorithm: "1",
+            keyLength: 4096,
+            isSecret: true,
+            createdAt: nil,
+            expiresAt: nil,
+            trustLevel: .full,
+            secretMaterial: .localSecret
+        )
+    }
+
+    private func makeSubkey(fingerprint: String) -> GPGSubkey {
+        GPGSubkey(
+            fingerprint: fingerprint,
+            keyID: String(fingerprint.suffix(16)),
+            algorithm: "RSA",
+            keyLength: 4096,
+            usages: [.encrypt],
+            createdAt: Date(),
+            expiresAt: nil,
+            status: .valid,
+            isSecretMaterial: true
+        )
+    }
+}
+
+private final class MockSubkeyService: SubkeyManaging {
+    var stubbedSubkeys: [GPGSubkey] = []
+    var stubbedError: Error?
+    var shouldDelayMutation = false
+
+    var listCallCount = 0
+    var addCallCount = 0
+    var updateCallCount = 0
+
+    func listSubkeys(primaryKeyID: String) async throws -> [GPGSubkey] {
+        listCallCount += 1
+        if let stubbedError {
+            throw stubbedError
+        }
+        return stubbedSubkeys
+    }
+
+    func addSubkey(
+        primaryKeyID: String,
+        usage: SubkeyUsage,
+        expiresAt: Date?,
+        passphrase: String?
+    ) async throws {
+        addCallCount += 1
+        if shouldDelayMutation {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        if let stubbedError {
+            throw stubbedError
+        }
+    }
+
+    func updateSubkeyExpiration(
+        primaryKeyID: String,
+        subkeyFingerprint: String,
+        expiresAt: Date?,
+        passphrase: String?
+    ) async throws {
+        updateCallCount += 1
+        if shouldDelayMutation {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        if let stubbedError {
+            throw stubbedError
+        }
+    }
+}

@@ -598,6 +598,121 @@ struct SecurityHardeningFlowTests {
         }
     }
 
+    @Test("Subkey lifecycle supports add and expiration update")
+    func subkeyLifecycle_addAndUpdateExpiration() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let identity = makeIdentity(seed: "subkey-lifecycle")
+        var generatedFingerprint: String?
+
+        do {
+            let fingerprint = try await service.generateKey(
+                name: identity.name,
+                email: identity.email,
+                keyType: .rsa2048,
+                passphrase: identity.passphrase
+            )
+            generatedFingerprint = fingerprint
+
+            let beforeSubkeys = try await service.listSubkeys(primaryKeyID: fingerprint)
+            let beforeFingerprints = Set(beforeSubkeys.map(\.fingerprint))
+
+            let addedExpiresAt = Calendar.current.date(byAdding: .year, value: 1, to: Date())
+            try await service.addSubkey(
+                primaryKeyID: fingerprint,
+                usage: .encrypt,
+                expiresAt: addedExpiresAt,
+                passphrase: identity.passphrase
+            )
+
+            let afterAddSubkeys = try await service.listSubkeys(primaryKeyID: fingerprint)
+            #expect(afterAddSubkeys.count == beforeSubkeys.count + 1)
+
+            guard let newSubkey = afterAddSubkeys.first(where: { !beforeFingerprints.contains($0.fingerprint) }) else {
+                Issue.record("Expected one newly added subkey")
+                return
+            }
+            #expect(newSubkey.usages.contains(.encrypt))
+
+            let updatedExpiresAt = Calendar.current.date(byAdding: .year, value: 2, to: Date()) ?? Date()
+            try await service.updateSubkeyExpiration(
+                primaryKeyID: fingerprint,
+                subkeyFingerprint: newSubkey.fingerprint,
+                expiresAt: updatedExpiresAt,
+                passphrase: identity.passphrase
+            )
+
+            let afterUpdateSubkeys = try await service.listSubkeys(primaryKeyID: fingerprint)
+            guard let updatedSubkey = afterUpdateSubkeys.first(where: { $0.fingerprint == newSubkey.fingerprint }) else {
+                Issue.record("Updated subkey should remain listed")
+                return
+            }
+
+            let formatter = DateFormatter()
+            formatter.calendar = Calendar(identifier: .gregorian)
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.dateFormat = "yyyy-MM-dd"
+
+            #expect(updatedSubkey.expiresAt != nil)
+            #expect(
+                formatter.string(from: updatedSubkey.expiresAt ?? .distantPast)
+                    == formatter.string(from: updatedExpiresAt)
+            )
+        } catch {
+            if let generatedFingerprint {
+                await cleanupKey(fingerprint: generatedFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let generatedFingerprint {
+            await cleanupKey(fingerprint: generatedFingerprint, service: service)
+        }
+    }
+
+    @Test("Subkey add wrong passphrase maps to localized invalid passphrase message")
+    func subkeyAdd_wrongPassphrase_mapsToLocalizedMessage() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        let identity = makeIdentity(seed: "subkey-wrong-passphrase")
+        var generatedFingerprint: String?
+
+        do {
+            let fingerprint = try await service.generateKey(
+                name: identity.name,
+                email: identity.email,
+                keyType: .rsa2048,
+                passphrase: identity.passphrase
+            )
+            generatedFingerprint = fingerprint
+
+            do {
+                try await service.addSubkey(
+                    primaryKeyID: fingerprint,
+                    usage: .sign,
+                    expiresAt: nil,
+                    passphrase: "wrong-\(identity.passphrase)"
+                )
+                Issue.record("Expected invalid passphrase error")
+            } catch {
+                let mapped = UserFacingErrorMapper.message(for: error, context: .keyEdit)
+                #expect(mapped == AppLocalization.string("error_invalid_passphrase"))
+            }
+        } catch {
+            if let generatedFingerprint {
+                await cleanupKey(fingerprint: generatedFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let generatedFingerprint {
+            await cleanupKey(fingerprint: generatedFingerprint, service: service)
+        }
+    }
+
     private func waitForServiceReady(_ service: GPGService) async throws {
         let timeoutNanoseconds: UInt64 = 30_000_000_000
         let stepNanoseconds: UInt64 = 200_000_000

@@ -79,7 +79,18 @@ struct KeyActionMenuAvailabilityTests {
         #expect(!availability.canDecrypt)
         #expect(!availability.canSignDetached)
         #expect(!availability.canEdit)
+        #expect(!availability.canManageSubkeys)
         #expect(!availability.canSignKey)
+    }
+
+    @Test("Subkey management enabled for local secret key")
+    func subkeyManagement_enabledForLocalSecret() {
+        let availability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: true, secretMaterial: .localSecret),
+            isKeySigningMenuEnabled: false
+        )
+
+        #expect(availability.canManageSubkeys)
     }
 
     @Test("Key signing visibility follows feature flag")
@@ -108,6 +119,7 @@ struct KeyActionMenuAvailabilityTests {
         #expect(availability.canDecrypt)
         #expect(availability.canSignDetached)
         #expect(!availability.canEdit)
+        #expect(!availability.canManageSubkeys)
         #expect(!availability.showsExportPrivateKey)
         #expect(!availability.canSignKey)
     }

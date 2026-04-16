@@ -386,6 +386,7 @@ struct KeyActionMenuAvailability {
     }
     var canSignDetached: Bool { hasSecretKey }
     var canEdit: Bool { hasSecretKey && !isSmartCardStub }
+    var canManageSubkeys: Bool { hasSecretKey && !isSmartCardStub }
     var canSignKey: Bool { hasSecretKey && !isSmartCardStub && isKeySigningMenuEnabled }
     var showsSignKey: Bool { isKeySigningMenuEnabled }
     var showsExportPrivateKey: Bool { hasSecretKey && !isSmartCardStub }
@@ -437,6 +438,7 @@ struct KeyActionMenu: View {
     @State private var showingTrustSheet = false
     @State private var showingSigningSheet = false
     @State private var showingEditSheet = false
+    @State private var showingSubkeySheet = false
     @State private var pendingPassphraseAction: PassphraseAction?
     @State private var pendingPassphraseAllowsEmpty = true
     @State private var pendingYubiKeyPINAction: YubiKeyPINAction?
@@ -504,6 +506,13 @@ struct KeyActionMenu: View {
                     Label("action_edit", systemImage: "pencil")
                 }
                 .disabled(!availability.canEdit)
+                Button(action: {
+                    guard availability.canManageSubkeys else { return }
+                    showingSubkeySheet = true
+                }) {
+                    Label("action_manage_subkeys", systemImage: "key.horizontal.fill")
+                }
+                .disabled(!availability.canManageSubkeys)
             }
 
             Divider()
@@ -648,6 +657,10 @@ struct KeyActionMenu: View {
         .sheet(isPresented: $showingEditSheet) {
             KeyEditSheet(key: key)
                 .environment(viewModel)
+                .environment(\.locale, AppLocalization.locale)
+        }
+        .sheet(isPresented: $showingSubkeySheet) {
+            SubkeyManagementSheet(key: key)
                 .environment(\.locale, AppLocalization.locale)
         }
         .sheet(isPresented: $showingBackupSheet) {

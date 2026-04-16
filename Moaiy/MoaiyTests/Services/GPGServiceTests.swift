@@ -203,6 +203,77 @@ struct GPGServiceTests {
         #expect(keys.first?.cardSerialNumber == nil)
     }
 
+    @Test("Subkey algorithm token uses ECC curves for ECC primary keys")
+    func subkeyAlgorithmToken_eccPrimary_usesExpectedCurves() {
+        let encryptToken = GPGService.subkeyAlgorithmToken(
+            primaryAlgorithm: "22",
+            primaryKeyLength: 255,
+            usage: .encrypt
+        )
+        let signToken = GPGService.subkeyAlgorithmToken(
+            primaryAlgorithm: "22",
+            primaryKeyLength: 255,
+            usage: .sign
+        )
+        let authToken = GPGService.subkeyAlgorithmToken(
+            primaryAlgorithm: "22",
+            primaryKeyLength: 255,
+            usage: .authenticate
+        )
+
+        #expect(encryptToken == "cv25519")
+        #expect(signToken == "ed25519")
+        #expect(authToken == "ed25519")
+    }
+
+    @Test("Subkey algorithm token follows RSA primary key length")
+    func subkeyAlgorithmToken_rsaPrimary_usesRSALength() {
+        let encryptToken = GPGService.subkeyAlgorithmToken(
+            primaryAlgorithm: "1",
+            primaryKeyLength: 4096,
+            usage: .encrypt
+        )
+
+        #expect(encryptToken == "rsa4096")
+    }
+
+    @Test("Subkey algorithm token keeps non-default RSA primary key length")
+    func subkeyAlgorithmToken_rsaPrimary_keepsPrimaryLength() {
+        let encryptToken = GPGService.subkeyAlgorithmToken(
+            primaryAlgorithm: "1",
+            primaryKeyLength: 3072,
+            usage: .encrypt
+        )
+
+        #expect(encryptToken == "rsa3072")
+    }
+
+    @Test("parseSubkeyList extracts usages, status, and secret-material flag")
+    func parseSubkeyList_extractsSubkeyProperties() {
+        let output = """
+        sec:u:255:22:80A9F21258CB1E83:1773379357:::u:::scESCA:::+::ed25519:::0:
+        fpr:::::::::50AA1EFC028475CBC64AF04980A9F21258CB1E83:
+        uid:u::::1773379357::::::User <user@example.com>:
+        ssb:u:255:18:21635FE639C33F67:1773379357:0:::::e:::D2760001240100000006198741050000::cv25519::
+        fpr:::::::::9DAF4148FF8A9D58E5BF22F7A9491BDF1AEC49B2:
+        ssb:r:255:22:1234567890ABCDEF:1773379357:1773379360:::::sa:::+::ed25519::
+        fpr:::::::::AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:
+        """
+
+        let subkeys = parseSubkeyListOutput(output)
+
+        #expect(subkeys.count == 2)
+        #expect(subkeys[0].fingerprint == "9DAF4148FF8A9D58E5BF22F7A9491BDF1AEC49B2")
+        #expect(subkeys[0].usages == [.encrypt])
+        #expect(!subkeys[0].isSecretMaterial)
+
+        #expect(subkeys[1].fingerprint == "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+        #expect(subkeys[1].status == .revoked)
+        #expect(subkeys[1].usages.contains(.sign))
+        #expect(subkeys[1].usages.contains(.authenticate))
+        #expect(subkeys[1].isSecretMaterial)
+    }
+
     @Test("parse smartcard LEARN output extracts fingerprints and public key URL")
     func parseSmartCardLearnOutput_extractsFingerprintsAndURL() {
         let output = """
@@ -590,6 +661,130 @@ private func parseKeyListOutput(_ output: String, secretOnly: Bool) -> [GPGKey] 
     return keys
 }
 
+private func parseSubkeyListOutput(_ output: String) -> [GPGSubkey] {
+    var subkeys: [GPGSubkey] = []
+    var currentSubkey: GPGSubkeyBuilder?
+    var isAwaitingSubkeyFingerprint = false
+    var isInsideSecretPrimary = false
+
+    for line in output.components(separatedBy: "\n") {
+        let fields = line.components(separatedBy: ":")
+        guard let recordType = fields.first else { continue }
+
+        switch recordType {
+        case "sec":
+            if let subkey = currentSubkey?.build() {
+                subkeys.append(subkey)
+            }
+            currentSubkey = nil
+            isInsideSecretPrimary = true
+            isAwaitingSubkeyFingerprint = false
+
+        case "pub":
+            if let subkey = currentSubkey?.build() {
+                subkeys.append(subkey)
+            }
+            currentSubkey = nil
+            isInsideSecretPrimary = false
+            isAwaitingSubkeyFingerprint = false
+
+        case "ssb", "sub":
+            if let subkey = currentSubkey?.build() {
+                subkeys.append(subkey)
+            }
+
+            guard isInsideSecretPrimary else {
+                currentSubkey = nil
+                isAwaitingSubkeyFingerprint = false
+                continue
+            }
+
+            var builder = GPGSubkeyBuilder()
+            builder.keyID = fields.count > 4 ? fields[4] : ""
+            builder.fingerprint = fields.count > 4 ? fields[4] : ""
+            builder.algorithm = subkeyAlgorithmName(fields.count > 3 ? fields[3] : "")
+            builder.keyLength = Int(fields.count > 2 ? fields[2] : "") ?? 0
+            builder.createdAt = parseTimestampString(fields.count > 5 ? fields[5] : "")
+            builder.expiresAt = parseTimestampString(fields.count > 6 ? fields[6] : "")
+            builder.status = SubkeyStatus(gpgCode: fields.count > 1 ? fields[1] : "") ?? .unknown
+            builder.usages = parseSubkeyUsagesOutput(fields)
+            builder.isSecretMaterial = isSubkeySecretMaterialOutput(recordType: recordType, fields: fields)
+
+            currentSubkey = builder
+            isAwaitingSubkeyFingerprint = true
+
+        case "fpr":
+            guard isAwaitingSubkeyFingerprint, fields.count >= 10 else { continue }
+            currentSubkey?.fingerprint = fields[9]
+            isAwaitingSubkeyFingerprint = false
+
+        default:
+            continue
+        }
+    }
+
+    if let subkey = currentSubkey?.build() {
+        subkeys.append(subkey)
+    }
+
+    return subkeys
+}
+
+private func parseSubkeyUsagesOutput(_ fields: [String]) -> Set<SubkeyUsage> {
+    let candidates = [11, 12, 13]
+    let capabilityString = candidates
+        .compactMap { index -> String? in
+            guard fields.indices.contains(index) else { return nil }
+            let value = fields[index].trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? nil : value
+        }
+        .first ?? ""
+
+    let normalized = capabilityString.lowercased()
+    var usages: Set<SubkeyUsage> = []
+    if normalized.contains("e") {
+        usages.insert(.encrypt)
+    }
+    if normalized.contains("s") {
+        usages.insert(.sign)
+    }
+    if normalized.contains("a") {
+        usages.insert(.authenticate)
+    }
+    return usages
+}
+
+private func isSubkeySecretMaterialOutput(recordType: String, fields: [String]) -> Bool {
+    guard recordType == "ssb" else { return false }
+    guard fields.indices.contains(14) else { return true }
+
+    let token = fields[14].trimmingCharacters(in: .whitespacesAndNewlines)
+    if token.isEmpty || token == "+" {
+        return true
+    }
+    if token == "#" {
+        return false
+    }
+    return false
+}
+
+private func subkeyAlgorithmName(_ code: String) -> String {
+    switch code {
+    case "1":
+        return "RSA"
+    case "17":
+        return "DSA"
+    case "18":
+        return "ECDH"
+    case "19":
+        return "ECDSA"
+    case "22":
+        return "EdDSA"
+    default:
+        return code.isEmpty ? "Unknown" : code
+    }
+}
+
 /// Parse import result output
 private func parseImportResultOutput(_ output: String) -> KeyImportResult {
     var imported = 0
@@ -741,6 +936,33 @@ private func resolveSmartCardCompletionLevel(
         return .partial
     }
     return .stubOnly
+}
+
+private struct GPGSubkeyBuilder {
+    var fingerprint: String = ""
+    var keyID: String = ""
+    var algorithm: String = ""
+    var keyLength: Int = 0
+    var usages: Set<SubkeyUsage> = []
+    var createdAt: Date?
+    var expiresAt: Date?
+    var status: SubkeyStatus = .unknown
+    var isSecretMaterial: Bool = false
+
+    func build() -> GPGSubkey? {
+        guard !fingerprint.isEmpty else { return nil }
+        return GPGSubkey(
+            fingerprint: fingerprint,
+            keyID: keyID,
+            algorithm: algorithm,
+            keyLength: keyLength,
+            usages: usages,
+            createdAt: createdAt,
+            expiresAt: expiresAt,
+            status: status,
+            isSecretMaterial: isSecretMaterial
+        )
+    }
 }
 
 /// Helper class for building GPGKey (copy from GPGService for testing)

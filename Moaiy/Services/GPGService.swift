@@ -27,6 +27,22 @@ private final class PipeAccumulator {
     }
 }
 
+protocol SubkeyManaging {
+    func listSubkeys(primaryKeyID: String) async throws -> [GPGSubkey]
+    func addSubkey(
+        primaryKeyID: String,
+        usage: SubkeyUsage,
+        expiresAt: Date?,
+        passphrase: String?
+    ) async throws
+    func updateSubkeyExpiration(
+        primaryKeyID: String,
+        subkeyFingerprint: String,
+        expiresAt: Date?,
+        passphrase: String?
+    ) async throws
+}
+
 // MARK: - GPG Process Actor
 
 /// Actor for executing GPG commands off the main thread
@@ -183,7 +199,7 @@ actor GPGProcessExecutor {
 /// Service class for GPG operations
 @MainActor
 @Observable
-final class GPGService {
+final class GPGService: SubkeyManaging {
     
     private let logger = Logger(subsystem: "com.moaiy.app", category: "GPGService")
     
@@ -1154,6 +1170,118 @@ final class GPGService {
             throw credentialError
         }
         throw GPGError.executionFailed(protectedResult.stderr ?? "Exit code \(protectedResult.exitCode)")
+    }
+
+    // MARK: - Subkey Management
+
+    func listSubkeys(primaryKeyID: String) async throws -> [GPGSubkey] {
+        let normalizedPrimaryKeyID = normalizeKeyReference(primaryKeyID) ?? primaryKeyID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let result = try await executeGPG(
+            arguments: [
+                "--list-secret-keys",
+                "--with-colons",
+                "--with-fingerprint",
+                "--fixed-list-mode",
+                "--",
+                normalizedPrimaryKeyID
+            ]
+        )
+
+        guard result.exitCode == 0 else {
+            throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
+        }
+
+        guard let output = result.stdout else {
+            return []
+        }
+
+        return parseSubkeyList(output)
+    }
+
+    func addSubkey(
+        primaryKeyID: String,
+        usage: SubkeyUsage,
+        expiresAt: Date?,
+        passphrase: String?
+    ) async throws {
+        try await ensureGPGAgentRunningIfNeeded()
+
+        let normalizedPrimaryKeyID = normalizeKeyReference(primaryKeyID) ?? primaryKeyID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedPrimaryKey = try await resolveSecretPrimaryKey(for: normalizedPrimaryKeyID)
+
+        let algorithm = Self.subkeyAlgorithmToken(
+            primaryAlgorithm: resolvedPrimaryKey?.algorithm ?? "",
+            primaryKeyLength: resolvedPrimaryKey?.keyLength ?? 3072,
+            usage: usage
+        )
+        let expiration = formatExpirationDate(expiresAt)
+        let input = (passphrase ?? "") + "\n"
+
+        let result = try await executeGPG(
+            arguments: [
+                "--batch",
+                "--yes",
+                "--no-tty",
+                "--pinentry-mode", "loopback",
+                "--passphrase-fd", "0",
+                "--quick-add-key",
+                "--",
+                normalizedPrimaryKeyID,
+                algorithm,
+                usage.quickAddUsageArgument,
+                expiration
+            ],
+            input: input
+        )
+
+        if result.exitCode != 0 {
+            if let credentialError = credentialFailureError(from: result) {
+                throw credentialError
+            }
+            throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
+        }
+    }
+
+    func updateSubkeyExpiration(
+        primaryKeyID: String,
+        subkeyFingerprint: String,
+        expiresAt: Date?,
+        passphrase: String?
+    ) async throws {
+        try await ensureGPGAgentRunningIfNeeded()
+
+        let normalizedPrimaryKeyID = normalizeKeyReference(primaryKeyID) ?? primaryKeyID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedSubkeyFingerprint = normalizeKeyReference(subkeyFingerprint) ?? subkeyFingerprint
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let expiration = formatExpirationDate(expiresAt)
+        let input = (passphrase ?? "") + "\n"
+
+        let result = try await executeGPG(
+            arguments: [
+                "--batch",
+                "--yes",
+                "--no-tty",
+                "--pinentry-mode", "loopback",
+                "--passphrase-fd", "0",
+                "--quick-set-expire",
+                "--",
+                normalizedPrimaryKeyID,
+                expiration,
+                normalizedSubkeyFingerprint
+            ],
+            input: input
+        )
+
+        if result.exitCode != 0 {
+            if let credentialError = credentialFailureError(from: result) {
+                throw credentialError
+            }
+            throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
+        }
     }
     
     // MARK: - Keyserver Operations
@@ -2309,6 +2437,61 @@ final class GPGService {
         return formatter.string(from: date)
     }
 
+    private func resolveSecretPrimaryKey(for keyReference: String) async throws -> GPGKey? {
+        let normalizedReference = normalizeKeyReference(keyReference)
+        let secretKeys = try await listKeys(secretOnly: true)
+
+        return secretKeys.first { key in
+            guard let normalizedReference else {
+                return keyReference.caseInsensitiveCompare(key.fingerprint) == .orderedSame
+                    || keyReference.caseInsensitiveCompare(key.keyID) == .orderedSame
+            }
+            if let normalizedFingerprint = normalizeKeyReference(key.fingerprint),
+               keyReferencesMatch(expected: normalizedReference, actual: normalizedFingerprint) {
+                return true
+            }
+            if let normalizedKeyID = normalizeKeyReference(key.keyID),
+               keyReferencesMatch(expected: normalizedReference, actual: normalizedKeyID) {
+                return true
+            }
+            return false
+        }
+    }
+
+    nonisolated static func subkeyAlgorithmToken(
+        primaryAlgorithm: String,
+        primaryKeyLength: Int,
+        usage: SubkeyUsage
+    ) -> String {
+        let isECCPrimary = isECCAlgorithm(primaryAlgorithm)
+        if isECCPrimary {
+            switch usage {
+            case .encrypt:
+                return "cv25519"
+            case .sign, .authenticate:
+                return "ed25519"
+            }
+        }
+
+        let resolvedLength = primaryKeyLength > 0 ? primaryKeyLength : 2048
+        return "rsa\(resolvedLength)"
+    }
+
+    private nonisolated static func isECCAlgorithm(_ algorithm: String) -> Bool {
+        let normalized = algorithm.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return false }
+
+        if let algorithmCode = Int(normalized) {
+            return [18, 19, 22].contains(algorithmCode)
+        }
+
+        return normalized.contains("ed25519")
+            || normalized.contains("cv25519")
+            || normalized.contains("eddsa")
+            || normalized.contains("ecdh")
+            || normalized.contains("ecdsa")
+    }
+
     private func credentialFailureError(from result: GPGExecutionResult) -> GPGError? {
         if isBadPIN(result) {
             return .smartCardPinInvalid
@@ -3390,6 +3573,133 @@ final class GPGService {
         
         return keys
     }
+
+    private func parseSubkeyList(_ output: String) -> [GPGSubkey] {
+        var subkeys: [GPGSubkey] = []
+        var currentSubkey: GPGSubkeyBuilder?
+        var isAwaitingSubkeyFingerprint = false
+        var isInsideSecretPrimary = false
+
+        for line in output.components(separatedBy: "\n") {
+            let fields = line.components(separatedBy: ":")
+            guard let recordType = fields.first else { continue }
+
+            switch recordType {
+            case "sec":
+                if let subkey = currentSubkey?.build() {
+                    subkeys.append(subkey)
+                }
+                currentSubkey = nil
+                isAwaitingSubkeyFingerprint = false
+                isInsideSecretPrimary = true
+
+            case "pub":
+                if let subkey = currentSubkey?.build() {
+                    subkeys.append(subkey)
+                }
+                currentSubkey = nil
+                isAwaitingSubkeyFingerprint = false
+                isInsideSecretPrimary = false
+
+            case "ssb", "sub":
+                if let subkey = currentSubkey?.build() {
+                    subkeys.append(subkey)
+                }
+
+                guard isInsideSecretPrimary else {
+                    currentSubkey = nil
+                    isAwaitingSubkeyFingerprint = false
+                    continue
+                }
+
+                var builder = GPGSubkeyBuilder()
+                builder.keyID = fields.count > 4 ? fields[4] : ""
+                builder.fingerprint = fields.count > 4 ? fields[4] : ""
+                builder.algorithm = subkeyAlgorithmName(from: fields.count > 3 ? fields[3] : "")
+                builder.keyLength = Int(fields.count > 2 ? fields[2] : "") ?? 0
+                builder.createdAt = parseTimestamp(fields.count > 5 ? fields[5] : "")
+                builder.expiresAt = parseTimestamp(fields.count > 6 ? fields[6] : "")
+                builder.status = SubkeyStatus(gpgCode: fields.count > 1 ? fields[1] : "") ?? .unknown
+                builder.usages = parseSubkeyUsages(from: fields)
+                builder.isSecretMaterial = isSubkeySecretMaterial(recordType: recordType, fields: fields)
+
+                currentSubkey = builder
+                isAwaitingSubkeyFingerprint = true
+
+            case "fpr":
+                guard isAwaitingSubkeyFingerprint, fields.count >= 10 else { continue }
+                currentSubkey?.fingerprint = fields[9]
+                isAwaitingSubkeyFingerprint = false
+
+            default:
+                continue
+            }
+        }
+
+        if let subkey = currentSubkey?.build() {
+            subkeys.append(subkey)
+        }
+
+        return subkeys
+    }
+
+    private func parseSubkeyUsages(from fields: [String]) -> Set<SubkeyUsage> {
+        let capabilityCandidates = [11, 12, 13]
+        let capabilityString = capabilityCandidates
+            .compactMap { index -> String? in
+                guard fields.indices.contains(index) else { return nil }
+                let value = fields[index].trimmingCharacters(in: .whitespacesAndNewlines)
+                return value.isEmpty ? nil : value
+            }
+            .first ?? ""
+
+        let normalized = capabilityString.lowercased()
+        var usages: Set<SubkeyUsage> = []
+        if normalized.contains("e") {
+            usages.insert(.encrypt)
+        }
+        if normalized.contains("s") {
+            usages.insert(.sign)
+        }
+        if normalized.contains("a") {
+            usages.insert(.authenticate)
+        }
+        return usages
+    }
+
+    private func isSubkeySecretMaterial(recordType: String, fields: [String]) -> Bool {
+        guard recordType == "ssb" else { return false }
+        guard fields.indices.contains(14) else {
+            return true
+        }
+
+        let token = fields[14].trimmingCharacters(in: .whitespacesAndNewlines)
+        if token.isEmpty || token == "+" {
+            return true
+        }
+        if token == "#" {
+            return false
+        }
+        // Serial-number token means smart-card resident material, not local secret material.
+        return false
+    }
+
+    private func subkeyAlgorithmName(from code: String) -> String {
+        switch code {
+        case "1":
+            return "RSA"
+        case "17":
+            return "DSA"
+        case "18":
+            return "ECDH"
+        case "19":
+            return "ECDSA"
+        case "22":
+            return "EdDSA"
+        default:
+            return code.isEmpty ? "Unknown" : code
+        }
+    }
     
     /// Parse timestamp
     private func parseTimestamp(_ string: String) -> Date? {
@@ -3731,6 +4041,152 @@ enum SecretKeyMaterial: String, Codable {
     }
 }
 
+enum SubkeyUsage: String, CaseIterable, Identifiable, Sendable {
+    case encrypt
+    case sign
+    case authenticate
+
+    var id: String { rawValue }
+
+    var quickAddUsageArgument: String {
+        switch self {
+        case .encrypt:
+            return "encrypt"
+        case .sign:
+            return "sign"
+        case .authenticate:
+            return "auth"
+        }
+    }
+
+    var localizedName: String {
+        switch self {
+        case .encrypt:
+            return AppLocalization.string("subkey_usage_encrypt")
+        case .sign:
+            return AppLocalization.string("subkey_usage_sign")
+        case .authenticate:
+            return AppLocalization.string("subkey_usage_authenticate")
+        }
+    }
+}
+
+enum SubkeyExpirationPreset: String, CaseIterable, Identifiable {
+    case never
+    case oneYear
+    case twoYears
+    case fiveYears
+    case custom
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .never:
+            return "subkey_expiration_never"
+        case .oneYear:
+            return "subkey_expiration_one_year"
+        case .twoYears:
+            return "subkey_expiration_two_years"
+        case .fiveYears:
+            return "subkey_expiration_five_years"
+        case .custom:
+            return "subkey_expiration_custom_date"
+        }
+    }
+
+    func resolveDate(customDate: Date) -> Date? {
+        switch self {
+        case .never:
+            return nil
+        case .oneYear:
+            return Calendar.current.date(byAdding: .year, value: 1, to: Date())
+        case .twoYears:
+            return Calendar.current.date(byAdding: .year, value: 2, to: Date())
+        case .fiveYears:
+            return Calendar.current.date(byAdding: .year, value: 5, to: Date())
+        case .custom:
+            return customDate
+        }
+    }
+}
+
+enum SubkeyStatus: String, CaseIterable, Identifiable {
+    case valid
+    case revoked
+    case expired
+    case disabled
+    case invalid
+    case unknown
+
+    var id: String { rawValue }
+
+    init?(gpgCode: String) {
+        switch gpgCode {
+        case "r":
+            self = .revoked
+        case "e":
+            self = .expired
+        case "d":
+            self = .disabled
+        case "i":
+            self = .invalid
+        case "", "-", "q", "n":
+            self = .unknown
+        case "m", "f", "u", "o", "w", "s":
+            self = .valid
+        default:
+            return nil
+        }
+    }
+
+    var localizedName: String {
+        switch self {
+        case .valid:
+            return AppLocalization.string("subkey_status_valid")
+        case .revoked:
+            return AppLocalization.string("subkey_status_revoked")
+        case .expired:
+            return AppLocalization.string("subkey_status_expired")
+        case .disabled:
+            return AppLocalization.string("subkey_status_disabled")
+        case .invalid:
+            return AppLocalization.string("subkey_status_invalid")
+        case .unknown:
+            return AppLocalization.string("subkey_status_unknown")
+        }
+    }
+}
+
+struct GPGSubkey: Identifiable, Hashable {
+    let fingerprint: String
+    let keyID: String
+    let algorithm: String
+    let keyLength: Int
+    let usages: Set<SubkeyUsage>
+    let createdAt: Date?
+    let expiresAt: Date?
+    let status: SubkeyStatus
+    let isSecretMaterial: Bool
+
+    var id: String { fingerprint }
+
+    var isExpired: Bool {
+        if status == .expired {
+            return true
+        }
+        guard let expiresAt else { return false }
+        return expiresAt < Date()
+    }
+
+    var usageDisplayName: String {
+        usages
+            .sorted { $0.rawValue < $1.rawValue }
+            .map(\.localizedName)
+            .joined(separator: " • ")
+    }
+}
+
 /// GPG Key model
 struct GPGKey: Identifiable, Hashable {
     let id: String
@@ -3895,6 +4351,37 @@ enum KeyType: String, CaseIterable, Identifiable {
         case .ecc: return "cv25519"
         default: return nil
         }
+    }
+}
+
+private struct GPGSubkeyBuilder {
+    var fingerprint: String = ""
+    var keyID: String = ""
+    var algorithm: String = ""
+    var keyLength: Int = 0
+    var usages: Set<SubkeyUsage> = []
+    var createdAt: Date?
+    var expiresAt: Date?
+    var status: SubkeyStatus = .unknown
+    var isSecretMaterial: Bool = false
+
+    func build() -> GPGSubkey? {
+        let normalizedFingerprint = fingerprint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedFingerprint.isEmpty else {
+            return nil
+        }
+
+        return GPGSubkey(
+            fingerprint: normalizedFingerprint,
+            keyID: keyID,
+            algorithm: algorithm,
+            keyLength: keyLength,
+            usages: usages,
+            createdAt: createdAt,
+            expiresAt: expiresAt,
+            status: status,
+            isSecretMaterial: isSecretMaterial
+        )
     }
 }
 

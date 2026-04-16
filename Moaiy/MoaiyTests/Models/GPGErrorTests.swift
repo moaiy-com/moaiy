@@ -215,6 +215,15 @@ struct GPGErrorTests {
         #expect(mapped == AppLocalization.string("error_smartcard_pin_invalid"))
     }
 
+    @Test("Raw bad passphrase maps to invalid passphrase message")
+    func rawBadPassphrase_mapsToInvalidPassphraseMessage() {
+        let mapped = UserFacingErrorMapper.message(
+            for: GPGError.executionFailed("gpg: signing failed: Bad passphrase"),
+            context: .keyEdit
+        )
+        #expect(mapped == AppLocalization.string("error_invalid_passphrase"))
+    }
+
     @Test("App localization string follows all supported app languages")
     func appLocalization_stringFollowsAllSupportedLanguages() {
         let defaults = UserDefaults.standard
