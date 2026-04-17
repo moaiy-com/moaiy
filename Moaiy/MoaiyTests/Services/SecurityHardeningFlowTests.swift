@@ -667,10 +667,12 @@ struct SecurityHardeningFlowTests {
                 passphrase: identity.passphrase
             )
 
-            let afterDisableSubkeys = try await service.listSubkeys(primaryKeyID: fingerprint)
-            guard let disabledSubkey = afterDisableSubkeys.first(where: { $0.fingerprint == newSubkey.fingerprint }) else {
-                Issue.record("Disabled subkey should remain listed")
-                return
+            let disabledSubkey = try await waitForSubkey(
+                service: service,
+                primaryKeyID: fingerprint,
+                subkeyFingerprint: newSubkey.fingerprint
+            ) { candidate in
+                candidate.status == .expired || candidate.isExpired
             }
             #expect(disabledSubkey.status == .expired || disabledSubkey.isExpired)
 
@@ -682,10 +684,12 @@ struct SecurityHardeningFlowTests {
                 passphrase: identity.passphrase
             )
 
-            let afterEnableSubkeys = try await service.listSubkeys(primaryKeyID: fingerprint)
-            guard let enabledSubkey = afterEnableSubkeys.first(where: { $0.fingerprint == newSubkey.fingerprint }) else {
-                Issue.record("Enabled subkey should remain listed")
-                return
+            let enabledSubkey = try await waitForSubkey(
+                service: service,
+                primaryKeyID: fingerprint,
+                subkeyFingerprint: newSubkey.fingerprint
+            ) { candidate in
+                candidate.status != .revoked && !candidate.isExpired
             }
             #expect(enabledSubkey.status != .revoked)
             #expect(!enabledSubkey.isExpired)
@@ -916,6 +920,48 @@ struct SecurityHardeningFlowTests {
     private func cleanupKey(fingerprint: String, service: GPGService) async {
         try? await service.deleteKey(keyID: fingerprint, secret: true)
         try? await service.deleteKey(keyID: fingerprint, secret: false)
+    }
+
+    private func waitForSubkey(
+        service: GPGService,
+        primaryKeyID: String,
+        subkeyFingerprint: String,
+        timeoutNanoseconds: UInt64 = 8_000_000_000,
+        stepNanoseconds: UInt64 = 250_000_000,
+        condition: (GPGSubkey) -> Bool
+    ) async throws -> GPGSubkey {
+        var elapsed: UInt64 = 0
+        var lastSeen: GPGSubkey?
+
+        while elapsed <= timeoutNanoseconds {
+            let subkeys = try await service.listSubkeys(primaryKeyID: primaryKeyID)
+            if let candidate = subkeys.first(where: { $0.fingerprint == subkeyFingerprint }) {
+                lastSeen = candidate
+                if condition(candidate) {
+                    return candidate
+                }
+            }
+
+            if elapsed == timeoutNanoseconds {
+                break
+            }
+
+            try await Task.sleep(nanoseconds: stepNanoseconds)
+            elapsed += stepNanoseconds
+        }
+
+        if let lastSeen {
+            Issue.record(
+                """
+                Timed out waiting for subkey state transition.
+                keyID=\(lastSeen.keyID) status=\(lastSeen.status.rawValue) isExpired=\(lastSeen.isExpired)
+                """
+            )
+            return lastSeen
+        }
+
+        Issue.record("Timed out waiting for subkey to appear after lifecycle mutation")
+        throw GPGError.keyNotFound(subkeyFingerprint)
     }
 
     private func makeIdentity(seed: String) -> (name: String, email: String, passphrase: String) {
