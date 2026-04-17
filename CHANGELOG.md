@@ -30,6 +30,22 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Fixed subkey management passphrase handling and batch command sequencing for non-interactive subkey revocation.
 
+### Added (zh-Hans)
+
+- 在子密钥管理面板中扩展生命周期操作：吊销子密钥、禁用子密钥、重新启用子密钥。
+- 新增子密钥风险与轮换体验：高风险与临期标记、筛选与排序控制、轮换建议面板。
+- 服务层新增子密钥吊销/禁用/启用 API，并补充对应命令构建路径的测试覆盖。
+- 在安全加固流程测试中新增子密钥生命周期回归覆盖（新增/更新/禁用/启用/吊销端到端）。
+
+### Changed (zh-Hans)
+
+- 重构子密钥管理状态变更流程为统一生命周期管线，操作成功后自动刷新界面。
+- 更新发布说明渲染流程，要求生成内容必须包含从 CHANGELOG 派生的详细更新条目。
+
+### Fixed (zh-Hans)
+
+- 修复子密钥管理中的口令处理与批处理命令顺序，确保非交互子密钥吊销流程正确执行。
+
 ## [0.7.0] - 2026-04-16
 
 ### Added

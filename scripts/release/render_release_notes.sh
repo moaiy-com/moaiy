@@ -89,21 +89,31 @@ if [[ -z "$asset_rows" ]]; then
   exit 1
 fi
 
-asset_table="$(cat <<EOF
+asset_table_en="$(cat <<EOF
 | Asset | Arch | SHA-256 | Size (bytes) |
 | --- | --- | --- | ---: |
 $asset_rows
 EOF
 )"
+asset_table_zh="$(cat <<EOF
+| 文件 | 架构 | SHA-256 | 大小（字节） |
+| --- | --- | --- | ---: |
+$asset_rows
+EOF
+)"
 
-known_issues="- Unsigned distribution track is active when signing mode is \`unsigned\`."
+known_issues_en="- Unsigned distribution track is active when signing mode is \`unsigned\`."
+known_issues_zh="- 当签名模式为 \`unsigned\` 时，当前为未签名分发轨道。"
 if [[ "$signing_mode" == "signed" ]]; then
-  known_issues="- Signed distribution track is active. Verify notarization status before public rollout."
+  known_issues_en="- Signed distribution track is active. Verify notarization status before public rollout."
+  known_issues_zh="- 当前为已签名分发轨道。对外发布前请先确认公证（notarization）状态。"
 fi
 
 if [[ "$gate_mode" == "balanced" ]]; then
-  known_issues="$known_issues
+  known_issues_en="$known_issues_en
 - Balanced gate: x86_64 uses build + smoke fallback when Intel physical hardware is unavailable."
+  known_issues_zh="$known_issues_zh
+- 在平衡校验策略下，无 Intel 实机时，x86_64 采用 build + smoke 回退验证。"
 fi
 
 changelog_section="$(
@@ -120,26 +130,90 @@ if [[ -z "${changelog_section//[[:space:]]/}" ]]; then
 fi
 
 detailed_updates_en="$(printf '%s\n' "$changelog_section" | sed '/./,$!d')"
-detailed_updates_zh="$(
-  printf '%s\n' "$detailed_updates_en" \
-    | sed \
-      -e 's/^### Added$/### 新增/' \
-      -e 's/^### Changed$/### 变更/' \
-      -e 's/^### Fixed$/### 修复/' \
-      -e 's/^### Removed$/### 移除/' \
-      -e 's/^### Security$/### 安全/' \
-      -e 's/^### Deprecated$/### 弃用/'
+#
+# CHANGELOG supports optional bilingual sections using heading suffix "(zh-Hans)",
+# for example:
+#   ### Added
+#   - ...
+#   ### Added (zh-Hans)
+#   - ...
+# If zh-Hans blocks exist, English notes exclude them and Chinese notes consume them.
+#
+detailed_updates_en="$(
+  printf '%s\n' "$changelog_section" \
+    | awk '
+      /^### .* \(zh-Hans\)$/ { in_zh=1; next }
+      /^### / { if (in_zh == 1) in_zh=0 }
+      in_zh == 0 { print }
+    ' \
+    | sed '/./,$!d'
 )"
+
+if [[ -z "${detailed_updates_en//[[:space:]]/}" ]]; then
+  echo "ERROR: no English changelog details found for version $VERSION"
+  exit 1
+fi
+
+if printf '%s\n' "$changelog_section" | grep -Eq '^### .+ \(zh-Hans\)$'; then
+  detailed_updates_zh="$(
+    printf '%s\n' "$changelog_section" \
+      | awk '
+        /^### .* \(zh-Hans\)$/ { in_zh=1; print; next }
+        /^### / { in_zh=0 }
+        in_zh == 1 { print }
+      ' \
+      | sed \
+        -e 's/^### \(.*\) (zh-Hans)$/### \1/' \
+        -e 's/^### Added$/### 新增/' \
+        -e 's/^### Changed$/### 变更/' \
+        -e 's/^### Fixed$/### 修复/' \
+        -e 's/^### Removed$/### 移除/' \
+        -e 's/^### Security$/### 安全/' \
+        -e 's/^### Deprecated$/### 弃用/' \
+      | sed '/./,$!d'
+  )"
+else
+  echo "WARN: no zh-Hans changelog sections found for version $VERSION; falling back to English detail bodies."
+  detailed_updates_zh="$(
+    printf '%s\n' "$detailed_updates_en" \
+      | sed \
+        -e 's/^### Added$/### 新增/' \
+        -e 's/^### Changed$/### 变更/' \
+        -e 's/^### Fixed$/### 修复/' \
+        -e 's/^### Removed$/### 移除/' \
+        -e 's/^### Security$/### 安全/' \
+        -e 's/^### Deprecated$/### 弃用/'
+  )"
+fi
+
+if [[ -z "${detailed_updates_zh//[[:space:]]/}" ]]; then
+  echo "ERROR: no Chinese changelog details found for version $VERSION"
+  exit 1
+fi
 
 mkdir -p "$(dirname "$OUTPUT_PATH")"
 
 while IFS= read -r line || [[ -n "$line" ]]; do
   case "$line" in
+    *"{{ASSET_TABLE_EN}}"*)
+      printf '%s\n' "$asset_table_en"
+      ;;
+    *"{{ASSET_TABLE_ZH}}"*)
+      printf '%s\n' "$asset_table_zh"
+      ;;
     *"{{ASSET_TABLE}}"*)
-      printf '%s\n' "$asset_table"
+      # Backward compatibility for templates that still use a shared key.
+      printf '%s\n' "$asset_table_en"
+      ;;
+    *"{{KNOWN_ISSUES_EN}}"*)
+      printf '%s\n' "$known_issues_en"
+      ;;
+    *"{{KNOWN_ISSUES_ZH}}"*)
+      printf '%s\n' "$known_issues_zh"
       ;;
     *"{{KNOWN_ISSUES}}"*)
-      printf '%s\n' "$known_issues"
+      # Backward compatibility for templates that still use a shared key.
+      printf '%s\n' "$known_issues_en"
       ;;
     *"{{DETAILED_UPDATES_EN}}"*)
       printf '%s\n' "$detailed_updates_en"

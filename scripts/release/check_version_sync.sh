@@ -124,8 +124,10 @@ required_tokens=(
   "{{TARGET_COMMIT}}"
   "{{GATE_MODE}}"
   "{{SIGNING_MODE}}"
-  "{{ASSET_TABLE}}"
-  "{{KNOWN_ISSUES}}"
+  "{{ASSET_TABLE_EN}}"
+  "{{ASSET_TABLE_ZH}}"
+  "{{KNOWN_ISSUES_EN}}"
+  "{{KNOWN_ISSUES_ZH}}"
   "{{DETAILED_UPDATES_EN}}"
   "{{DETAILED_UPDATES_ZH}}"
 )
