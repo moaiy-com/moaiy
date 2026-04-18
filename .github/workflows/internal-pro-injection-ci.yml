@@ -65,10 +65,14 @@ jobs:
           if [[ -n "${ARTIFACT_TOKEN:-}" ]]; then
             curl -fL \
               -H "Authorization: Bearer $ARTIFACT_TOKEN" \
+              -H "Accept: application/octet-stream" \
               "$ARTIFACT_URL" \
               -o "$ARCHIVE_PATH"
           else
-            curl -fL "$ARTIFACT_URL" -o "$ARCHIVE_PATH"
+            curl -fL \
+              -H "Accept: application/octet-stream" \
+              "$ARTIFACT_URL" \
+              -o "$ARCHIVE_PATH"
           fi
 
           if [[ -n "$ARTIFACT_SHA256" ]]; then

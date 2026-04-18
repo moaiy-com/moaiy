@@ -455,6 +455,7 @@ struct KeyActionMenu: View {
     @State private var preferredOperationForResults: OperationType?
     @State private var showingResultOverlay = false
     @State private var promptAlert: PromptAlertContent?
+    @State private var runningProActionID: String?
     @State private var hardwareKeyAdvancedAvailability = ProFeatureAvailability.locked(
         reasonCode: .providerUnavailable,
         source: .none,
@@ -543,6 +544,7 @@ struct KeyActionMenu: View {
                 }
                 .disabled(!availability.canManageSubkeys)
                 if let hardwareKeyAdvancedDescriptor {
+                    let isExecutingProAction = runningProActionID == hardwareKeyAdvancedDescriptor.id
                     Button(action: {
                         Task { @MainActor in
                             await executeProMenuAction(hardwareKeyAdvancedDescriptor)
@@ -550,12 +552,14 @@ struct KeyActionMenu: View {
                     }) {
                         Label(
                             LocalizedStringKey(hardwareKeyAdvancedDescriptor.titleKey),
-                            systemImage: availability.canUseHardwareKeyAdvanced
-                                ? hardwareKeyAdvancedDescriptor.systemImage
-                                : "lock.fill"
+                            systemImage: isExecutingProAction
+                                ? "hourglass"
+                                : availability.canUseHardwareKeyAdvanced
+                                    ? hardwareKeyAdvancedDescriptor.systemImage
+                                    : "lock.fill"
                         )
                     }
-                    .disabled(!availability.canUseHardwareKeyAdvanced)
+                    .disabled(!availability.canUseHardwareKeyAdvanced || isExecutingProAction)
                 }
             }
 
@@ -740,6 +744,11 @@ struct KeyActionMenu: View {
 
     @MainActor
     private func executeProMenuAction(_ descriptor: ProActionDescriptor) async {
+        guard runningProActionID == nil else { return }
+        runningProActionID = descriptor.id
+        defer { runningProActionID = nil }
+
+        await refreshProAvailability()
         let currentAvailability = proRuntime.availability(for: descriptor.feature)
         guard currentAvailability.isEnabled else {
             promptAlert = .info(
@@ -764,9 +773,10 @@ struct KeyActionMenu: View {
                 message: AppLocalization.string("pro_action_module_unavailable_message")
             )
         } catch ProModuleExecutionError.featureLocked {
+            let refreshedAvailability = proRuntime.availability(for: descriptor.feature)
             promptAlert = .info(
                 title: "pro_feature_locked_title",
-                message: AppLocalization.localizedString(forKey: currentAvailability.messageKey)
+                message: AppLocalization.localizedString(forKey: refreshedAvailability.messageKey)
             )
         } catch {
             promptAlert = .failure(
