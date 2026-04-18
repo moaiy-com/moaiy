@@ -114,6 +114,11 @@ Invariants:
   - `scripts/check_pro_contracts.py` must pass.
 - Internal CI:
   - Runs with Pro binary injected.
+  - Workflow: `.github/workflows/internal-pro-injection-ci.yml`.
+  - Required secrets:
+    - `MOAIY_PRO_XCFRAMEWORK_URL`
+    - `MOAIY_PRO_XCFRAMEWORK_TOKEN` (if artifact URL requires auth)
+    - `MOAIY_PRO_XCFRAMEWORK_SHA256` (recommended)
   - Covers entitlement transitions and Pro action execution.
   - Verifies adapter path (`ProBinaryModuleAdapter`) and descriptor mapping.
 - Contract tests include:

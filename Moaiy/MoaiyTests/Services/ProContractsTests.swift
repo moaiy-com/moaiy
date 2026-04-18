@@ -46,6 +46,31 @@ struct ProContractsTests {
         #expect(features == Set(ProFeature.allCases))
     }
 
+    @Test("Pro module factory hardware action behavior matches injection mode")
+    func moduleFactory_hardwareActionBehaviorMatchesInjectionMode() async {
+        let module = ProModuleFactory.makeModule()
+
+        do {
+            let result = try await module.execute(
+                actionID: ProActionDescriptor.hardwareKeyAdvanced.id,
+                context: ProActionContext(keyFingerprint: nil)
+            )
+#if canImport(MoaiyProKit)
+            #expect(result.titleKey == ProActionDescriptor.hardwareKeyAdvanced.titleKey)
+#else
+            Issue.record("Expected unsupported action when Pro binary is not injected")
+#endif
+        } catch ProModuleExecutionError.unsupportedAction {
+#if canImport(MoaiyProKit)
+            Issue.record("Expected injected Pro module to support hardware-key-advanced action")
+#else
+            #expect(true)
+#endif
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
     @Test("StoreKit mapping resolves entitled product IDs to enabled features")
     func storeKitMapping_resolvesEnabledFeatures() {
         let entitledProductIDs: Set<String> = [
