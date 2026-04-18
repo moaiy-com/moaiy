@@ -88,7 +88,9 @@ jobs:
             exit 1
           fi
 
-          XCFRAMEWORK_PATH="$(find "$EXTRACT_DIR" -type d -name "MoaiyProKit.xcframework" -print -quit)"
+          XCFRAMEWORK_PATH="$(
+            find "$EXTRACT_DIR" -type d -name "MoaiyProKit.xcframework" ! -path "*/__MACOSX/*" -print | head -n 1
+          )"
           if [[ -z "$XCFRAMEWORK_PATH" ]]; then
             echo "MoaiyProKit.xcframework not found in extracted archive."
             exit 1
@@ -102,6 +104,14 @@ jobs:
 
           if [[ -z "$PRO_FRAMEWORK_SEARCH_PATH" ]]; then
             echo "No macOS slice found in $COPIED_XCFRAMEWORK_PATH."
+            exit 1
+          fi
+
+          PRO_FRAMEWORK_BUNDLE_PATH="$PRO_FRAMEWORK_SEARCH_PATH/MoaiyProKit.framework"
+          PRO_FRAMEWORK_BINARY_PATH="$PRO_FRAMEWORK_BUNDLE_PATH/MoaiyProKit"
+          if [[ ! -d "$PRO_FRAMEWORK_BUNDLE_PATH" || ! -f "$PRO_FRAMEWORK_BINARY_PATH" ]]; then
+            echo "Invalid framework payload in $PRO_FRAMEWORK_SEARCH_PATH."
+            find "$COPIED_XCFRAMEWORK_PATH" -maxdepth 4 -print
             exit 1
           fi
 
