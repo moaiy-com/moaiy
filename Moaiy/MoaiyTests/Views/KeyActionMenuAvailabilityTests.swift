@@ -126,6 +126,30 @@ struct KeyActionMenuAvailabilityTests {
         #expect(!availability.canSignKey)
     }
 
+    @Test("Hardware advanced action is locked without Pro entitlement")
+    func hardwareAdvanced_lockedWithoutProEntitlement() {
+        let availability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: true),
+            isKeySigningMenuEnabled: false,
+            isBackupRestoreMenuEnabled: false,
+            isHardwareKeyAdvancedEnabled: false
+        )
+
+        #expect(!availability.canUseHardwareKeyAdvanced)
+    }
+
+    @Test("Hardware advanced action is available with Pro entitlement on local secret key")
+    func hardwareAdvanced_enabledWithProEntitlement() {
+        let availability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: true, secretMaterial: .localSecret),
+            isKeySigningMenuEnabled: false,
+            isBackupRestoreMenuEnabled: false,
+            isHardwareKeyAdvancedEnabled: true
+        )
+
+        #expect(availability.canUseHardwareKeyAdvanced)
+    }
+
     private func makeKey(isSecret: Bool, secretMaterial: SecretKeyMaterial? = nil) -> GPGKey {
         GPGKey(
             id: isSecret ? "secret-key-id" : "public-key-id",

@@ -12,8 +12,11 @@ struct SettingsView: View {
     @AppStorage("defaultKeyType") private var defaultKeyType = 0
     @AppStorage(Constants.StorageKeys.appLanguageCode) private var appLanguageCode = AppLanguageOption.system.rawValue
     @AppStorage(Constants.StorageKeys.enableKeySigningMenu) private var enableKeySigningMenu = false
+    @AppStorage(Constants.StorageKeys.proEntitlementLastRefresh) private var proEntitlementLastRefresh = 0.0
     @State private var gpgVersion: String = ""
     @State private var activeGPGHomePath: String = ""
+    @State private var proRuntime: ProRuntime = AppState.shared.proRuntime
+    @State private var promptAlert: PromptAlertContent?
     
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -112,6 +115,78 @@ struct SettingsView: View {
                 .moaiyModalCard()
 
                 VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
+                    Text("section_pro")
+                        .font(.headline)
+                        .foregroundStyle(Color.moaiyTextPrimary)
+
+                    ForEach(proRuntime.settingsDescriptors) { descriptor in
+                        let availability = proRuntime.availability(for: descriptor.feature)
+                        VStack(alignment: .leading, spacing: MoaiyUI.Spacing.xs) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(LocalizedStringKey(descriptor.titleKey))
+                                    .foregroundStyle(Color.moaiyTextSecondary)
+                                Spacer()
+                                Text(LocalizedStringKey(availability.statusDisplayKey))
+                                    .foregroundStyle(
+                                        availability.isEnabled
+                                            ? Color.moaiySuccess
+                                            : Color.moaiyWarning
+                                    )
+                            }
+
+                            if !availability.isEnabled {
+                                Text(LocalizedStringKey(availability.messageKey))
+                                    .font(.caption)
+                                    .foregroundStyle(Color.moaiyTextSecondary)
+                            }
+                        }
+                    }
+
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("setting_pro_entitlement_source")
+                            .foregroundStyle(Color.moaiyTextSecondary)
+                        Spacer()
+                        Text(
+                            LocalizedStringKey(
+                                proRuntime.availability(for: .hardwareKeyAdvanced).source.displayKey
+                            )
+                        )
+                        .foregroundStyle(Color.moaiyTextPrimary)
+                    }
+
+                    if proEntitlementLastRefresh > 0 {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("setting_pro_last_refresh")
+                                .foregroundStyle(Color.moaiyTextSecondary)
+                            Spacer()
+                            Text(
+                                Date(timeIntervalSince1970: proEntitlementLastRefresh)
+                                    .formatted(.dateTime.year().month().day().hour().minute())
+                            )
+                            .foregroundStyle(Color.moaiyTextPrimary)
+                        }
+                    }
+
+                    HStack(spacing: MoaiyUI.Spacing.sm) {
+                        Button("action_restore_purchases") {
+                            Task {
+                                await restorePurchases()
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        Button("action_refresh_pro_status") {
+                            Task {
+                                await refreshProState()
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .moaiyModalCard()
+
+                VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
                     Text("section_about")
                         .font(.headline)
                         .foregroundStyle(Color.moaiyTextPrimary)
@@ -179,10 +254,12 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.moaiySurfaceBackground)
         .moaiyModalAdaptiveSize(minWidth: 420, idealWidth: 560, maxWidth: 760)
+        .moaiyPromptAlertHost(alert: $promptAlert)
         .task {
             normalizeLanguageSelection()
             await loadGPGVersion()
             refreshKeyringState()
+            await refreshProState()
         }
     }
 
@@ -205,6 +282,29 @@ struct SettingsView: View {
     private func refreshKeyringState() {
         let service = GPGService.shared
         activeGPGHomePath = service.activeGPGHomePath
+    }
+
+    @MainActor
+    private func refreshProState() async {
+        await proRuntime.refreshEntitlements()
+        proEntitlementLastRefresh = Date().timeIntervalSince1970
+    }
+
+    @MainActor
+    private func restorePurchases() async {
+        do {
+            try await proRuntime.restorePurchases()
+            proEntitlementLastRefresh = Date().timeIntervalSince1970
+            promptAlert = .success(
+                message: AppLocalization.string("pro_restore_success_message"),
+                title: "pro_restore_success_title"
+            )
+        } catch {
+            promptAlert = .failure(
+                title: "pro_restore_failure_title",
+                message: AppLocalization.string("pro_restore_failure_message")
+            )
+        }
     }
 }
 

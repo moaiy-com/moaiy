@@ -17,6 +17,7 @@ private let logger = Logger(subsystem: "com.moaiy.app", category: "App")
 @main
 struct MoaiyApp: App {
     @AppStorage(Constants.StorageKeys.appLanguageCode) private var appLanguageCode = AppLanguageOption.system.rawValue
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         SecureTempStorage.cleanupStaleDirectories()
@@ -37,6 +38,15 @@ struct MoaiyApp: App {
                 .onAppear {
                     logger.notice("MainView appeared")
                     logger.notice("GPGService.isReady after view appear: \(GPGService.shared.isReady)")
+                }
+                .task {
+                    await AppState.shared.proRuntime.refreshEntitlements()
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    guard newPhase == .active else { return }
+                    Task {
+                        await AppState.shared.proRuntime.refreshEntitlements()
+                    }
                 }
         }
         .windowStyle(.automatic)

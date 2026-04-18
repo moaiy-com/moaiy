@@ -30,6 +30,10 @@ Language policy:
 - Project integration notes
 - Build and configuration guidance
 
+### [Pro Open Core Contracts v1](./pro-open-core-contracts-v1.md)
+- Public/private repository boundaries for Pro
+- Stable contracts, semantic versioning, and entitlement integration
+
 ## Release Operations
 
 ### [Release Workflow Guide](./release-workflow-skill.md)
@@ -90,4 +94,4 @@ Language policy:
 
 ---
 
-Last updated: 2026-04-15
+Last updated: 2026-04-18

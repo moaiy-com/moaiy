@@ -134,6 +134,9 @@ enum Constants {
         /// Feature toggle for exposing key-signing action in key menu
         static let enableKeySigningMenu = "enableKeySigningMenu"
 
+        /// Last successful Pro entitlement refresh timestamp (seconds since 1970).
+        static let proEntitlementLastRefresh = "proEntitlementLastRefresh"
+
     }
     
     // MARK: - Backup
@@ -147,6 +150,25 @@ enum Constants {
 
         /// Maximum accepted backup key file size during restore (10 MB)
         static let maxImportFileSizeBytes = 10 * 1024 * 1024
+    }
+
+    // MARK: - Pro / Commercial
+
+    enum Pro {
+        /// Semantic version for the open Pro contracts surface.
+        static let contractsSemanticVersion = "1.0.0"
+
+        /// App Store product IDs for Pro feature unlocks.
+        static let featureToProductID: [ProFeature: String] = [
+            .hardwareKeyAdvanced: "com.moaiy.pro.hardware_key_advanced",
+            .batchGovernance: "com.moaiy.pro.batch_governance",
+            .auditExport: "com.moaiy.pro.audit_export",
+            .teamPolicyTemplates: "com.moaiy.pro.team_policy_templates"
+        ]
+
+        static let productToFeatureMap: [String: ProFeature] = Dictionary(
+            uniqueKeysWithValues: featureToProductID.map { ($1, $0) }
+        )
     }
 }
 

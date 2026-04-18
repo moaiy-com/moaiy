@@ -33,6 +33,11 @@ jobs:
           chmod +x ./scripts/check_localization.py
           ./scripts/check_localization.py --catalog Moaiy/Resources/Localizable.xcstrings
 
+      - name: Pro Contracts Integrity Guard
+        run: |
+          chmod +x ./scripts/check_pro_contracts.py
+          ./scripts/check_pro_contracts.py
+
       - name: Build
         run: |
           xcodebuild -project Moaiy/Moaiy.xcodeproj \

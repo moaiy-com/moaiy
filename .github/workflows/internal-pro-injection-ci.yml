@@ -1,0 +1,148 @@
+name: Internal Pro Injection CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_url:
+        description: "Optional override URL for MoaiyProKit archive"
+        required: false
+        type: string
+      artifact_sha256:
+        description: "Optional override SHA256 for the archive"
+        required: false
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  pro-injection-build-and-test:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Resolve and download injected Pro framework archive
+        id: inject
+        env:
+          INPUT_ARTIFACT_URL: ${{ github.event.inputs.artifact_url }}
+          INPUT_ARTIFACT_SHA256: ${{ github.event.inputs.artifact_sha256 }}
+          SECRET_ARTIFACT_URL: ${{ secrets.MOAIY_PRO_XCFRAMEWORK_URL }}
+          SECRET_ARTIFACT_SHA256: ${{ secrets.MOAIY_PRO_XCFRAMEWORK_SHA256 }}
+          ARTIFACT_TOKEN: ${{ secrets.MOAIY_PRO_XCFRAMEWORK_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          ARTIFACT_URL="${INPUT_ARTIFACT_URL:-}"
+          if [[ -z "$ARTIFACT_URL" ]]; then
+            ARTIFACT_URL="${SECRET_ARTIFACT_URL:-}"
+          fi
+
+          if [[ -z "$ARTIFACT_URL" ]]; then
+            echo "Missing Pro artifact URL."
+            echo "Provide workflow input artifact_url or secret MOAIY_PRO_XCFRAMEWORK_URL."
+            exit 1
+          fi
+
+          ARTIFACT_SHA256="${INPUT_ARTIFACT_SHA256:-}"
+          if [[ -z "$ARTIFACT_SHA256" ]]; then
+            ARTIFACT_SHA256="${SECRET_ARTIFACT_SHA256:-}"
+          fi
+
+          ARCHIVE_PATH="$RUNNER_TEMP/moaiy-pro-kit.archive"
+          EXTRACT_DIR="$RUNNER_TEMP/moaiy-pro-kit-extract"
+          FRAMEWORK_ROOT="$RUNNER_TEMP/moaiy-pro-frameworks"
+
+          rm -rf "$EXTRACT_DIR" "$FRAMEWORK_ROOT"
+          mkdir -p "$EXTRACT_DIR" "$FRAMEWORK_ROOT"
+
+          if [[ -n "${ARTIFACT_TOKEN:-}" ]]; then
+            curl -fL \
+              -H "Authorization: Bearer $ARTIFACT_TOKEN" \
+              "$ARTIFACT_URL" \
+              -o "$ARCHIVE_PATH"
+          else
+            curl -fL "$ARTIFACT_URL" -o "$ARCHIVE_PATH"
+          fi
+
+          if [[ -n "$ARTIFACT_SHA256" ]]; then
+            echo "$ARTIFACT_SHA256  $ARCHIVE_PATH" | shasum -a 256 -c -
+          fi
+
+          if unzip -q "$ARCHIVE_PATH" -d "$EXTRACT_DIR" >/dev/null 2>&1; then
+            echo "Archive extracted as zip"
+          elif tar -xf "$ARCHIVE_PATH" -C "$EXTRACT_DIR" >/dev/null 2>&1; then
+            echo "Archive extracted as tar"
+          else
+            echo "Unsupported archive format: $ARCHIVE_PATH"
+            exit 1
+          fi
+
+          XCFRAMEWORK_PATH="$(find "$EXTRACT_DIR" -type d -name "MoaiyProKit.xcframework" -print -quit)"
+          if [[ -z "$XCFRAMEWORK_PATH" ]]; then
+            echo "MoaiyProKit.xcframework not found in extracted archive."
+            exit 1
+          fi
+
+          cp -R "$XCFRAMEWORK_PATH" "$FRAMEWORK_ROOT/"
+          COPIED_XCFRAMEWORK_PATH="$FRAMEWORK_ROOT/MoaiyProKit.xcframework"
+          PRO_FRAMEWORK_SEARCH_PATH="$(
+            find "$COPIED_XCFRAMEWORK_PATH" -mindepth 1 -maxdepth 1 -type d -name "macos-*" -print -quit
+          )"
+
+          if [[ -z "$PRO_FRAMEWORK_SEARCH_PATH" ]]; then
+            echo "No macOS slice found in $COPIED_XCFRAMEWORK_PATH."
+            exit 1
+          fi
+
+          echo "pro_framework_search_path=$PRO_FRAMEWORK_SEARCH_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Asset Catalog Integrity Guard
+        run: |
+          chmod +x ./scripts/release/check_asset_catalog_integrity.sh
+          ./scripts/release/check_asset_catalog_integrity.sh
+
+      - name: Localization Integrity Guard
+        run: |
+          chmod +x ./scripts/check_localization.py
+          ./scripts/check_localization.py --catalog Moaiy/Resources/Localizable.xcstrings
+
+      - name: Pro Contracts Integrity Guard
+        run: |
+          chmod +x ./scripts/check_pro_contracts.py
+          ./scripts/check_pro_contracts.py
+
+      - name: Build (with injected Pro framework)
+        env:
+          PRO_FRAMEWORK_SEARCH_PATH: ${{ steps.inject.outputs.pro_framework_search_path }}
+        run: |
+          set -euo pipefail
+          xcodebuild -project Moaiy/Moaiy.xcodeproj \
+            -scheme Moaiy \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            FRAMEWORK_SEARCH_PATHS="\$(inherited) $PRO_FRAMEWORK_SEARCH_PATH" \
+            OTHER_SWIFT_FLAGS="\$(inherited) -F$PRO_FRAMEWORK_SEARCH_PATH" \
+            OTHER_LDFLAGS="\$(inherited) -F$PRO_FRAMEWORK_SEARCH_PATH -framework MoaiyProKit" \
+            LD_RUNPATH_SEARCH_PATHS="\$(inherited) $PRO_FRAMEWORK_SEARCH_PATH" \
+            build
+
+      - name: Test (with injected Pro framework)
+        env:
+          PRO_FRAMEWORK_SEARCH_PATH: ${{ steps.inject.outputs.pro_framework_search_path }}
+        run: |
+          set -euo pipefail
+          xcodebuild test -project Moaiy/Moaiy.xcodeproj \
+            -scheme MoaiyTests \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            FRAMEWORK_SEARCH_PATHS="\$(inherited) $PRO_FRAMEWORK_SEARCH_PATH" \
+            OTHER_SWIFT_FLAGS="\$(inherited) -F$PRO_FRAMEWORK_SEARCH_PATH" \
+            OTHER_LDFLAGS="\$(inherited) -F$PRO_FRAMEWORK_SEARCH_PATH -framework MoaiyProKit" \
+            LD_RUNPATH_SEARCH_PATHS="\$(inherited) $PRO_FRAMEWORK_SEARCH_PATH"

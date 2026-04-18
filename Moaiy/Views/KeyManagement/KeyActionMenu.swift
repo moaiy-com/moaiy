@@ -369,16 +369,19 @@ struct KeyActionMenuAvailability {
     let isSmartCardStub: Bool
     let isKeySigningMenuEnabled: Bool
     let isBackupRestoreMenuEnabled: Bool
+    let isHardwareKeyAdvancedEnabled: Bool
 
     init(
         key: GPGKey,
         isKeySigningMenuEnabled: Bool,
-        isBackupRestoreMenuEnabled: Bool = false
+        isBackupRestoreMenuEnabled: Bool = false,
+        isHardwareKeyAdvancedEnabled: Bool = false
     ) {
         self.hasSecretKey = key.isSecret
         self.isSmartCardStub = key.isSmartCardStub
         self.isKeySigningMenuEnabled = isKeySigningMenuEnabled
         self.isBackupRestoreMenuEnabled = isBackupRestoreMenuEnabled
+        self.isHardwareKeyAdvancedEnabled = isHardwareKeyAdvancedEnabled
     }
 
     var canDecrypt: Bool {
@@ -389,6 +392,7 @@ struct KeyActionMenuAvailability {
     var canManageSubkeys: Bool { hasSecretKey && !isSmartCardStub }
     var canManageRevocation: Bool { hasSecretKey && !isSmartCardStub }
     var canSignKey: Bool { hasSecretKey && !isSmartCardStub && isKeySigningMenuEnabled }
+    var canUseHardwareKeyAdvanced: Bool { hasSecretKey && !isSmartCardStub && isHardwareKeyAdvancedEnabled }
     var showsSignKey: Bool { isKeySigningMenuEnabled }
     var showsExportPrivateKey: Bool { hasSecretKey && !isSmartCardStub }
     // Reserved feature: keep backup/restore implementation, hide entry for now.
@@ -429,6 +433,7 @@ struct KeyActionMenu: View {
     let key: GPGKey
     var onDelete: (() -> Void)?
     @Environment(KeyManagementViewModel.self) private var viewModel
+    @State private var proRuntime: ProRuntime = AppState.shared.proRuntime
 
     @AppStorage(Constants.StorageKeys.enableKeySigningMenu) private var isKeySigningMenuEnabled = false
     // Reserved feature: backup/restore flow is retained, only menu entry is hidden.
@@ -450,13 +455,23 @@ struct KeyActionMenu: View {
     @State private var preferredOperationForResults: OperationType?
     @State private var showingResultOverlay = false
     @State private var promptAlert: PromptAlertContent?
+    @State private var hardwareKeyAdvancedAvailability = ProFeatureAvailability.locked(
+        reasonCode: .providerUnavailable,
+        source: .none,
+        messageKey: "pro_status_locked_message_provider"
+    )
 
     private var availability: KeyActionMenuAvailability {
         KeyActionMenuAvailability(
             key: key,
             isKeySigningMenuEnabled: isKeySigningMenuEnabled,
-            isBackupRestoreMenuEnabled: isBackupRestoreMenuEnabled
+            isBackupRestoreMenuEnabled: isBackupRestoreMenuEnabled,
+            isHardwareKeyAdvancedEnabled: hardwareKeyAdvancedAvailability.isEnabled
         )
+    }
+
+    private var hardwareKeyAdvancedDescriptor: ProActionDescriptor? {
+        proRuntime.menuDescriptors.first(where: { $0.feature == .hardwareKeyAdvanced })
     }
 
     private enum PassphraseAction {
@@ -527,6 +542,21 @@ struct KeyActionMenu: View {
                     Label("action_manage_subkeys", systemImage: "key.horizontal.fill")
                 }
                 .disabled(!availability.canManageSubkeys)
+                if let hardwareKeyAdvancedDescriptor {
+                    Button(action: {
+                        Task { @MainActor in
+                            await executeProMenuAction(hardwareKeyAdvancedDescriptor)
+                        }
+                    }) {
+                        Label(
+                            LocalizedStringKey(hardwareKeyAdvancedDescriptor.titleKey),
+                            systemImage: availability.canUseHardwareKeyAdvanced
+                                ? hardwareKeyAdvancedDescriptor.systemImage
+                                : "lock.fill"
+                        )
+                    }
+                    .disabled(!availability.canUseHardwareKeyAdvanced)
+                }
             }
 
             Divider()
@@ -691,6 +721,58 @@ struct KeyActionMenu: View {
             BackupManagerView()
                 .environment(viewModel)
                 .environment(\.locale, AppLocalization.locale)
+        }
+        .task {
+            await refreshProAvailability()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task {
+                await refreshProAvailability()
+            }
+        }
+    }
+
+    @MainActor
+    private func refreshProAvailability() async {
+        await proRuntime.refreshEntitlements()
+        hardwareKeyAdvancedAvailability = proRuntime.availability(for: .hardwareKeyAdvanced)
+    }
+
+    @MainActor
+    private func executeProMenuAction(_ descriptor: ProActionDescriptor) async {
+        let currentAvailability = proRuntime.availability(for: descriptor.feature)
+        guard currentAvailability.isEnabled else {
+            promptAlert = .info(
+                title: "pro_feature_locked_title",
+                message: AppLocalization.localizedString(forKey: currentAvailability.messageKey)
+            )
+            return
+        }
+
+        do {
+            let result = try await proRuntime.executeMenuAction(
+                descriptor: descriptor,
+                keyFingerprint: key.fingerprint
+            )
+            promptAlert = .info(
+                title: LocalizedStringKey(result.titleKey),
+                message: AppLocalization.localizedString(forKey: result.messageKey)
+            )
+        } catch ProModuleExecutionError.unsupportedAction {
+            promptAlert = .info(
+                title: "pro_feature_locked_title",
+                message: AppLocalization.string("pro_action_module_unavailable_message")
+            )
+        } catch ProModuleExecutionError.featureLocked {
+            promptAlert = .info(
+                title: "pro_feature_locked_title",
+                message: AppLocalization.localizedString(forKey: currentAvailability.messageKey)
+            )
+        } catch {
+            promptAlert = .failure(
+                title: "pro_action_failure_title",
+                message: AppLocalization.string("pro_action_failure_message")
+            )
         }
     }
 

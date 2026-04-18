@@ -50,6 +50,16 @@ jobs:
         run: |
           ./scripts/release/check_asset_catalog_integrity.sh
 
+      - name: Localization integrity guard
+        run: |
+          chmod +x ./scripts/check_localization.py
+          ./scripts/check_localization.py --catalog Moaiy/Resources/Localizable.xcstrings
+
+      - name: Pro contracts integrity guard
+        run: |
+          chmod +x ./scripts/check_pro_contracts.py
+          ./scripts/check_pro_contracts.py
+
       - name: Resolve release version from project
         id: version
         run: |
