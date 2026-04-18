@@ -7,6 +7,9 @@
 
 import Foundation
 import StoreKit
+#if canImport(MoaiyProKit)
+import MoaiyProKit
+#endif
 
 enum ProFeature: String, CaseIterable, Identifiable, Sendable {
     case hardwareKeyAdvanced
@@ -160,6 +163,80 @@ struct NoopProModule: ProModule {
         throw ProModuleExecutionError.unsupportedAction(actionID)
     }
 }
+
+enum ProModuleFactory {
+    static func makeModule() -> any ProModule {
+#if canImport(MoaiyProKit)
+        let adaptedModule = ProBinaryModuleAdapter(module: MoaiyProKitBootstrap.makeModule())
+        if adaptedModule.menuDescriptors.isEmpty && adaptedModule.settingsDescriptors.isEmpty {
+            return NoopProModule()
+        }
+        return adaptedModule
+#else
+        return NoopProModule()
+#endif
+    }
+}
+
+#if canImport(MoaiyProKit)
+private struct ProBinaryModuleAdapter: ProModule {
+    private let module: any MoaiyProKit.ProModule
+
+    init(module: any MoaiyProKit.ProModule) {
+        self.module = module
+    }
+
+    var menuDescriptors: [ProActionDescriptor] {
+        module.menuDescriptors.compactMap { descriptor in
+            guard let feature = ProFeature(rawValue: descriptor.feature.rawValue) else {
+                return nil
+            }
+            return ProActionDescriptor(
+                id: descriptor.id,
+                feature: feature,
+                titleKey: descriptor.titleKey,
+                systemImage: descriptor.systemImage
+            )
+        }
+    }
+
+    var settingsDescriptors: [ProSettingsDescriptor] {
+        module.settingsDescriptors.compactMap { descriptor in
+            guard let feature = ProFeature(rawValue: descriptor.feature.rawValue) else {
+                return nil
+            }
+            return ProSettingsDescriptor(
+                id: descriptor.id,
+                feature: feature,
+                titleKey: descriptor.titleKey
+            )
+        }
+    }
+
+    func execute(
+        actionID: String,
+        context: ProActionContext
+    ) async throws -> ProActionExecutionResult {
+        do {
+            let result = try await module.execute(
+                actionID: actionID,
+                context: MoaiyProKit.ProActionContext(keyFingerprint: context.keyFingerprint)
+            )
+            return ProActionExecutionResult(titleKey: result.titleKey, messageKey: result.messageKey)
+        } catch let error as MoaiyProKit.ProModuleExecutionError {
+            switch error {
+            case .unsupportedAction(let unsupportedActionID):
+                throw ProModuleExecutionError.unsupportedAction(unsupportedActionID)
+            case .featureLocked(let feature):
+                guard let mappedFeature = ProFeature(rawValue: feature.rawValue) else {
+                    throw ProModuleExecutionError.unsupportedAction(actionID)
+                }
+                throw ProModuleExecutionError.featureLocked(mappedFeature)
+            }
+        }
+    }
+}
+#endif
 
 actor NoopEntitlementProvider: ProEntitlementProvider {
     func refresh() async {}
@@ -368,7 +445,7 @@ final class AppState {
         keyManagement = KeyManagementViewModel()
 
         let entitlementProvider: any ProEntitlementProvider = StoreKit2EntitlementProvider()
-        let module: any ProModule = NoopProModule()
+        let module: any ProModule = ProModuleFactory.makeModule()
         proRuntime = ProRuntime(
             entitlementProvider: entitlementProvider,
             module: module

@@ -86,6 +86,11 @@ Invariants:
 
 - Core never directly imports Pro private view types.
 - Core gates all Pro execution by entitlement state before action dispatch.
+- Core module bootstrap path:
+  - `ProModuleFactory.makeModule()` is the single entry.
+  - If `MoaiyProKit` is importable, Core uses a binary adapter (`ProBinaryModuleAdapter`) to map
+    private contract types into Core contract types.
+  - If `MoaiyProKit` is absent, Core falls back to `NoopProModule` automatically.
 - App lifecycle refresh points:
   - App launch task
   - Foreground activation
@@ -110,9 +115,11 @@ Invariants:
 - Internal CI:
   - Runs with Pro binary injected.
   - Covers entitlement transitions and Pro action execution.
+  - Verifies adapter path (`ProBinaryModuleAdapter`) and descriptor mapping.
 - Contract tests include:
   - Noop provider behavior
   - Noop module rejection behavior
+  - Module factory descriptor exposure and settings coverage
   - StoreKit mapping resolution
   - Manifest one-to-one mapping
   - Contract semver format

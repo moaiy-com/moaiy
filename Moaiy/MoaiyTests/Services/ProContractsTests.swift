@@ -32,6 +32,20 @@ struct ProContractsTests {
         }
     }
 
+    @Test("Pro module factory exposes hardware advanced descriptor")
+    func moduleFactory_exposesHardwareActionDescriptor() {
+        let module = ProModuleFactory.makeModule()
+        let actionIDs = Set(module.menuDescriptors.map(\.id))
+        #expect(actionIDs.contains(ProActionDescriptor.hardwareKeyAdvanced.id))
+    }
+
+    @Test("Pro module factory settings descriptors cover all known features")
+    func moduleFactory_settingsDescriptorsCoverAllFeatures() {
+        let module = ProModuleFactory.makeModule()
+        let features = Set(module.settingsDescriptors.map(\.feature))
+        #expect(features == Set(ProFeature.allCases))
+    }
+
     @Test("StoreKit mapping resolves entitled product IDs to enabled features")
     func storeKitMapping_resolvesEnabledFeatures() {
         let entitledProductIDs: Set<String> = [
