@@ -106,6 +106,7 @@ Invariants:
 - Public CI:
   - Must pass with no private Pro binary injected.
   - `Noop` fallback path must remain green.
+  - `scripts/check_pro_contracts.py` must pass.
 - Internal CI:
   - Runs with Pro binary injected.
   - Covers entitlement transitions and Pro action execution.
@@ -116,4 +117,3 @@ Invariants:
   - Manifest one-to-one mapping
   - Contract semver format
   - Runtime entitlement transition states
-
