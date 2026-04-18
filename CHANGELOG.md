@@ -12,6 +12,26 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Release execution checklist for v0.5.0 (`doc/v0.5.0-minimal-release-checklist.md`)
 - Core flow validation list for v0.5.0 (`doc/v0.5.0-core-flow-validation.md`)
 
+## [0.8.0] - 2026-04-18
+
+### Added
+
+- Added optional Pro binary adapter path (`ProModuleFactory` + `ProBinaryModuleAdapter`) so Core can run with injected `MoaiyProKit` while preserving Noop fallback in public CI.
+- Added internal Pro injection workflow (`.github/workflows/internal-pro-injection-ci.yml`) for injected-mode build/test validation.
+- Added v0.8.0 rollout tracker (`doc/v0.8.0-pro-rollout-tracker.md`) to track Pro-first release execution and audit gates.
+
+### Changed
+
+- Hardened Pro module fallback behavior: Core now falls back to `NoopProModule` when required injected descriptors are not present.
+- Normalized injected settings descriptors to ensure full `ProFeature` coverage even when private module descriptors are partial.
+- Improved Pro action execution UX in key menu: prevent duplicate trigger, refresh entitlements before execute, and surface running state icon.
+- Updated Pro contracts documentation with private artifact pipeline and current HardwareKeyAdvanced v1 diagnostic flow.
+
+### Fixed
+
+- Fixed stale Pro availability edge case in action execution path by forcing entitlement refresh before dispatch.
+- Fixed injected-module partial-descriptor risk that could leave Settings feature list incomplete.
+
 ## [0.7.1] - 2026-04-16
 
 ### Added

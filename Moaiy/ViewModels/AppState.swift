@@ -168,7 +168,7 @@ enum ProModuleFactory {
     static func makeModule() -> any ProModule {
 #if canImport(MoaiyProKit)
         let adaptedModule = ProBinaryModuleAdapter(module: MoaiyProKitBootstrap.makeModule())
-        if adaptedModule.menuDescriptors.isEmpty && adaptedModule.settingsDescriptors.isEmpty {
+        if !adaptedModule.supportsRequiredContracts {
             return NoopProModule()
         }
         return adaptedModule
@@ -186,31 +186,54 @@ private struct ProBinaryModuleAdapter: ProModule {
         self.module = module
     }
 
+    var supportsRequiredContracts: Bool {
+        mappedMenuDescriptors.contains {
+            $0.id == ProActionDescriptor.hardwareKeyAdvanced.id
+                && $0.feature == .hardwareKeyAdvanced
+        }
+    }
+
     var menuDescriptors: [ProActionDescriptor] {
-        module.menuDescriptors.compactMap { descriptor in
+        mappedMenuDescriptors
+    }
+
+    var settingsDescriptors: [ProSettingsDescriptor] {
+        var mappedByFeature: [ProFeature: ProSettingsDescriptor] = [:]
+        for descriptor in module.settingsDescriptors {
             guard let feature = ProFeature(rawValue: descriptor.feature.rawValue) else {
-                return nil
+                continue
             }
-            return ProActionDescriptor(
+            mappedByFeature[feature] = ProSettingsDescriptor(
+                id: descriptor.id,
+                feature: feature,
+                titleKey: descriptor.titleKey
+            )
+        }
+
+        return ProFeature.allCases.map { feature in
+            mappedByFeature[feature]
+                ?? ProSettingsDescriptor(
+                    id: "settings-\(feature.rawValue)",
+                    feature: feature,
+                    titleKey: feature.settingsDisplayKey
+                )
+        }
+    }
+
+    private var mappedMenuDescriptors: [ProActionDescriptor] {
+        var byID: [String: ProActionDescriptor] = [:]
+        for descriptor in module.menuDescriptors {
+            guard let feature = ProFeature(rawValue: descriptor.feature.rawValue) else {
+                continue
+            }
+            byID[descriptor.id] = ProActionDescriptor(
                 id: descriptor.id,
                 feature: feature,
                 titleKey: descriptor.titleKey,
                 systemImage: descriptor.systemImage
             )
         }
-    }
-
-    var settingsDescriptors: [ProSettingsDescriptor] {
-        module.settingsDescriptors.compactMap { descriptor in
-            guard let feature = ProFeature(rawValue: descriptor.feature.rawValue) else {
-                return nil
-            }
-            return ProSettingsDescriptor(
-                id: descriptor.id,
-                feature: feature,
-                titleKey: descriptor.titleKey
-            )
-        }
+        return byID.values.sorted { $0.id < $1.id }
     }
 
     func execute(

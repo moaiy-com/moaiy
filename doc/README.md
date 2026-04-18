@@ -36,6 +36,10 @@ Language policy:
 
 ## Release Operations
 
+### [v0.8.0 Pro Rollout Tracker](./v0.8.0-pro-rollout-tracker.md)
+- Execution tracker for Pro-first release implementation
+- Task status, gates, and audit output references
+
 ### [Release Workflow Guide](./release-workflow-skill.md)
 - Tracked release process specification
 - Workflow split, publish gate, and fallback policy
@@ -89,7 +93,7 @@ Language policy:
 - [Contribution Guide](../CONTRIBUTING.md)
 - [Security Policy](../SECURITY.md)
 - [Changelog](../CHANGELOG.md)
-- [Latest Release (v0.6.5)](https://github.com/moaiy-com/moaiy/releases/tag/v0.6.5)
+- [Latest Release (v0.7.1)](https://github.com/moaiy-com/moaiy/releases/tag/v0.7.1)
 - [Disclaimer](../DISCLAIMER.md)
 
 ---

@@ -106,6 +106,20 @@ Invariants:
   - `DirectLicenseEntitlementProvider` remains a contract placeholder.
   - Not enabled by default.
 
+## 6.1 Private Artifact Pipeline (`moaiy-pro`)
+
+- Private repo release workflow:
+  - `.github/workflows/release-xcframework.yml`
+- Generated release assets:
+  - `MoaiyProKit.xcframework.zip`
+  - `MoaiyProKit.xcframework.zip.sha256`
+  - generated notes file (`release-notes.md`)
+- Tag format:
+  - `pro-vX.Y.Z`
+- Notes rendering script:
+  - `scripts/render_release_notes.sh`
+- Core internal injection workflow consumes this artifact as the Pro binary source.
+
 ## 7. Test and CI Expectations
 
 - Public CI:
@@ -129,3 +143,18 @@ Invariants:
   - Manifest one-to-one mapping
   - Contract semver format
   - Runtime entitlement transition states
+
+## 8. HardwareKeyAdvanced v1 (Current Pro Baseline)
+
+- Diagnostics flow in `moaiy-pro`:
+  - `gpg --version` (runtime availability)
+  - optional fingerprint precheck:
+    - `gpg --batch --with-colons --list-secret-keys -- <fingerprint>`
+  - `gpg --card-status` (hardware card readiness)
+- Failure outcomes map to existing Core-localized keys:
+  - `error_smartcard_unavailable_recovery`
+  - `error_key_not_found_recovery`
+  - `error_smartcard_not_present_recovery`
+  - fallback: `pro_action_module_unavailable_message`
+- Goal:
+  - Keep Pro diagnostics actionable without introducing locale regressions.
