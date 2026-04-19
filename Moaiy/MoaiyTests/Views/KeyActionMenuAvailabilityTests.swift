@@ -150,6 +150,32 @@ struct KeyActionMenuAvailabilityTests {
         #expect(availability.canUseHardwareKeyAdvanced)
     }
 
+    @Test("Batch governance action is locked without Pro entitlement")
+    func batchGovernance_lockedWithoutProEntitlement() {
+        let availability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: true, secretMaterial: .localSecret),
+            isKeySigningMenuEnabled: false,
+            isBackupRestoreMenuEnabled: false,
+            isHardwareKeyAdvancedEnabled: false,
+            isBatchGovernanceEnabled: false
+        )
+
+        #expect(!availability.canUseBatchGovernance)
+    }
+
+    @Test("Batch governance action is available with Pro entitlement on local secret key")
+    func batchGovernance_enabledWithProEntitlement() {
+        let availability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: true, secretMaterial: .localSecret),
+            isKeySigningMenuEnabled: false,
+            isBackupRestoreMenuEnabled: false,
+            isHardwareKeyAdvancedEnabled: false,
+            isBatchGovernanceEnabled: true
+        )
+
+        #expect(availability.canUseBatchGovernance)
+    }
+
     private func makeKey(isSecret: Bool, secretMaterial: SecretKeyMaterial? = nil) -> GPGKey {
         GPGKey(
             id: isSecret ? "secret-key-id" : "public-key-id",

@@ -113,11 +113,31 @@ struct ProSettingsDescriptor: Sendable, Hashable, Identifiable {
 
 struct ProActionContext: Sendable {
     let keyFingerprint: String?
+    let metadata: [String: String]
+
+    init(
+        keyFingerprint: String?,
+        metadata: [String: String] = [:]
+    ) {
+        self.keyFingerprint = keyFingerprint
+        self.metadata = metadata
+    }
 }
 
 struct ProActionExecutionResult: Sendable, Hashable {
     let titleKey: String
     let messageKey: String
+    let metadata: [String: String]
+
+    init(
+        titleKey: String,
+        messageKey: String,
+        metadata: [String: String] = [:]
+    ) {
+        self.titleKey = titleKey
+        self.messageKey = messageKey
+        self.metadata = metadata
+    }
 }
 
 enum ProModuleExecutionError: Error, LocalizedError {
@@ -147,10 +167,17 @@ extension ProActionDescriptor {
         titleKey: "action_pro_hardware_key_advanced",
         systemImage: "creditcard.and.123"
     )
+
+    static let batchGovernance = ProActionDescriptor(
+        id: "batch-governance",
+        feature: .batchGovernance,
+        titleKey: "action_pro_batch_governance",
+        systemImage: "square.stack.3d.up.fill"
+    )
 }
 
 struct NoopProModule: ProModule {
-    let menuDescriptors: [ProActionDescriptor] = [.hardwareKeyAdvanced]
+    let menuDescriptors: [ProActionDescriptor] = [.hardwareKeyAdvanced, .batchGovernance]
     let settingsDescriptors: [ProSettingsDescriptor] = ProFeature.allCases.map {
         ProSettingsDescriptor(
             id: "settings-\($0.rawValue)",
@@ -187,9 +214,15 @@ private struct ProBinaryModuleAdapter: ProModule {
     }
 
     var supportsRequiredContracts: Bool {
-        mappedMenuDescriptors.contains {
-            $0.id == ProActionDescriptor.hardwareKeyAdvanced.id
-                && $0.feature == .hardwareKeyAdvanced
+        let requiredDescriptors: [ProActionDescriptor] = [
+            .hardwareKeyAdvanced,
+            .batchGovernance
+        ]
+        return requiredDescriptors.allSatisfy { requiredDescriptor in
+            mappedMenuDescriptors.contains {
+                $0.id == requiredDescriptor.id
+                    && $0.feature == requiredDescriptor.feature
+            }
         }
     }
 
@@ -243,9 +276,16 @@ private struct ProBinaryModuleAdapter: ProModule {
         do {
             let result = try await module.execute(
                 actionID: actionID,
-                context: MoaiyProKit.ProActionContext(keyFingerprint: context.keyFingerprint)
+                context: MoaiyProKit.ProActionContext(
+                    keyFingerprint: context.keyFingerprint,
+                    metadata: context.metadata
+                )
             )
-            return ProActionExecutionResult(titleKey: result.titleKey, messageKey: result.messageKey)
+            return ProActionExecutionResult(
+                titleKey: result.titleKey,
+                messageKey: result.messageKey,
+                metadata: result.metadata
+            )
         } catch let error as MoaiyProKit.ProModuleExecutionError {
             switch error {
             case .unsupportedAction(let unsupportedActionID):
@@ -436,14 +476,15 @@ final class ProRuntime {
 
     func executeMenuAction(
         descriptor: ProActionDescriptor,
-        keyFingerprint: String?
+        keyFingerprint: String?,
+        metadata: [String: String] = [:]
     ) async throws -> ProActionExecutionResult {
         guard isEnabled(descriptor.feature) else {
             throw ProModuleExecutionError.featureLocked(descriptor.feature)
         }
         return try await module.execute(
             actionID: descriptor.id,
-            context: ProActionContext(keyFingerprint: keyFingerprint)
+            context: ProActionContext(keyFingerprint: keyFingerprint, metadata: metadata)
         )
     }
 }

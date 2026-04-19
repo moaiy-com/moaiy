@@ -370,18 +370,21 @@ struct KeyActionMenuAvailability {
     let isKeySigningMenuEnabled: Bool
     let isBackupRestoreMenuEnabled: Bool
     let isHardwareKeyAdvancedEnabled: Bool
+    let isBatchGovernanceEnabled: Bool
 
     init(
         key: GPGKey,
         isKeySigningMenuEnabled: Bool,
         isBackupRestoreMenuEnabled: Bool = false,
-        isHardwareKeyAdvancedEnabled: Bool = false
+        isHardwareKeyAdvancedEnabled: Bool = false,
+        isBatchGovernanceEnabled: Bool = false
     ) {
         self.hasSecretKey = key.isSecret
         self.isSmartCardStub = key.isSmartCardStub
         self.isKeySigningMenuEnabled = isKeySigningMenuEnabled
         self.isBackupRestoreMenuEnabled = isBackupRestoreMenuEnabled
         self.isHardwareKeyAdvancedEnabled = isHardwareKeyAdvancedEnabled
+        self.isBatchGovernanceEnabled = isBatchGovernanceEnabled
     }
 
     var canDecrypt: Bool {
@@ -393,6 +396,7 @@ struct KeyActionMenuAvailability {
     var canManageRevocation: Bool { hasSecretKey && !isSmartCardStub }
     var canSignKey: Bool { hasSecretKey && !isSmartCardStub && isKeySigningMenuEnabled }
     var canUseHardwareKeyAdvanced: Bool { hasSecretKey && !isSmartCardStub && isHardwareKeyAdvancedEnabled }
+    var canUseBatchGovernance: Bool { hasSecretKey && !isSmartCardStub && isBatchGovernanceEnabled }
     var showsSignKey: Bool { isKeySigningMenuEnabled }
     var showsExportPrivateKey: Bool { hasSecretKey && !isSmartCardStub }
     // Reserved feature: keep backup/restore implementation, hide entry for now.
@@ -446,6 +450,7 @@ struct KeyActionMenu: View {
     @State private var showingRevocationSheet = false
     @State private var showingEditSheet = false
     @State private var showingSubkeySheet = false
+    @State private var showingBatchGovernanceSheet = false
     @State private var pendingPassphraseAction: PassphraseAction?
     @State private var pendingPassphraseAllowsEmpty = true
     @State private var pendingYubiKeyPINAction: YubiKeyPINAction?
@@ -461,18 +466,28 @@ struct KeyActionMenu: View {
         source: .none,
         messageKey: "pro_status_locked_message_provider"
     )
+    @State private var batchGovernanceAvailability = ProFeatureAvailability.locked(
+        reasonCode: .providerUnavailable,
+        source: .none,
+        messageKey: "pro_status_locked_message_provider"
+    )
 
     private var availability: KeyActionMenuAvailability {
         KeyActionMenuAvailability(
             key: key,
             isKeySigningMenuEnabled: isKeySigningMenuEnabled,
             isBackupRestoreMenuEnabled: isBackupRestoreMenuEnabled,
-            isHardwareKeyAdvancedEnabled: hardwareKeyAdvancedAvailability.isEnabled
+            isHardwareKeyAdvancedEnabled: hardwareKeyAdvancedAvailability.isEnabled,
+            isBatchGovernanceEnabled: batchGovernanceAvailability.isEnabled
         )
     }
 
     private var hardwareKeyAdvancedDescriptor: ProActionDescriptor? {
         proRuntime.menuDescriptors.first(where: { $0.feature == .hardwareKeyAdvanced })
+    }
+
+    private var batchGovernanceDescriptor: ProActionDescriptor? {
+        proRuntime.menuDescriptors.first(where: { $0.feature == .batchGovernance })
     }
 
     private enum PassphraseAction {
@@ -560,6 +575,23 @@ struct KeyActionMenu: View {
                         )
                     }
                     .disabled(!availability.canUseHardwareKeyAdvanced || isExecutingProAction)
+                }
+                if let batchGovernanceDescriptor {
+                    let isExecutingProAction = runningProActionID == batchGovernanceDescriptor.id
+                    Button(action: {
+                        guard availability.canUseBatchGovernance else { return }
+                        showingBatchGovernanceSheet = true
+                    }) {
+                        Label(
+                            LocalizedStringKey(batchGovernanceDescriptor.titleKey),
+                            systemImage: isExecutingProAction
+                                ? "hourglass"
+                                : availability.canUseBatchGovernance
+                                    ? batchGovernanceDescriptor.systemImage
+                                    : "lock.fill"
+                        )
+                    }
+                    .disabled(!availability.canUseBatchGovernance || isExecutingProAction)
                 }
             }
 
@@ -721,6 +753,15 @@ struct KeyActionMenu: View {
             SubkeyManagementSheet(key: key)
                 .environment(\.locale, AppLocalization.locale)
         }
+        .sheet(isPresented: $showingBatchGovernanceSheet) {
+            BatchGovernanceSheet(
+                key: key,
+                onExecute: { request in
+                    await executeBatchGovernance(request)
+                }
+            )
+            .environment(\.locale, AppLocalization.locale)
+        }
         .sheet(isPresented: $showingBackupSheet) {
             BackupManagerView()
                 .environment(viewModel)
@@ -740,6 +781,7 @@ struct KeyActionMenu: View {
     private func refreshProAvailability() async {
         await proRuntime.refreshEntitlements()
         hardwareKeyAdvancedAvailability = proRuntime.availability(for: .hardwareKeyAdvanced)
+        batchGovernanceAvailability = proRuntime.availability(for: .batchGovernance)
     }
 
     @MainActor
@@ -782,6 +824,72 @@ struct KeyActionMenu: View {
             promptAlert = .failure(
                 title: "pro_action_failure_title",
                 message: AppLocalization.string("pro_action_failure_message")
+            )
+        }
+    }
+
+    @MainActor
+    private func executeBatchGovernance(
+        _ request: BatchGovernanceExecutionRequest
+    ) async -> BatchGovernanceExecutionReceipt {
+        guard let descriptor = batchGovernanceDescriptor else {
+            return BatchGovernanceExecutionReceipt(
+                titleKey: "pro_batch_governance_title",
+                messageKey: "pro_action_module_unavailable_message",
+                metadata: [:]
+            )
+        }
+
+        guard runningProActionID == nil else {
+            return BatchGovernanceExecutionReceipt(
+                titleKey: "pro_batch_governance_title",
+                messageKey: "pro_batch_governance_execution_busy_message",
+                metadata: [:]
+            )
+        }
+
+        runningProActionID = descriptor.id
+        defer { runningProActionID = nil }
+
+        await refreshProAvailability()
+        let currentAvailability = proRuntime.availability(for: descriptor.feature)
+        guard currentAvailability.isEnabled else {
+            return BatchGovernanceExecutionReceipt(
+                titleKey: "pro_feature_locked_title",
+                messageKey: currentAvailability.messageKey,
+                metadata: [:]
+            )
+        }
+
+        do {
+            let result = try await proRuntime.executeMenuAction(
+                descriptor: descriptor,
+                keyFingerprint: key.fingerprint,
+                metadata: request.metadata
+            )
+            return BatchGovernanceExecutionReceipt(
+                titleKey: result.titleKey,
+                messageKey: result.messageKey,
+                metadata: result.metadata
+            )
+        } catch ProModuleExecutionError.unsupportedAction {
+            return BatchGovernanceExecutionReceipt(
+                titleKey: "pro_batch_governance_title",
+                messageKey: "pro_action_module_unavailable_message",
+                metadata: [:]
+            )
+        } catch ProModuleExecutionError.featureLocked {
+            let refreshedAvailability = proRuntime.availability(for: descriptor.feature)
+            return BatchGovernanceExecutionReceipt(
+                titleKey: "pro_feature_locked_title",
+                messageKey: refreshedAvailability.messageKey,
+                metadata: [:]
+            )
+        } catch {
+            return BatchGovernanceExecutionReceipt(
+                titleKey: "pro_action_failure_title",
+                messageKey: "pro_action_failure_message",
+                metadata: [:]
             )
         }
     }

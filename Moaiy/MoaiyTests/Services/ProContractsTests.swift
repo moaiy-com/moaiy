@@ -32,11 +32,12 @@ struct ProContractsTests {
         }
     }
 
-    @Test("Pro module factory exposes hardware advanced descriptor")
-    func moduleFactory_exposesHardwareActionDescriptor() {
+    @Test("Pro module factory exposes required action descriptors")
+    func moduleFactory_exposesRequiredActionDescriptors() {
         let module = ProModuleFactory.makeModule()
         let actionIDs = Set(module.menuDescriptors.map(\.id))
         #expect(actionIDs.contains(ProActionDescriptor.hardwareKeyAdvanced.id))
+        #expect(actionIDs.contains(ProActionDescriptor.batchGovernance.id))
     }
 
     @Test("Pro module factory settings descriptors cover all known features")
@@ -63,6 +64,39 @@ struct ProContractsTests {
         } catch ProModuleExecutionError.unsupportedAction {
 #if canImport(MoaiyProKit)
             Issue.record("Expected injected Pro module to support hardware-key-advanced action")
+#else
+            #expect(true)
+#endif
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test("Pro module factory batch-governance action behavior matches injection mode")
+    func moduleFactory_batchGovernanceActionBehaviorMatchesInjectionMode() async {
+        let module = ProModuleFactory.makeModule()
+        let context = ProActionContext(
+            keyFingerprint: "FINGERPRINT",
+            metadata: [
+                "batch.operation": "ownerTrust",
+                "batch.targets": "FINGERPRINT",
+                "batch.ownerTrust": "full"
+            ]
+        )
+
+        do {
+            let result = try await module.execute(
+                actionID: ProActionDescriptor.batchGovernance.id,
+                context: context
+            )
+#if canImport(MoaiyProKit)
+            #expect(result.titleKey == ProActionDescriptor.batchGovernance.titleKey)
+#else
+            Issue.record("Expected unsupported action when Pro binary is not injected")
+#endif
+        } catch ProModuleExecutionError.unsupportedAction {
+#if canImport(MoaiyProKit)
+            Issue.record("Expected injected Pro module to support batch-governance action")
 #else
             #expect(true)
 #endif
