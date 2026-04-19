@@ -156,7 +156,7 @@ enum Constants {
 
     enum Pro {
         /// Semantic version for the open Pro contracts surface.
-        static let contractsSemanticVersion = "1.2.0"
+        static let contractsSemanticVersion = "1.3.0"
 
         /// App Store product IDs for Pro feature unlocks.
         static let featureToProductID: [ProFeature: String] = [

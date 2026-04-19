@@ -39,6 +39,7 @@ struct ProContractsTests {
         #expect(actionIDs.contains(ProActionDescriptor.hardwareKeyAdvanced.id))
         #expect(actionIDs.contains(ProActionDescriptor.batchGovernance.id))
         #expect(actionIDs.contains(ProActionDescriptor.auditExport.id))
+        #expect(actionIDs.contains(ProActionDescriptor.teamPolicyTemplates.id))
     }
 
     @Test("Pro module factory settings descriptors cover all known features")
@@ -141,12 +142,44 @@ struct ProContractsTests {
         }
     }
 
+    @Test("Pro module factory team-policy-templates action behavior matches injection mode")
+    func moduleFactory_teamPolicyTemplatesActionBehaviorMatchesInjectionMode() async {
+        let module = ProModuleFactory.makeModule()
+        let context = ProActionContext(
+            keyFingerprint: nil,
+            metadata: [
+                "policy.operation": "list"
+            ]
+        )
+
+        do {
+            let result = try await module.execute(
+                actionID: ProActionDescriptor.teamPolicyTemplates.id,
+                context: context
+            )
+#if canImport(MoaiyProKit)
+            #expect(result.titleKey == ProActionDescriptor.teamPolicyTemplates.titleKey)
+#else
+            Issue.record("Expected unsupported action when Pro binary is not injected")
+#endif
+        } catch ProModuleExecutionError.unsupportedAction {
+#if canImport(MoaiyProKit)
+            Issue.record("Expected injected Pro module to support team-policy-templates action")
+#else
+            #expect(true)
+#endif
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
     @Test("StoreKit mapping resolves entitled product IDs to enabled features")
     func storeKitMapping_resolvesEnabledFeatures() {
         let entitledProductIDs: Set<String> = [
             "com.moaiy.pro.hardware_key_advanced",
             "com.moaiy.pro.batch_governance",
-            "com.moaiy.pro.audit_export"
+            "com.moaiy.pro.audit_export",
+            "com.moaiy.pro.team_policy_templates"
         ]
 
         let enabled = StoreKit2EntitlementProvider.resolveEnabledFeatures(
@@ -157,6 +190,7 @@ struct ProContractsTests {
         #expect(enabled.contains(.hardwareKeyAdvanced))
         #expect(enabled.contains(.batchGovernance))
         #expect(enabled.contains(.auditExport))
+        #expect(enabled.contains(.teamPolicyTemplates))
     }
 
     @Test("Pro product manifest maps features one-to-one")
@@ -173,6 +207,39 @@ struct ProContractsTests {
         let segments = Constants.Pro.contractsSemanticVersion.split(separator: ".")
         #expect(segments.count == 3)
         #expect(segments.allSatisfy { Int($0) != nil })
+    }
+
+    @Test("Team policy template list parser decodes metadata payload")
+    func teamPolicyTemplateListParser_decodesTemplates() {
+        let metadata: [String: String] = [
+            "policy.templates": """
+            [
+              {
+                "defaultKeyType": 2,
+                "enableKeySigningMenu": true,
+                "id": "team-balanced",
+                "isManaged": true,
+                "name": "Team Balanced",
+                "summary": "Balanced defaults"
+              }
+            ]
+            """
+        ]
+
+        let templates = TeamPolicyTemplateDescriptor.parseList(from: metadata)
+        #expect(templates.count == 1)
+        #expect(templates.first?.id == "team-balanced")
+        #expect(templates.first?.defaultKeyType == 2)
+        #expect(templates.first?.enableKeySigningMenu == true)
+    }
+
+    @Test("Team policy bool parser supports canonical values")
+    func teamPolicyTemplateBoolParser_supportsCanonicalValues() {
+        #expect(TeamPolicyTemplateDescriptor.parseBool("true") == true)
+        #expect(TeamPolicyTemplateDescriptor.parseBool("1") == true)
+        #expect(TeamPolicyTemplateDescriptor.parseBool("false") == false)
+        #expect(TeamPolicyTemplateDescriptor.parseBool("0") == false)
+        #expect(TeamPolicyTemplateDescriptor.parseBool("invalid") == nil)
     }
 
     @Test("Runtime entitlement transitions cover purchase restore and revocation")

@@ -181,10 +181,22 @@ extension ProActionDescriptor {
         titleKey: "action_pro_audit_export",
         systemImage: "doc.text.magnifyingglass"
     )
+
+    static let teamPolicyTemplates = ProActionDescriptor(
+        id: "team-policy-templates",
+        feature: .teamPolicyTemplates,
+        titleKey: "action_pro_team_policy_templates",
+        systemImage: "person.3.sequence.fill"
+    )
 }
 
 struct NoopProModule: ProModule {
-    let menuDescriptors: [ProActionDescriptor] = [.hardwareKeyAdvanced, .batchGovernance, .auditExport]
+    let menuDescriptors: [ProActionDescriptor] = [
+        .hardwareKeyAdvanced,
+        .batchGovernance,
+        .auditExport,
+        .teamPolicyTemplates
+    ]
     let settingsDescriptors: [ProSettingsDescriptor] = ProFeature.allCases.map {
         ProSettingsDescriptor(
             id: "settings-\($0.rawValue)",
@@ -224,7 +236,8 @@ private struct ProBinaryModuleAdapter: ProModule {
         let requiredDescriptors: [ProActionDescriptor] = [
             .hardwareKeyAdvanced,
             .batchGovernance,
-            .auditExport
+            .auditExport,
+            .teamPolicyTemplates
         ]
         return requiredDescriptors.allSatisfy { requiredDescriptor in
             mappedMenuDescriptors.contains {
