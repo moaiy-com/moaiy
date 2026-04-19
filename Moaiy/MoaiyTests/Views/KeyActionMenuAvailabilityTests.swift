@@ -176,6 +176,34 @@ struct KeyActionMenuAvailabilityTests {
         #expect(availability.canUseBatchGovernance)
     }
 
+    @Test("Audit export action is locked without Pro entitlement")
+    func auditExport_lockedWithoutProEntitlement() {
+        let availability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: true, secretMaterial: .localSecret),
+            isKeySigningMenuEnabled: false,
+            isBackupRestoreMenuEnabled: false,
+            isHardwareKeyAdvancedEnabled: false,
+            isBatchGovernanceEnabled: false,
+            isAuditExportEnabled: false
+        )
+
+        #expect(!availability.canUseAuditExport)
+    }
+
+    @Test("Audit export action is available with Pro entitlement on local secret key")
+    func auditExport_enabledWithProEntitlement() {
+        let availability = KeyActionMenuAvailability(
+            key: makeKey(isSecret: true, secretMaterial: .localSecret),
+            isKeySigningMenuEnabled: false,
+            isBackupRestoreMenuEnabled: false,
+            isHardwareKeyAdvancedEnabled: false,
+            isBatchGovernanceEnabled: false,
+            isAuditExportEnabled: true
+        )
+
+        #expect(availability.canUseAuditExport)
+    }
+
     private func makeKey(isSecret: Bool, secretMaterial: SecretKeyMaterial? = nil) -> GPGKey {
         GPGKey(
             id: isSecret ? "secret-key-id" : "public-key-id",

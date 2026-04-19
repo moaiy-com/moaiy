@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Moaiy
 
@@ -41,5 +42,50 @@ struct BatchGovernanceSheetTests {
         #expect(receipt.failedTargets == 3)
         #expect(receipt.artifactCount == 2)
         #expect(receipt.outputDirectoryPath == "/tmp/moaiy-batch")
+    }
+
+    @Test("Audit export request metadata maps selected filters")
+    func auditExportRequest_metadataMapsExpectedKeys() {
+        let dateFrom = Date(timeIntervalSince1970: 1_705_000_000)
+        let dateTo = Date(timeIntervalSince1970: 1_706_000_000)
+        let request = AuditExportExecutionRequest(
+            format: .csv,
+            redaction: .strict,
+            targets: ["FPR1", "FPR2"],
+            operations: [.governance, .trust],
+            includeSuccess: true,
+            includeFailure: false,
+            dateFrom: dateFrom,
+            dateTo: dateTo
+        )
+
+        #expect(request.metadata["audit.format"] == "csv")
+        #expect(request.metadata["audit.redaction"] == "strict")
+        #expect(request.metadata["audit.targets"] == "FPR1\nFPR2")
+        #expect(request.metadata["audit.operations"]?.contains("governance") == true)
+        #expect(request.metadata["audit.operations"]?.contains("trust") == true)
+        #expect(request.metadata["audit.includeSuccess"] == "true")
+        #expect(request.metadata["audit.includeFailure"] == "false")
+        #expect(request.metadata["audit.dateFrom"]?.isEmpty == false)
+        #expect(request.metadata["audit.dateTo"]?.isEmpty == false)
+    }
+
+    @Test("Audit export receipt parses summary metadata")
+    func auditExportReceipt_parsesSummaryMetadata() {
+        let receipt = AuditExportExecutionReceipt(
+            titleKey: "pro_audit_export_title",
+            messageKey: "pro_audit_export_success_message",
+            metadata: [
+                "audit.receipt.total": "32",
+                "audit.receipt.redacted": "20",
+                "audit.receipt.format": "json",
+                "audit.receipt.outputPath": "/tmp/moaiy-audit/export.json"
+            ]
+        )
+
+        #expect(receipt.totalRecords == 32)
+        #expect(receipt.redactedRecords == 20)
+        #expect(receipt.formatRawValue == "json")
+        #expect(receipt.outputPath == "/tmp/moaiy-audit/export.json")
     }
 }

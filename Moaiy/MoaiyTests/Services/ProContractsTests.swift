@@ -38,6 +38,7 @@ struct ProContractsTests {
         let actionIDs = Set(module.menuDescriptors.map(\.id))
         #expect(actionIDs.contains(ProActionDescriptor.hardwareKeyAdvanced.id))
         #expect(actionIDs.contains(ProActionDescriptor.batchGovernance.id))
+        #expect(actionIDs.contains(ProActionDescriptor.auditExport.id))
     }
 
     @Test("Pro module factory settings descriptors cover all known features")
@@ -105,11 +106,47 @@ struct ProContractsTests {
         }
     }
 
+    @Test("Pro module factory audit-export action behavior matches injection mode")
+    func moduleFactory_auditExportActionBehaviorMatchesInjectionMode() async {
+        let module = ProModuleFactory.makeModule()
+        let context = ProActionContext(
+            keyFingerprint: "FINGERPRINT",
+            metadata: [
+                "audit.format": "json",
+                "audit.redaction": "partial",
+                "audit.targets": "FINGERPRINT",
+                "audit.includeSuccess": "true",
+                "audit.includeFailure": "true"
+            ]
+        )
+
+        do {
+            let result = try await module.execute(
+                actionID: ProActionDescriptor.auditExport.id,
+                context: context
+            )
+#if canImport(MoaiyProKit)
+            #expect(result.titleKey == ProActionDescriptor.auditExport.titleKey)
+#else
+            Issue.record("Expected unsupported action when Pro binary is not injected")
+#endif
+        } catch ProModuleExecutionError.unsupportedAction {
+#if canImport(MoaiyProKit)
+            Issue.record("Expected injected Pro module to support audit-export action")
+#else
+            #expect(true)
+#endif
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
     @Test("StoreKit mapping resolves entitled product IDs to enabled features")
     func storeKitMapping_resolvesEnabledFeatures() {
         let entitledProductIDs: Set<String> = [
             "com.moaiy.pro.hardware_key_advanced",
-            "com.moaiy.pro.batch_governance"
+            "com.moaiy.pro.batch_governance",
+            "com.moaiy.pro.audit_export"
         ]
 
         let enabled = StoreKit2EntitlementProvider.resolveEnabledFeatures(
@@ -119,7 +156,7 @@ struct ProContractsTests {
 
         #expect(enabled.contains(.hardwareKeyAdvanced))
         #expect(enabled.contains(.batchGovernance))
-        #expect(!enabled.contains(.auditExport))
+        #expect(enabled.contains(.auditExport))
     }
 
     @Test("Pro product manifest maps features one-to-one")
