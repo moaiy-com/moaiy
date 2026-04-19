@@ -8,6 +8,67 @@
 import SwiftUI
 import AppKit
 
+private enum TeamPolicyTemplateMetadataKey {
+    static let operation = "policy.operation"
+    static let templateID = "policy.templateID"
+    static let templates = "policy.templates"
+    static let appliedTemplateID = "policy.applied.templateID"
+    static let appliedDefaultKeyType = "policy.applied.defaultKeyType"
+    static let appliedEnableKeySigningMenu = "policy.applied.enableKeySigningMenu"
+}
+
+struct TeamPolicyTemplateDescriptor: Sendable, Codable, Equatable, Identifiable {
+    let id: String
+    let name: String
+    let summary: String
+    let defaultKeyType: Int
+    let enableKeySigningMenu: Bool
+    let isManaged: Bool
+
+    var defaultKeyTypeDisplayKey: String {
+        switch defaultKeyType {
+        case 1:
+            return "key_type_rsa2048"
+        case 2:
+            return "key_type_ecc_curve25519"
+        default:
+            return "key_type_rsa4096"
+        }
+    }
+
+    static func parseList(from metadata: [String: String]) -> [TeamPolicyTemplateDescriptor] {
+        guard
+            let rawTemplates = metadata[TeamPolicyTemplateMetadataKey.templates],
+            let data = rawTemplates.data(using: .utf8)
+        else {
+            return []
+        }
+
+        guard let templates = try? JSONDecoder().decode([TeamPolicyTemplateDescriptor].self, from: data) else {
+            return []
+        }
+
+        return templates.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
+    static func parseBool(_ value: String?) -> Bool? {
+        guard let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() else {
+            return nil
+        }
+
+        switch normalized {
+        case "1", "true", "yes", "y":
+            return true
+        case "0", "false", "no", "n":
+            return false
+        default:
+            return nil
+        }
+    }
+}
+
 struct SettingsView: View {
     @AppStorage("defaultKeyType") private var defaultKeyType = 0
     @AppStorage(Constants.StorageKeys.appLanguageCode) private var appLanguageCode = AppLanguageOption.system.rawValue
@@ -17,6 +78,10 @@ struct SettingsView: View {
     @State private var activeGPGHomePath: String = ""
     @State private var proRuntime: ProRuntime = AppState.shared.proRuntime
     @State private var promptAlert: PromptAlertContent?
+    @State private var teamPolicyTemplates: [TeamPolicyTemplateDescriptor] = []
+    @State private var selectedTeamPolicyTemplateID = ""
+    @State private var isLoadingTeamPolicyTemplates = false
+    @State private var isApplyingTeamPolicyTemplate = false
     
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -32,6 +97,14 @@ struct SettingsView: View {
 
     private var privacyPolicyURL: URL? {
         URL(string: "https://moaiy.com/privacy")
+    }
+
+    private var teamPolicyTemplatesDescriptor: ProActionDescriptor? {
+        proRuntime.menuDescriptors.first(where: { $0.feature == .teamPolicyTemplates })
+    }
+
+    private var selectedTeamPolicyTemplate: TeamPolicyTemplateDescriptor? {
+        teamPolicyTemplates.first(where: { $0.id == selectedTeamPolicyTemplateID })
     }
     
     var body: some View {
@@ -182,6 +255,105 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.bordered)
                     }
+
+                    if let descriptor = teamPolicyTemplatesDescriptor {
+                        Divider()
+
+                        let availability = proRuntime.availability(for: descriptor.feature)
+                        VStack(alignment: .leading, spacing: MoaiyUI.Spacing.sm) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(LocalizedStringKey(descriptor.titleKey))
+                                    .foregroundStyle(Color.moaiyTextSecondary)
+                                Spacer()
+                                if isLoadingTeamPolicyTemplates || isApplyingTeamPolicyTemplate {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                }
+                            }
+
+                            if !availability.isEnabled {
+                                Text(LocalizedStringKey(availability.messageKey))
+                                    .font(.caption)
+                                    .foregroundStyle(Color.moaiyTextSecondary)
+                            } else {
+                                Picker(
+                                    "pro_team_policy_templates_picker_label",
+                                    selection: $selectedTeamPolicyTemplateID
+                                ) {
+                                    ForEach(teamPolicyTemplates) { template in
+                                        Text(template.name)
+                                            .tag(template.id)
+                                    }
+                                }
+                                .labelsHidden()
+                                .pickerStyle(.menu)
+                                .disabled(teamPolicyTemplates.isEmpty || isLoadingTeamPolicyTemplates)
+
+                                if let selectedTeamPolicyTemplate {
+                                    if !selectedTeamPolicyTemplate.summary.isEmpty {
+                                        Text(selectedTeamPolicyTemplate.summary)
+                                            .font(.caption)
+                                            .foregroundStyle(Color.moaiyTextSecondary)
+                                    }
+
+                                    HStack(alignment: .firstTextBaseline) {
+                                        Text("setting_default_key_type")
+                                            .foregroundStyle(Color.moaiyTextSecondary)
+                                        Spacer()
+                                        Text(LocalizedStringKey(selectedTeamPolicyTemplate.defaultKeyTypeDisplayKey))
+                                            .foregroundStyle(Color.moaiyTextPrimary)
+                                    }
+
+                                    HStack(alignment: .firstTextBaseline) {
+                                        Text("setting_enable_key_signing")
+                                            .foregroundStyle(Color.moaiyTextSecondary)
+                                        Spacer()
+                                        Text(
+                                            LocalizedStringKey(
+                                                selectedTeamPolicyTemplate.enableKeySigningMenu
+                                                    ? "pro_team_policy_templates_value_enabled"
+                                                    : "pro_team_policy_templates_value_disabled"
+                                            )
+                                        )
+                                        .foregroundStyle(Color.moaiyTextPrimary)
+                                    }
+                                } else if isLoadingTeamPolicyTemplates {
+                                    Text("pro_team_policy_templates_loading")
+                                        .font(.caption)
+                                        .foregroundStyle(Color.moaiyTextSecondary)
+                                } else {
+                                    Text("pro_team_policy_templates_empty")
+                                        .font(.caption)
+                                        .foregroundStyle(Color.moaiyTextSecondary)
+                                }
+
+                                HStack(spacing: MoaiyUI.Spacing.sm) {
+                                    Button("action_pro_team_policy_templates_reload") {
+                                        Task {
+                                            await loadTeamPolicyTemplates(
+                                                forceRefresh: true,
+                                                showFailureAlert: true
+                                            )
+                                        }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .disabled(isLoadingTeamPolicyTemplates || isApplyingTeamPolicyTemplate)
+
+                                    Button("action_pro_team_policy_templates_apply") {
+                                        Task {
+                                            await applySelectedTeamPolicyTemplate()
+                                        }
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .disabled(
+                                        selectedTeamPolicyTemplate == nil
+                                            || isLoadingTeamPolicyTemplates
+                                            || isApplyingTeamPolicyTemplate
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .moaiyModalCard()
@@ -288,6 +460,7 @@ struct SettingsView: View {
     private func refreshProState() async {
         await proRuntime.refreshEntitlements()
         proEntitlementLastRefresh = Date().timeIntervalSince1970
+        await loadTeamPolicyTemplates(forceRefresh: true)
     }
 
     @MainActor
@@ -295,6 +468,7 @@ struct SettingsView: View {
         do {
             try await proRuntime.restorePurchases()
             proEntitlementLastRefresh = Date().timeIntervalSince1970
+            await loadTeamPolicyTemplates(forceRefresh: true)
             promptAlert = .success(
                 message: AppLocalization.string("pro_restore_success_message"),
                 title: "pro_restore_success_title"
@@ -303,6 +477,122 @@ struct SettingsView: View {
             promptAlert = .failure(
                 title: "pro_restore_failure_title",
                 message: AppLocalization.string("pro_restore_failure_message")
+            )
+        }
+    }
+
+    @MainActor
+    private func loadTeamPolicyTemplates(
+        forceRefresh: Bool,
+        showFailureAlert: Bool = false
+    ) async {
+        guard let descriptor = teamPolicyTemplatesDescriptor else {
+            teamPolicyTemplates = []
+            selectedTeamPolicyTemplateID = ""
+            return
+        }
+
+        let availability = proRuntime.availability(for: descriptor.feature)
+        guard availability.isEnabled else {
+            teamPolicyTemplates = []
+            selectedTeamPolicyTemplateID = ""
+            return
+        }
+
+        if isLoadingTeamPolicyTemplates {
+            return
+        }
+
+        if !forceRefresh && !teamPolicyTemplates.isEmpty {
+            return
+        }
+
+        isLoadingTeamPolicyTemplates = true
+        defer { isLoadingTeamPolicyTemplates = false }
+
+        do {
+            let result = try await proRuntime.executeMenuAction(
+                descriptor: descriptor,
+                keyFingerprint: nil,
+                metadata: [
+                    TeamPolicyTemplateMetadataKey.operation: "list"
+                ]
+            )
+
+            let loadedTemplates = TeamPolicyTemplateDescriptor.parseList(from: result.metadata)
+            teamPolicyTemplates = loadedTemplates
+
+            if let selected = loadedTemplates.first(where: { $0.id == selectedTeamPolicyTemplateID }) {
+                selectedTeamPolicyTemplateID = selected.id
+            } else {
+                selectedTeamPolicyTemplateID = loadedTemplates.first?.id ?? ""
+            }
+        } catch {
+            teamPolicyTemplates = []
+            selectedTeamPolicyTemplateID = ""
+            if showFailureAlert {
+                promptAlert = .failure(
+                    title: "pro_feature_locked_title",
+                    message: AppLocalization.string("pro_team_policy_templates_operation_failed_message")
+                )
+            }
+        }
+    }
+
+    @MainActor
+    private func applySelectedTeamPolicyTemplate() async {
+        guard let descriptor = teamPolicyTemplatesDescriptor else { return }
+        guard let selectedTemplate = selectedTeamPolicyTemplate else { return }
+
+        isApplyingTeamPolicyTemplate = true
+        defer { isApplyingTeamPolicyTemplate = false }
+
+        do {
+            let result = try await proRuntime.executeMenuAction(
+                descriptor: descriptor,
+                keyFingerprint: nil,
+                metadata: [
+                    TeamPolicyTemplateMetadataKey.operation: "apply",
+                    TeamPolicyTemplateMetadataKey.templateID: selectedTemplate.id
+                ]
+            )
+
+            guard
+                let resolvedDefaultKeyType = Int(
+                    result.metadata[TeamPolicyTemplateMetadataKey.appliedDefaultKeyType] ?? ""
+                ),
+                let resolvedSigningState = TeamPolicyTemplateDescriptor.parseBool(
+                    result.metadata[TeamPolicyTemplateMetadataKey.appliedEnableKeySigningMenu]
+                )
+            else {
+                promptAlert = .failure(
+                    title: "pro_feature_locked_title",
+                    message: AppLocalization.string("pro_team_policy_templates_operation_failed_message")
+                )
+                return
+            }
+
+            defaultKeyType = resolvedDefaultKeyType
+            enableKeySigningMenu = resolvedSigningState
+            selectedTeamPolicyTemplateID = result.metadata[TeamPolicyTemplateMetadataKey.appliedTemplateID]
+                ?? selectedTemplate.id
+
+            promptAlert = .success(
+                message: AppLocalization.localizedString(forKey: result.messageKey),
+                title: LocalizedStringKey(descriptor.titleKey)
+            )
+
+            await loadTeamPolicyTemplates(forceRefresh: true)
+        } catch ProModuleExecutionError.featureLocked {
+            let availability = proRuntime.availability(for: descriptor.feature)
+            promptAlert = .info(
+                title: "pro_feature_locked_title",
+                message: AppLocalization.localizedString(forKey: availability.messageKey)
+            )
+        } catch {
+            promptAlert = .failure(
+                title: "pro_feature_locked_title",
+                message: AppLocalization.string("pro_team_policy_templates_operation_failed_message")
             )
         }
     }
