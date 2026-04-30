@@ -12,6 +12,42 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Release execution checklist for v0.5.0 (`doc/v0.5.0-minimal-release-checklist.md`)
 - Core flow validation list for v0.5.0 (`doc/v0.5.0-core-flow-validation.md`)
 
+## [0.8.1] - 2026-04-19
+
+### Added
+
+- Added v0.8.1 release hardening tracker (`doc/v0.8.1-release-hardening-tracker.md`) for branch execution and gate closure.
+- Added comprehensive post-release audit briefing for v0.8.0 (`doc/v0.8.0-post-release-audit-2026-04-19.md`).
+
+### Changed
+
+- Updated release workflow tag SHA resolution to support both annotated and lightweight tags in preflight/publish checks.
+- Upgraded GitHub Actions dependencies to current stable major versions in CI/release workflows (`checkout`, `upload-artifact`, `download-artifact`).
+- Updated top-level documentation status pointers to reflect v0.8.0 as latest stable and v0.8.1 as active hardening rollout.
+- Bumped app version metadata from `0.8.0` to `0.8.1` and incremented `CURRENT_PROJECT_VERSION` from `7` to `8`.
+
+### Fixed
+
+- Fixed release-note renderer behavior: missing `zh-Hans` detailed changelog sections now fail fast instead of silently falling back to English bodies.
+- Added `zh-Hans` detailed update blocks to the v0.8.0 changelog section to keep bilingual release-note generation deterministic.
+
+### Added (zh-Hans)
+
+- 新增 v0.8.1 发布加固追踪文档（`doc/v0.8.1-release-hardening-tracker.md`），用于执行过程与门禁收口跟踪。
+- 新增 v0.8.0 发布后全面审计简报（`doc/v0.8.0-post-release-audit-2026-04-19.md`）。
+
+### Changed (zh-Hans)
+
+- 更新发布工作流中的 tag SHA 解析逻辑，使 preflight/publish 阶段同时兼容 annotated 与 lightweight tag。
+- 升级 CI/发布工作流中的 GitHub Actions 依赖到当前稳定主版本（`checkout`、`upload-artifact`、`download-artifact`）。
+- 更新顶层文档中的版本状态指引：`v0.8.0` 为最新稳定版，`v0.8.1` 为当前加固迭代。
+- 将应用版本元数据从 `0.8.0` 升级到 `0.8.1`，并将 `CURRENT_PROJECT_VERSION` 从 `7` 递增至 `8`。
+
+### Fixed (zh-Hans)
+
+- 修复发布说明渲染器行为：当缺失 `zh-Hans` 详细变更区块时改为快速失败，避免中文部分回退为英文正文。
+- 为 `v0.8.0` 的 CHANGELOG 区块补齐 `zh-Hans` 详细变更，确保双语发布说明可稳定生成。
+
 ## [0.8.0] - 2026-04-18
 
 ### Added
@@ -31,6 +67,24 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Fixed stale Pro availability edge case in action execution path by forcing entitlement refresh before dispatch.
 - Fixed injected-module partial-descriptor risk that could leave Settings feature list incomplete.
+
+### Added (zh-Hans)
+
+- 新增可选 Pro 二进制适配路径（`ProModuleFactory` + `ProBinaryModuleAdapter`），使 Core 在保持 Noop 回退的前提下支持注入 `MoaiyProKit`，并继续兼容公共 CI。
+- 新增内部 Pro 注入工作流（`.github/workflows/internal-pro-injection-ci.yml`），用于注入模式下的构建与测试验证。
+- 新增 v0.8.0 推进追踪文档（`doc/v0.8.0-pro-rollout-tracker.md`），用于记录 Pro 优先发布的执行与审计关卡。
+
+### Changed (zh-Hans)
+
+- 强化 Pro 模块回退行为：当注入模块未提供必需 descriptor 时，Core 自动回退到 `NoopProModule`。
+- 统一注入模式下的 Settings descriptor 归一化逻辑，确保 `ProFeature` 覆盖完整，即使私有模块只返回部分 descriptor。
+- 优化钥匙菜单中的 Pro 动作执行体验：防重复触发、执行前刷新 entitlement、执行中显示运行状态图标。
+- 更新 Pro 契约文档，补充私有产物发布链路与当前 HardwareKeyAdvanced v1 诊断流程。
+
+### Fixed (zh-Hans)
+
+- 修复 Pro 动作路径中的可用性缓存陈旧问题：在分发执行前强制刷新 entitlement。
+- 修复注入模块 descriptor 不完整时可能导致 Settings 功能列表缺失的风险。
 
 ## [0.7.1] - 2026-04-16
 
