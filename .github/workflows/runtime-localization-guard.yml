@@ -1,0 +1,45 @@
+name: Runtime Localization Guard
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  runtime-localization-guard:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Build (Debug, unsigned)
+        run: |
+          DERIVED_DATA_PATH="$RUNNER_TEMP/moaiy-runtime-l10n-deriveddata"
+          xcodebuild -project Moaiy/Moaiy.xcodeproj \
+            -scheme Moaiy \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$DERIVED_DATA_PATH" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Runtime Localization Key Guard
+        run: |
+          DERIVED_DATA_PATH="$RUNNER_TEMP/moaiy-runtime-l10n-deriveddata"
+          STRINGS_PATH="$DERIVED_DATA_PATH/Build/Products/Debug/Moaiy.app/Contents/Resources/en.lproj/Localizable.strings"
+
+          chmod +x ./scripts/check_runtime_localization_keys.py
+          ./scripts/check_runtime_localization_keys.py \
+            --source-root Moaiy \
+            --catalog Moaiy/Resources/Localizable.xcstrings \
+            --compiled-strings "$STRINGS_PATH"
