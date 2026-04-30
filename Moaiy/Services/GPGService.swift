@@ -3606,14 +3606,8 @@ final class GPGService: SubkeyManaging {
         guard !trimmed.isEmpty else {
             return "hkps://keys.openpgp.org"
         }
-        if trimmed.contains("://") {
-            return trimmed
-        }
         guard let host = normalizedKeyserverHost(trimmed) else {
-            return trimmed
-        }
-        if host == "pgp.mit.edu" {
-            return "hkp://\(host)"
+            return "hkps://keys.openpgp.org"
         }
         return "hkps://\(host)"
     }
@@ -3681,9 +3675,7 @@ final class GPGService: SubkeyManaging {
 
     private func hkpUploadEndpoints(forHost host: String) -> [URL] {
         let candidates = [
-            "https://\(host)/pks/add",
-            "http://\(host)/pks/add",
-            "http://\(host):11371/pks/add"
+            "https://\(host)/pks/add"
         ]
         return candidates.compactMap(URL.init(string:))
     }
