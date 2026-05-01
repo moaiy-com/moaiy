@@ -34,6 +34,7 @@
 		3A1000012F76000100000008 /* PasswordInputSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2000012F76000100000008 /* PasswordInputSheet.swift */; };
 		3A1000012F76000100000009 /* DeleteKeyOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2000012F76000100000009 /* DeleteKeyOption.swift */; };
 		3A1000012F7600010000000A /* OperationPromptHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2000012F7600010000000A /* OperationPromptHost.swift */; };
+		3A1000012F7600010000000B /* BatchGovernanceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2000012F7600010000000B /* BatchGovernanceSheet.swift */; };
 		B00000000001 /* MoaiyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000001 /* MoaiyApp.swift */; };
 		B00000000002 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000002 /* MainView.swift */; };
 		B00000000003 /* KeyManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000003 /* KeyManagementView.swift */; };
@@ -87,6 +88,7 @@
 		3A2000012F76000100000008 /* PasswordInputSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordInputSheet.swift; sourceTree = "<group>"; };
 		3A2000012F76000100000009 /* DeleteKeyOption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteKeyOption.swift; sourceTree = "<group>"; };
 		3A2000012F7600010000000A /* OperationPromptHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationPromptHost.swift; sourceTree = "<group>"; };
+		3A2000012F7600010000000B /* BatchGovernanceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchGovernanceSheet.swift; sourceTree = "<group>"; };
 		A00000000001 /* MoaiyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoaiyApp.swift; sourceTree = "<group>"; };
 		A00000000002 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		A00000000003 /* KeyManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyManagementView.swift; sourceTree = "<group>"; };
@@ -266,6 +268,7 @@
 				3A2000012F76000100000003 /* KeyCardView.swift */,
 				3A2000012F76000100000004 /* DropZoneView.swift */,
 				3A2000012F76000100000005 /* KeyActionMenu.swift */,
+				3A2000012F7600010000000B /* BatchGovernanceSheet.swift */,
 				3A2000012F76000100000006 /* OperationResultOverlay.swift */,
 				3A2000012F7600010000000A /* OperationPromptHost.swift */,
 				3A2000012F76000100000007 /* UploadToKeyserverSheet.swift */,
@@ -497,6 +500,7 @@
 				3A1000012F76000100000003 /* KeyCardView.swift in Sources */,
 				3A1000012F76000100000004 /* DropZoneView.swift in Sources */,
 				3A1000012F76000100000005 /* KeyActionMenu.swift in Sources */,
+				3A1000012F7600010000000B /* BatchGovernanceSheet.swift in Sources */,
 				3A1000012F76000100000006 /* OperationResultOverlay.swift in Sources */,
 				3A1000012F7600010000000A /* OperationPromptHost.swift in Sources */,
 				3A1000012F76000100000007 /* UploadToKeyserverSheet.swift in Sources */,

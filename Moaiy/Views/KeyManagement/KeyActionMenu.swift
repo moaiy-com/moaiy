@@ -370,18 +370,24 @@ struct KeyActionMenuAvailability {
     let isKeySigningMenuEnabled: Bool
     let isBackupRestoreMenuEnabled: Bool
     let isHardwareKeyAdvancedEnabled: Bool
+    let isBatchGovernanceEnabled: Bool
+    let isAuditExportEnabled: Bool
 
     init(
         key: GPGKey,
         isKeySigningMenuEnabled: Bool,
         isBackupRestoreMenuEnabled: Bool = false,
-        isHardwareKeyAdvancedEnabled: Bool = false
+        isHardwareKeyAdvancedEnabled: Bool = false,
+        isBatchGovernanceEnabled: Bool = false,
+        isAuditExportEnabled: Bool = false
     ) {
         self.hasSecretKey = key.isSecret
         self.isSmartCardStub = key.isSmartCardStub
         self.isKeySigningMenuEnabled = isKeySigningMenuEnabled
         self.isBackupRestoreMenuEnabled = isBackupRestoreMenuEnabled
         self.isHardwareKeyAdvancedEnabled = isHardwareKeyAdvancedEnabled
+        self.isBatchGovernanceEnabled = isBatchGovernanceEnabled
+        self.isAuditExportEnabled = isAuditExportEnabled
     }
 
     var canDecrypt: Bool {
@@ -393,6 +399,8 @@ struct KeyActionMenuAvailability {
     var canManageRevocation: Bool { hasSecretKey && !isSmartCardStub }
     var canSignKey: Bool { hasSecretKey && !isSmartCardStub && isKeySigningMenuEnabled }
     var canUseHardwareKeyAdvanced: Bool { hasSecretKey && !isSmartCardStub && isHardwareKeyAdvancedEnabled }
+    var canUseBatchGovernance: Bool { hasSecretKey && !isSmartCardStub && isBatchGovernanceEnabled }
+    var canUseAuditExport: Bool { hasSecretKey && !isSmartCardStub && isAuditExportEnabled }
     var showsSignKey: Bool { isKeySigningMenuEnabled }
     var showsExportPrivateKey: Bool { hasSecretKey && !isSmartCardStub }
     // Reserved feature: keep backup/restore implementation, hide entry for now.
@@ -429,6 +437,404 @@ struct KeyActionBatchResultPlanner {
     }
 }
 
+enum AuditExportFormatOption: String, CaseIterable, Identifiable, Sendable {
+    case json
+    case csv
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .json:
+            return "pro_audit_export_format_json"
+        case .csv:
+            return "pro_audit_export_format_csv"
+        }
+    }
+}
+
+enum AuditExportRedactionOption: String, CaseIterable, Identifiable, Sendable {
+    case none
+    case partial
+    case strict
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .none:
+            return "pro_audit_export_redaction_none"
+        case .partial:
+            return "pro_audit_export_redaction_partial"
+        case .strict:
+            return "pro_audit_export_redaction_strict"
+        }
+    }
+}
+
+enum AuditExportOperationOption: String, CaseIterable, Identifiable, Sendable {
+    case encryption
+    case decryption
+    case signing
+    case verification
+    case trust
+    case governance
+    case keyManagement
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .encryption:
+            return "pro_audit_export_operation_encryption"
+        case .decryption:
+            return "pro_audit_export_operation_decryption"
+        case .signing:
+            return "pro_audit_export_operation_signing"
+        case .verification:
+            return "pro_audit_export_operation_verification"
+        case .trust:
+            return "pro_audit_export_operation_trust"
+        case .governance:
+            return "pro_audit_export_operation_governance"
+        case .keyManagement:
+            return "pro_audit_export_operation_key_management"
+        }
+    }
+}
+
+struct AuditExportExecutionRequest: Sendable, Equatable {
+    let format: AuditExportFormatOption
+    let redaction: AuditExportRedactionOption
+    let targets: [String]
+    let operations: Set<AuditExportOperationOption>
+    let includeSuccess: Bool
+    let includeFailure: Bool
+    let dateFrom: Date?
+    let dateTo: Date?
+
+    var metadata: [String: String] {
+        var payload: [String: String] = [
+            "audit.format": format.rawValue,
+            "audit.redaction": redaction.rawValue,
+            "audit.targets": targets.joined(separator: "\n"),
+            "audit.operations": operations
+                .map(\.rawValue)
+                .sorted()
+                .joined(separator: ","),
+            "audit.includeSuccess": includeSuccess ? "true" : "false",
+            "audit.includeFailure": includeFailure ? "true" : "false"
+        ]
+
+        let formatter = ISO8601DateFormatter()
+        payload["audit.dateFrom"] = dateFrom.map { formatter.string(from: $0) } ?? ""
+        payload["audit.dateTo"] = dateTo.map { formatter.string(from: $0) } ?? ""
+        return payload
+    }
+}
+
+struct AuditExportExecutionReceipt: Sendable, Equatable {
+    let titleKey: String
+    let messageKey: String
+    let metadata: [String: String]
+
+    var totalRecords: Int {
+        Int(metadata["audit.receipt.total"] ?? "") ?? 0
+    }
+
+    var redactedRecords: Int {
+        Int(metadata["audit.receipt.redacted"] ?? "") ?? 0
+    }
+
+    var formatRawValue: String {
+        metadata["audit.receipt.format"] ?? ""
+    }
+
+    var outputPath: String? {
+        guard let value = metadata["audit.receipt.outputPath"], !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
+
+    var outputFileURL: URL? {
+        guard let outputPath else { return nil }
+        return URL(fileURLWithPath: outputPath)
+    }
+}
+
+struct AuditExportSheet: View {
+    let key: GPGKey
+    let onExecute: @Sendable (AuditExportExecutionRequest) async -> AuditExportExecutionReceipt
+
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var format: AuditExportFormatOption = .json
+    @State private var redaction: AuditExportRedactionOption = .partial
+    @State private var selectedOperations: Set<AuditExportOperationOption> = Set(AuditExportOperationOption.allCases)
+    @State private var targetsInput = ""
+    @State private var includeSuccess = true
+    @State private var includeFailure = true
+    @State private var enableDateRange = false
+    @State private var dateFrom = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+    @State private var dateTo = Date()
+    @State private var isRunning = false
+    @State private var validationMessageKey: String?
+    @State private var receipt: AuditExportExecutionReceipt?
+
+    var body: some View {
+        VStack(spacing: MoaiyUI.Spacing.lg) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("pro_audit_export_title")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.moaiyTextPrimary)
+                    Text("pro_audit_export_description")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.moaiyTextSecondary)
+                }
+
+                Spacer()
+
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(Color.moaiyTextSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: MoaiyUI.Spacing.lg) {
+                    VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
+                        HStack {
+                            Picker("pro_audit_export_format_title", selection: $format) {
+                                ForEach(AuditExportFormatOption.allCases) { option in
+                                    Text(LocalizedStringKey(option.titleKey)).tag(option)
+                                }
+                            }
+                            .pickerStyle(.menu)
+
+                            Picker("pro_audit_export_redaction_title", selection: $redaction) {
+                                ForEach(AuditExportRedactionOption.allCases) { option in
+                                    Text(LocalizedStringKey(option.titleKey)).tag(option)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                        }
+
+                        Text("pro_audit_export_targets_title")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.moaiyTextSecondary)
+
+                        TextEditor(text: $targetsInput)
+                            .frame(minHeight: 120)
+                            .font(.system(.body, design: .monospaced))
+                            .padding(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.moaiyBorderPrimary.opacity(0.8), lineWidth: 1)
+                            )
+
+                        Text("pro_audit_export_targets_hint")
+                            .font(.caption)
+                            .foregroundStyle(Color.moaiyTextSecondary)
+
+                        HStack(spacing: MoaiyUI.Spacing.md) {
+                            Toggle("pro_audit_export_filter_success", isOn: $includeSuccess)
+                            Toggle("pro_audit_export_filter_failure", isOn: $includeFailure)
+                        }
+
+                        VStack(alignment: .leading, spacing: MoaiyUI.Spacing.xs) {
+                            Text("pro_audit_export_operations_title")
+                                .font(.subheadline)
+                                .foregroundStyle(Color.moaiyTextSecondary)
+
+                            ForEach(AuditExportOperationOption.allCases) { option in
+                                Toggle(
+                                    LocalizedStringKey(option.titleKey),
+                                    isOn: Binding(
+                                        get: { selectedOperations.contains(option) },
+                                        set: { shouldEnable in
+                                            if shouldEnable {
+                                                selectedOperations.insert(option)
+                                            } else {
+                                                selectedOperations.remove(option)
+                                            }
+                                        }
+                                    )
+                                )
+                            }
+                        }
+
+                        Toggle("pro_audit_export_filter_date_range", isOn: $enableDateRange)
+                        if enableDateRange {
+                            DatePicker("pro_audit_export_date_from", selection: $dateFrom, displayedComponents: [.date, .hourAndMinute])
+                            DatePicker("pro_audit_export_date_to", selection: $dateTo, displayedComponents: [.date, .hourAndMinute])
+                        }
+
+                        HStack(spacing: MoaiyUI.Spacing.sm) {
+                            Button("action_cancel") {
+                                dismiss()
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button(action: executeAuditExport) {
+                                if isRunning {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Text("action_pro_audit_export_execute")
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Color.moaiyAccentV2)
+                            .disabled(isRunning)
+                        }
+                    }
+                    .padding(MoaiyUI.Spacing.md)
+                    .moaiyCardStyle()
+
+                    if let validationMessageKey {
+                        Text(LocalizedStringKey(validationMessageKey))
+                            .font(.subheadline)
+                            .foregroundStyle(Color.moaiyError)
+                            .padding(MoaiyUI.Spacing.md)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .moaiyBannerStyle(tint: Color.moaiyError)
+                    }
+
+                    if let receipt {
+                        VStack(alignment: .leading, spacing: MoaiyUI.Spacing.sm) {
+                            Text("pro_audit_export_receipt_title")
+                                .font(.headline)
+
+                            Text(LocalizedStringKey(receipt.messageKey))
+                                .font(.subheadline)
+                                .foregroundStyle(receipt.outputPath == nil ? Color.moaiyWarning : Color.moaiySuccess)
+
+                            receiptMetricRow(
+                                titleKey: "pro_audit_export_receipt_total",
+                                value: receipt.totalRecords
+                            )
+                            receiptMetricRow(
+                                titleKey: "pro_audit_export_receipt_redacted",
+                                value: receipt.redactedRecords
+                            )
+
+                            HStack(alignment: .firstTextBaseline) {
+                                Text("pro_audit_export_receipt_format")
+                                    .foregroundStyle(Color.moaiyTextSecondary)
+                                Spacer()
+                                Text(receipt.formatRawValue.uppercased())
+                                    .foregroundStyle(Color.moaiyTextPrimary)
+                            }
+                            .font(.subheadline)
+
+                            if let outputFileURL = receipt.outputFileURL {
+                                Text(outputFileURL.path)
+                                    .font(.caption)
+                                    .foregroundStyle(Color.moaiyTextSecondary)
+                                    .textSelection(.enabled)
+
+                                Button("pro_audit_export_receipt_open_file") {
+                                    NSWorkspace.shared.activateFileViewerSelecting([outputFileURL])
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                        .padding(MoaiyUI.Spacing.md)
+                        .moaiyCardStyle()
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(MoaiyUI.Spacing.xxl)
+        .background(Color.moaiySurfaceBackground)
+        .moaiyModalAdaptiveSize(
+            minWidth: 560,
+            idealWidth: 740,
+            maxWidth: 920,
+            minHeight: 560,
+            idealHeight: 720,
+            maxHeight: 940
+        )
+        .task {
+            if targetsInput.isEmpty {
+                targetsInput = key.fingerprint
+            }
+        }
+    }
+
+    private func executeAuditExport() {
+        let targets = parseTargets(from: targetsInput)
+        guard !targets.isEmpty else {
+            validationMessageKey = "pro_audit_export_validation_targets_required"
+            return
+        }
+
+        guard includeSuccess || includeFailure else {
+            validationMessageKey = "pro_audit_export_validation_status_required"
+            return
+        }
+
+        if selectedOperations.isEmpty {
+            validationMessageKey = "pro_audit_export_validation_operations_required"
+            return
+        }
+
+        validationMessageKey = nil
+        isRunning = true
+
+        let request = AuditExportExecutionRequest(
+            format: format,
+            redaction: redaction,
+            targets: targets,
+            operations: selectedOperations,
+            includeSuccess: includeSuccess,
+            includeFailure: includeFailure,
+            dateFrom: enableDateRange ? dateFrom : nil,
+            dateTo: enableDateRange ? dateTo : nil
+        )
+
+        Task {
+            let result = await onExecute(request)
+            await MainActor.run {
+                receipt = result
+                isRunning = false
+            }
+        }
+    }
+
+    private func parseTargets(from source: String) -> [String] {
+        var deduped: [String] = []
+        var seen: Set<String> = []
+        let separators = CharacterSet(charactersIn: ",;\n")
+        for token in source.components(separatedBy: separators) {
+            let normalized = token.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else { continue }
+            if seen.insert(normalized).inserted {
+                deduped.append(normalized)
+            }
+        }
+        return deduped
+    }
+
+    @ViewBuilder
+    private func receiptMetricRow(titleKey: String, value: Int) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(LocalizedStringKey(titleKey))
+                .foregroundStyle(Color.moaiyTextSecondary)
+            Spacer()
+            Text("\(value)")
+                .foregroundStyle(Color.moaiyTextPrimary)
+        }
+        .font(.subheadline)
+    }
+}
+
 struct KeyActionMenu: View {
     let key: GPGKey
     var onDelete: (() -> Void)?
@@ -446,6 +852,8 @@ struct KeyActionMenu: View {
     @State private var showingRevocationSheet = false
     @State private var showingEditSheet = false
     @State private var showingSubkeySheet = false
+    @State private var showingBatchGovernanceSheet = false
+    @State private var showingAuditExportSheet = false
     @State private var pendingPassphraseAction: PassphraseAction?
     @State private var pendingPassphraseAllowsEmpty = true
     @State private var pendingYubiKeyPINAction: YubiKeyPINAction?
@@ -461,18 +869,38 @@ struct KeyActionMenu: View {
         source: .none,
         messageKey: "pro_status_locked_message_provider"
     )
+    @State private var batchGovernanceAvailability = ProFeatureAvailability.locked(
+        reasonCode: .providerUnavailable,
+        source: .none,
+        messageKey: "pro_status_locked_message_provider"
+    )
+    @State private var auditExportAvailability = ProFeatureAvailability.locked(
+        reasonCode: .providerUnavailable,
+        source: .none,
+        messageKey: "pro_status_locked_message_provider"
+    )
 
     private var availability: KeyActionMenuAvailability {
         KeyActionMenuAvailability(
             key: key,
             isKeySigningMenuEnabled: isKeySigningMenuEnabled,
             isBackupRestoreMenuEnabled: isBackupRestoreMenuEnabled,
-            isHardwareKeyAdvancedEnabled: hardwareKeyAdvancedAvailability.isEnabled
+            isHardwareKeyAdvancedEnabled: hardwareKeyAdvancedAvailability.isEnabled,
+            isBatchGovernanceEnabled: batchGovernanceAvailability.isEnabled,
+            isAuditExportEnabled: auditExportAvailability.isEnabled
         )
     }
 
     private var hardwareKeyAdvancedDescriptor: ProActionDescriptor? {
         proRuntime.menuDescriptors.first(where: { $0.feature == .hardwareKeyAdvanced })
+    }
+
+    private var batchGovernanceDescriptor: ProActionDescriptor? {
+        proRuntime.menuDescriptors.first(where: { $0.feature == .batchGovernance })
+    }
+
+    private var auditExportDescriptor: ProActionDescriptor? {
+        proRuntime.menuDescriptors.first(where: { $0.feature == .auditExport })
     }
 
     private enum PassphraseAction {
@@ -560,6 +988,40 @@ struct KeyActionMenu: View {
                         )
                     }
                     .disabled(!availability.canUseHardwareKeyAdvanced || isExecutingProAction)
+                }
+                if let batchGovernanceDescriptor {
+                    let isExecutingProAction = runningProActionID == batchGovernanceDescriptor.id
+                    Button(action: {
+                        guard availability.canUseBatchGovernance else { return }
+                        showingBatchGovernanceSheet = true
+                    }) {
+                        Label(
+                            LocalizedStringKey(batchGovernanceDescriptor.titleKey),
+                            systemImage: isExecutingProAction
+                                ? "hourglass"
+                                : availability.canUseBatchGovernance
+                                    ? batchGovernanceDescriptor.systemImage
+                                    : "lock.fill"
+                        )
+                    }
+                    .disabled(!availability.canUseBatchGovernance || isExecutingProAction)
+                }
+                if let auditExportDescriptor {
+                    let isExecutingProAction = runningProActionID == auditExportDescriptor.id
+                    Button(action: {
+                        guard availability.canUseAuditExport else { return }
+                        showingAuditExportSheet = true
+                    }) {
+                        Label(
+                            LocalizedStringKey(auditExportDescriptor.titleKey),
+                            systemImage: isExecutingProAction
+                                ? "hourglass"
+                                : availability.canUseAuditExport
+                                    ? auditExportDescriptor.systemImage
+                                    : "lock.fill"
+                        )
+                    }
+                    .disabled(!availability.canUseAuditExport || isExecutingProAction)
                 }
             }
 
@@ -721,6 +1183,24 @@ struct KeyActionMenu: View {
             SubkeyManagementSheet(key: key)
                 .environment(\.locale, AppLocalization.locale)
         }
+        .sheet(isPresented: $showingBatchGovernanceSheet) {
+            BatchGovernanceSheet(
+                key: key,
+                onExecute: { request in
+                    await executeBatchGovernance(request)
+                }
+            )
+            .environment(\.locale, AppLocalization.locale)
+        }
+        .sheet(isPresented: $showingAuditExportSheet) {
+            AuditExportSheet(
+                key: key,
+                onExecute: { request in
+                    await executeAuditExportAction(request)
+                }
+            )
+            .environment(\.locale, AppLocalization.locale)
+        }
         .sheet(isPresented: $showingBackupSheet) {
             BackupManagerView()
                 .environment(viewModel)
@@ -740,6 +1220,8 @@ struct KeyActionMenu: View {
     private func refreshProAvailability() async {
         await proRuntime.refreshEntitlements()
         hardwareKeyAdvancedAvailability = proRuntime.availability(for: .hardwareKeyAdvanced)
+        batchGovernanceAvailability = proRuntime.availability(for: .batchGovernance)
+        auditExportAvailability = proRuntime.availability(for: .auditExport)
     }
 
     @MainActor
@@ -782,6 +1264,139 @@ struct KeyActionMenu: View {
             promptAlert = .failure(
                 title: "pro_action_failure_title",
                 message: AppLocalization.string("pro_action_failure_message")
+            )
+        }
+    }
+
+    @MainActor
+    private func executeBatchGovernance(
+        _ request: BatchGovernanceExecutionRequest
+    ) async -> BatchGovernanceExecutionReceipt {
+        guard let descriptor = batchGovernanceDescriptor else {
+            return BatchGovernanceExecutionReceipt(
+                titleKey: "pro_batch_governance_title",
+                messageKey: "pro_action_module_unavailable_message",
+                metadata: [:]
+            )
+        }
+
+        guard runningProActionID == nil else {
+            return BatchGovernanceExecutionReceipt(
+                titleKey: "pro_batch_governance_title",
+                messageKey: "pro_batch_governance_execution_busy_message",
+                metadata: [:]
+            )
+        }
+
+        runningProActionID = descriptor.id
+        defer { runningProActionID = nil }
+
+        await refreshProAvailability()
+        let currentAvailability = proRuntime.availability(for: descriptor.feature)
+        guard currentAvailability.isEnabled else {
+            return BatchGovernanceExecutionReceipt(
+                titleKey: "pro_feature_locked_title",
+                messageKey: currentAvailability.messageKey,
+                metadata: [:]
+            )
+        }
+
+        do {
+            let result = try await proRuntime.executeMenuAction(
+                descriptor: descriptor,
+                keyFingerprint: key.fingerprint,
+                metadata: request.metadata
+            )
+            return BatchGovernanceExecutionReceipt(
+                titleKey: result.titleKey,
+                messageKey: result.messageKey,
+                metadata: result.metadata
+            )
+        } catch ProModuleExecutionError.unsupportedAction {
+            return BatchGovernanceExecutionReceipt(
+                titleKey: "pro_batch_governance_title",
+                messageKey: "pro_action_module_unavailable_message",
+                metadata: [:]
+            )
+        } catch ProModuleExecutionError.featureLocked {
+            let refreshedAvailability = proRuntime.availability(for: descriptor.feature)
+            return BatchGovernanceExecutionReceipt(
+                titleKey: "pro_feature_locked_title",
+                messageKey: refreshedAvailability.messageKey,
+                metadata: [:]
+            )
+        } catch {
+            return BatchGovernanceExecutionReceipt(
+                titleKey: "pro_action_failure_title",
+                messageKey: "pro_action_failure_message",
+                metadata: [:]
+            )
+        }
+    }
+
+    @MainActor
+    private func executeAuditExportAction(
+        _ request: AuditExportExecutionRequest
+    ) async -> AuditExportExecutionReceipt {
+        guard let descriptor = auditExportDescriptor else {
+            return AuditExportExecutionReceipt(
+                titleKey: "pro_audit_export_title",
+                messageKey: "pro_action_module_unavailable_message",
+                metadata: [:]
+            )
+        }
+
+        guard runningProActionID == nil else {
+            return AuditExportExecutionReceipt(
+                titleKey: "pro_audit_export_title",
+                messageKey: "pro_audit_export_execution_busy_message",
+                metadata: [:]
+            )
+        }
+
+        runningProActionID = descriptor.id
+        defer { runningProActionID = nil }
+
+        await refreshProAvailability()
+        let currentAvailability = proRuntime.availability(for: descriptor.feature)
+        guard currentAvailability.isEnabled else {
+            return AuditExportExecutionReceipt(
+                titleKey: "pro_feature_locked_title",
+                messageKey: currentAvailability.messageKey,
+                metadata: [:]
+            )
+        }
+
+        do {
+            let result = try await proRuntime.executeMenuAction(
+                descriptor: descriptor,
+                keyFingerprint: key.fingerprint,
+                metadata: request.metadata
+            )
+
+            return AuditExportExecutionReceipt(
+                titleKey: result.titleKey,
+                messageKey: result.messageKey,
+                metadata: result.metadata
+            )
+        } catch ProModuleExecutionError.unsupportedAction {
+            return AuditExportExecutionReceipt(
+                titleKey: "pro_audit_export_title",
+                messageKey: "pro_action_module_unavailable_message",
+                metadata: [:]
+            )
+        } catch ProModuleExecutionError.featureLocked {
+            let refreshedAvailability = proRuntime.availability(for: descriptor.feature)
+            return AuditExportExecutionReceipt(
+                titleKey: "pro_feature_locked_title",
+                messageKey: refreshedAvailability.messageKey,
+                metadata: [:]
+            )
+        } catch {
+            return AuditExportExecutionReceipt(
+                titleKey: "pro_action_failure_title",
+                messageKey: "pro_action_failure_message",
+                metadata: [:]
             )
         }
     }
