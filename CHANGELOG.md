@@ -12,6 +12,42 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Release execution checklist for v0.5.0 (`doc/v0.5.0-minimal-release-checklist.md`)
 - Core flow validation list for v0.5.0 (`doc/v0.5.0-core-flow-validation.md`)
 
+## [0.8.2] - 2026-05-03
+
+### Added
+
+- Added runtime localization guard workflow (`.github/workflows/runtime-localization-guard.yml`) and validator script (`scripts/check_runtime_localization_keys.py`) to verify compiled `Localizable.strings` coverage against `Localizable.xcstrings`.
+- Added localization placeholder completions for dynamic Pro/runtime keys across all supported locales to prevent `%@` / `%lld` runtime formatting regressions.
+
+### Changed
+
+- Bumped app version metadata to `0.8.2` and incremented `CURRENT_PROJECT_VERSION` to `9`.
+- Hardened release execution scripts/workflows: enforced signed publish flow in release orchestration and aligned CI/release workflow dependencies with current stable GitHub Actions versions.
+- Updated release and project documentation pointers for the 0.8.x hardening state and latest stable version references.
+
+### Fixed
+
+- Removed insecure `hkp://` / `http://` keyserver fallback path from keyserver defaults, keeping secure transport-only behavior in normal flows.
+- Fixed app icon asset wiring so packaged apps correctly resolve the bundled icon resources.
+- Fixed post-merge localization catalog consistency for the audit/release branch after mainline conflict resolution.
+
+### Added (zh-Hans)
+
+- 新增运行时本地化门禁工作流（`.github/workflows/runtime-localization-guard.yml`）与校验脚本（`scripts/check_runtime_localization_keys.py`），用于对比编译产物 `Localizable.strings` 与 `Localizable.xcstrings` 的覆盖一致性。
+- 为动态 Pro/运行时文案 key 在全部已支持语种补齐占位符翻译，避免 `%@` / `%lld` 在运行时格式化回退或异常。
+
+### Changed (zh-Hans)
+
+- 将应用版本元数据升级到 `0.8.2`，并将 `CURRENT_PROJECT_VERSION` 递增到 `9`。
+- 强化发布执行脚本与工作流：在发布编排中强制签名发布约束，并将 CI/发布工作流依赖统一到当前稳定版 GitHub Actions。
+- 更新发布与项目文档中的版本状态说明，统一 0.8.x 加固阶段和最新稳定版本指引。
+
+### Fixed (zh-Hans)
+
+- 从 keyserver 默认链路中移除不安全的 `hkp://` / `http://` 回退，仅保留安全传输策略。
+- 修复应用图标资源装配，确保打包后的 App 正确显示内置图标资源。
+- 修复审计/发布分支与主干合并冲突后的本地化目录一致性问题。
+
 ## [0.8.1] - 2026-04-19
 
 ### Added
