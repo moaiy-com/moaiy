@@ -173,17 +173,9 @@ if printf '%s\n' "$changelog_section" | grep -Eq '^### .+ \(zh-Hans\)$'; then
       | sed '/./,$!d'
   )"
 else
-  echo "WARN: no zh-Hans changelog sections found for version $VERSION; falling back to English detail bodies."
-  detailed_updates_zh="$(
-    printf '%s\n' "$detailed_updates_en" \
-      | sed \
-        -e 's/^### Added$/### 新增/' \
-        -e 's/^### Changed$/### 变更/' \
-        -e 's/^### Fixed$/### 修复/' \
-        -e 's/^### Removed$/### 移除/' \
-        -e 's/^### Security$/### 安全/' \
-        -e 's/^### Deprecated$/### 弃用/'
-  )"
+  echo "ERROR: no zh-Hans changelog sections found for version $VERSION."
+  echo "Add bilingual blocks in CHANGELOG using headings like '### Added (zh-Hans)'."
+  exit 1
 fi
 
 if [[ -z "${detailed_updates_zh//[[:space:]]/}" ]]; then

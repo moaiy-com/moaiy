@@ -3760,7 +3760,8 @@
             "value": "Пакетное управление"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "action_pro_batch_governance_execute": {
       "localizations": {
@@ -3900,7 +3901,8 @@
             "value": "Расширенный аппаратный ключ"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "action_refresh": {
       "extractionState": "manual",
@@ -27540,7 +27542,8 @@
             "value": "Не удалось выполнить действие Pro."
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_action_failure_title": {
       "localizations": {
@@ -27610,7 +27613,8 @@
             "value": "Сбой действия Pro"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_action_module_unavailable_message": {
       "localizations": {
@@ -27680,7 +27684,8 @@
             "value": "Модуль Pro не установлен в этой сборке."
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_batch_governance_description": {
       "localizations": {
@@ -27820,7 +27825,8 @@
             "value": "Пакетное управление уже выполняется."
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_batch_governance_failure_message": {
       "localizations": {
@@ -28310,7 +28316,8 @@
             "value": "Пакетное управление завершено с частичными ошибками."
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_batch_governance_passphrase_placeholder": {
       "localizations": {
@@ -28450,7 +28457,8 @@
             "value": "Создано артефактов"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_batch_governance_receipt_failure": {
       "localizations": {
@@ -28520,7 +28528,8 @@
             "value": "Ошибки"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_batch_governance_receipt_open_folder": {
       "localizations": {
@@ -28660,7 +28669,8 @@
             "value": "Успешно"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_batch_governance_receipt_title": {
       "localizations": {
@@ -28800,7 +28810,8 @@
             "value": "Всего целей"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_batch_governance_revocation_note_placeholder": {
       "localizations": {
@@ -29220,7 +29231,8 @@
             "value": "Пакетное управление"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_batch_governance_validation_targets_required": {
       "localizations": {
@@ -29360,7 +29372,8 @@
             "value": "Экспорт аудита"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_feature_batch_governance_title": {
       "localizations": {
@@ -29430,7 +29443,8 @@
             "value": "Пакетное управление"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_feature_hardware_key_advanced_title": {
       "localizations": {
@@ -29500,7 +29514,8 @@
             "value": "Расширенный аппаратный ключ"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_feature_locked_title": {
       "localizations": {
@@ -29570,7 +29585,8 @@
             "value": "Функция Pro заблокирована"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_feature_team_policy_templates_title": {
       "localizations": {
@@ -29640,7 +29656,8 @@
             "value": "Шаблоны командных политик"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_restore_failure_message": {
       "localizations": {
@@ -29990,7 +30007,8 @@
             "value": "Прямая лицензия"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_source_none": {
       "localizations": {
@@ -30060,7 +30078,8 @@
             "value": "Недоступно"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_source_storekit": {
       "localizations": {
@@ -30130,7 +30149,8 @@
             "value": "App Store"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_status_enabled": {
       "localizations": {
@@ -30270,7 +30290,8 @@
             "value": "Функция Pro активна."
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_status_locked": {
       "localizations": {
@@ -30410,7 +30431,8 @@
             "value": "Для этой функции отсутствует сопоставление продукта."
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_status_locked_message_provider": {
       "localizations": {
@@ -30480,7 +30502,8 @@
             "value": "Провайдер прав Pro недоступен в этой сборке."
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "pro_status_locked_message_purchase": {
       "localizations": {
@@ -30550,7 +30573,8 @@
             "value": "Разблокируйте Pro, чтобы использовать эту функцию."
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "processing_file": {
       "extractionState": "manual",
@@ -50852,7 +50876,8 @@
             "value": "Шаблоны командных политик"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "action_pro_team_policy_templates_apply": {
       "localizations": {

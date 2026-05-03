@@ -8,8 +8,8 @@ Moaiy is an open-source macOS app for encryption and recovery workflows, designe
 
 **[Chinese Version](./README_CN.md)**
 
-Latest stable release: `v0.7.1`  
-Current rollout in progress: `v0.8.0`
+Latest stable release: `v0.8.0`  
+Current rollout in progress: `v0.8.1`
 
 ## App Screenshot
 
