@@ -137,12 +137,27 @@ actor GPGProcessExecutor {
         defer {
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
             stderrPipe.fileHandleForReading.readabilityHandler = nil
+            try? stdoutPipe.fileHandleForReading.close()
+            try? stderrPipe.fileHandleForReading.close()
+            try? stdoutPipe.fileHandleForWriting.close()
+            try? stderrPipe.fileHandleForWriting.close()
+            if let stdinPipe {
+                try? stdinPipe.fileHandleForReading.close()
+                try? stdinPipe.fileHandleForWriting.close()
+            }
         }
 
         return try await withTaskCancellationHandler {
             // Execute with timeout
             try process.run()
             onLaunch?(process.processIdentifier)
+            // Close parent-side write handles as soon as the child is launched.
+            // Keeping them open can prevent EOF from being observed on reads.
+            try? stdoutPipe.fileHandleForWriting.close()
+            try? stderrPipe.fileHandleForWriting.close()
+            if let stdinPipe {
+                try? stdinPipe.fileHandleForReading.close()
+            }
 
             // Write input if provided
             if let input = input, let stdinPipe = stdinPipe {
@@ -189,12 +204,6 @@ actor GPGProcessExecutor {
                 let fallbackMessage = AppLocalization.string("error_operation_failed_generic")
                 throw GPGError.executionFailed(timeoutMessage?.isEmpty == false ? timeoutMessage! : fallbackMessage)
             }
-
-            // Capture any trailing bytes after readability handlers are removed.
-            let stdoutTail = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-            let stderrTail = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            stdoutAccumulator.append(stdoutTail)
-            stderrAccumulator.append(stderrTail)
 
             let stdoutData = stdoutAccumulator.data
             let stderrData = stderrAccumulator.data
@@ -3606,14 +3615,8 @@ final class GPGService: SubkeyManaging {
         guard !trimmed.isEmpty else {
             return "hkps://keys.openpgp.org"
         }
-        if trimmed.contains("://") {
-            return trimmed
-        }
         guard let host = normalizedKeyserverHost(trimmed) else {
-            return trimmed
-        }
-        if host == "pgp.mit.edu" {
-            return "hkp://\(host)"
+            return "hkps://keys.openpgp.org"
         }
         return "hkps://\(host)"
     }
@@ -3681,9 +3684,7 @@ final class GPGService: SubkeyManaging {
 
     private func hkpUploadEndpoints(forHost host: String) -> [URL] {
         let candidates = [
-            "https://\(host)/pks/add",
-            "http://\(host)/pks/add",
-            "http://\(host):11371/pks/add"
+            "https://\(host)/pks/add"
         ]
         return candidates.compactMap(URL.init(string:))
     }

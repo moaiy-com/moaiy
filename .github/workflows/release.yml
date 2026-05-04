@@ -60,7 +60,7 @@ jobs:
       bundle_archive_name: ${{ steps.bundle.outputs.bundle_archive_name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -98,7 +98,18 @@ jobs:
             exit 1
           fi
 
-          REMOTE_TAG_SHA="$(git ls-remote --tags origin "refs/tags/$TAG" | awk '{print $1}' | head -n 1 || true)"
+          resolve_remote_tag_commit() {
+            local tag_name="$1"
+            local peeled_sha
+            peeled_sha="$(git ls-remote --tags origin "refs/tags/${tag_name}^{}" | awk '{print $1}' | head -n 1 || true)"
+            if [[ -n "$peeled_sha" ]]; then
+              printf '%s\n' "$peeled_sha"
+              return 0
+            fi
+            git ls-remote --tags origin "refs/tags/${tag_name}" | awk '{print $1}' | head -n 1 || true
+          }
+
+          REMOTE_TAG_SHA="$(resolve_remote_tag_commit "$TAG")"
           if [[ -z "$REMOTE_TAG_SHA" ]]; then
             echo "Release tag $TAG does not exist on origin."
             echo "Create $TAG on origin/main ($MAIN_SHA) before running the Release workflow."
@@ -171,7 +182,7 @@ jobs:
           echo "archive_path=$ARCHIVE_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Upload release bundle artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-bundle-${{ github.event.inputs.version }}
           path: ${{ steps.archive.outputs.archive_path }}
@@ -184,12 +195,12 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Download release bundle artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-bundle-${{ github.event.inputs.version }}
           path: ${{ runner.temp }}/release-bundle
@@ -237,7 +248,18 @@ jobs:
 
           TAG="${{ needs.release_build.outputs.release_tag }}"
           EXPECTED_SHA="${{ needs.release_build.outputs.target_commit }}"
-          REMOTE_TAG_SHA="$(git ls-remote --tags origin "refs/tags/$TAG" | awk '{print $1}' | head -n 1 || true)"
+          resolve_remote_tag_commit() {
+            local tag_name="$1"
+            local peeled_sha
+            peeled_sha="$(git ls-remote --tags origin "refs/tags/${tag_name}^{}" | awk '{print $1}' | head -n 1 || true)"
+            if [[ -n "$peeled_sha" ]]; then
+              printf '%s\n' "$peeled_sha"
+              return 0
+            fi
+            git ls-remote --tags origin "refs/tags/${tag_name}" | awk '{print $1}' | head -n 1 || true
+          }
+
+          REMOTE_TAG_SHA="$(resolve_remote_tag_commit "$TAG")"
 
           if [[ -z "$REMOTE_TAG_SHA" ]]; then
             echo "ERROR: release tag not found on origin: $TAG"

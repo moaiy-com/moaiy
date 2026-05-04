@@ -37,11 +37,10 @@ enum Constants {
         /// Default public keyserver host.
         static let defaultKeyserver = "keys.openpgp.org"
 
-        /// Supported public keyserver hosts in UI pickers.
+        /// Supported public keyserver hosts in UI pickers (HKPS/TLS only).
         static let supportedKeyservers: [String] = [
             defaultKeyserver,
-            "keyserver.ubuntu.com",
-            "pgp.mit.edu"
+            "keyserver.ubuntu.com"
         ]
     }
     

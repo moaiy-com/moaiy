@@ -60,7 +60,11 @@ use the controlled fallback path.
 
 - Release notes must contain version-specific detailed updates (Added/Changed/Fixed/Security, etc.).
 - The source of truth for detailed updates is `CHANGELOG.md` section `## [X.Y.Z]`.
+- `CHANGELOG.md` for the target version must include bilingual detail blocks:
+  - English: `### Added`, `### Changed`, `### Fixed`, ...
+  - Chinese: `### Added (zh-Hans)`, `### Changed (zh-Hans)`, `### Fixed (zh-Hans)`, ...
 - Packaging metadata (assets, hashes, gate/signing mode) is supplementary and cannot replace detailed updates.
+- Renderer behavior is strict: missing `zh-Hans` detail blocks fails release-note generation.
 - During release review, compare generated `release-notes.md` against the corresponding changelog section before publish.
 - If a published release note is incomplete, patch it with:
 
@@ -84,6 +88,7 @@ gh release edit vX.Y.Z --repo moaiy-com/moaiy --notes-file <release-notes.md>
 
 When `v*` tag creation is protected by rulesets, the `Release` workflow does not create tags.
 Create `vX.Y.Z` manually on `origin/main` with an authorized account before triggering workflow dispatch.
+Both lightweight and annotated tags are accepted by workflow SHA checks.
 
 ## Release Safety CI
 

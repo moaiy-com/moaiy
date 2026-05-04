@@ -97,6 +97,36 @@ struct GPGProcessExecutorTests {
         #expect(terminated == true)
     }
 
+    @Test("Executor returns when parent exits even if grandchild keeps stdout open")
+    func parentExit_withGrandchildHoldingStdout_doesNotHang() async throws {
+        let executor = GPGProcessExecutor()
+        let pidRecorder = PIDRecorder()
+
+        let script = "sleep 5 & printf 'done\\n'"
+
+        let result = try await executor.execute(
+            executableURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", script],
+            environment: [:],
+            gpgHome: nil,
+            input: nil,
+            timeout: 5,
+            onLaunch: { pid in
+                pidRecorder.set(pid)
+            }
+        )
+
+        #expect(result.exitCode == 0)
+        #expect((result.stdout ?? "").contains("done"))
+
+        if let pid = pidRecorder.pid, pid > 0 {
+            let terminated = try await waitForProcessExit(pid, timeout: 2)
+            #expect(terminated == true)
+        } else {
+            Issue.record("Expected launched PID to be recorded")
+        }
+    }
+
     private func waitForPID(_ recorder: PIDRecorder, timeout: TimeInterval) async throws -> Int32 {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {

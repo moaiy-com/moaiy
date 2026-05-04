@@ -151,6 +151,12 @@ else
   BUILD_CONFIGURATION="Debug"
 fi
 
+if [[ "$MODE" == "publish" && "$EFFECTIVE_SIGNING_MODE" != "signed" ]]; then
+  echo "ERROR: publish mode requires signed artifacts."
+  echo "Use --signing signed, or --signing auto with a valid MOAIY_DEVELOPMENT_TEAM_ID."
+  exit 1
+fi
+
 SYNC_ARGS=(--version "$VERSION")
 if [[ "$ALLOW_EXISTING_TAG" == true ]]; then
   SYNC_ARGS+=(--allow-existing-tag)

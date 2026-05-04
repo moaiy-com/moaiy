@@ -36,9 +36,17 @@ Language policy:
 
 ## Release Operations
 
+### [v0.8.1 Release Hardening Tracker](./v0.8.1-release-hardening-tracker.md)
+- Execution tracker for v0.8.1 hardening tasks
+- Workflow, localization, and audit closure status
+
 ### [v0.8.0 Pro Rollout Tracker](./v0.8.0-pro-rollout-tracker.md)
 - Execution tracker for Pro-first release implementation
 - Task status, gates, and audit output references
+
+### [v0.8.0 Post-Release Audit (2026-04-19)](./v0.8.0-post-release-audit-2026-04-19.md)
+- Comprehensive integrity and quality audit after release publication
+- CI/release/checksum/release-note consistency evidence
 
 ### [Release Workflow Guide](./release-workflow-skill.md)
 - Tracked release process specification
@@ -93,9 +101,9 @@ Language policy:
 - [Contribution Guide](../CONTRIBUTING.md)
 - [Security Policy](../SECURITY.md)
 - [Changelog](../CHANGELOG.md)
-- [Latest Release (v0.7.1)](https://github.com/moaiy-com/moaiy/releases/tag/v0.7.1)
+- [Latest Release (v0.8.0)](https://github.com/moaiy-com/moaiy/releases/tag/v0.8.0)
 - [Disclaimer](../DISCLAIMER.md)
 
 ---
 
-Last updated: 2026-04-18
+Last updated: 2026-04-19
