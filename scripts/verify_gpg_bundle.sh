@@ -29,17 +29,17 @@ WARN_COUNT=0
 # Helper functions
 pass() {
     echo -e "${GREEN}✅ $1${NC}"
-    ((PASS_COUNT++))
+    ((PASS_COUNT+=1))
 }
 
 fail() {
     echo -e "${RED}❌ $1${NC}"
-    ((FAIL_COUNT++))
+    ((FAIL_COUNT+=1))
 }
 
 warn() {
     echo -e "${YELLOW}⚠️  $1${NC}"
-    ((WARN_COUNT++))
+    ((WARN_COUNT+=1))
 }
 
 info() {
@@ -330,6 +330,8 @@ generate_manifest() {
   "gpg_version": "$gpg_version",
   "created": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
   "platform": "$(uname -m)",
+  "architecture": "$(uname -m)",
+  "macos_min_version": "12.0",
   "checksums": {
 $checksums
   }
