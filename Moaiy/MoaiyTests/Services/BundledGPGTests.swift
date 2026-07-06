@@ -172,6 +172,25 @@ struct BundledGPGTests {
         #expect(output.contains("GnuPG"), "Output should contain 'GnuPG'")
         #expect(output.contains("2."), "Output should indicate version 2.x")
     }
+
+    @Test("Bundled GPG reports Kyber support")
+    func bundledGPGReportsKyberSupport() async throws {
+        let home = try TestGPGHome.make(prefix: "moaiy-test-gpg-capabilities")
+        defer {
+            home.cleanup()
+        }
+
+        let result = try await home.execute(arguments: ["--with-colons", "--list-config"], timeout: 10)
+
+        guard result.exitCode == 0 else {
+            Issue.record("gpg --list-config should succeed: \(result.stderr ?? "missing stderr")")
+            return
+        }
+
+        let capabilities = GPGCapabilities.parseListConfig(result.stdout ?? "")
+        #expect(capabilities.version != nil)
+        #expect(capabilities.supportsKyber)
+    }
     
     @Test("Bundled GPG uses correct library paths")
     func bundledGPGUsesCorrectLibraryPaths() async throws {

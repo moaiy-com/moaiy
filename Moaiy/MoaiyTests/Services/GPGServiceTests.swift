@@ -11,6 +11,70 @@ import Testing
 
 @Suite("GPGService Tests")
 struct GPGServiceTests {
+
+    // MARK: - Capability Parsing Tests
+
+    @Test("GPG capabilities detect Kyber by public key algorithm name")
+    func gpgCapabilities_detectsKyberByName() {
+        let output = """
+        cfg:version:2.5.20
+        cfg:pubkey:1;16;17;18;19;22
+        cfg:pubkeyname:RSA;Kyber;ELG;DSA;ECDH;ECDSA;EDDSA
+        """
+
+        let capabilities = GPGCapabilities.parseListConfig(output)
+
+        #expect(capabilities.version == "2.5.20")
+        #expect(capabilities.supportsKyber)
+    }
+
+    @Test("GPG capabilities detect Kyber by public key algorithm id")
+    func gpgCapabilities_detectsKyberByID() {
+        let output = """
+        cfg:version:2.5.20
+        cfg:pubkey:1;8;16;17;18;19;22
+        cfg:pubkeyname:RSA;ELG;DSA;ECDH;ECDSA;EDDSA
+        """
+
+        let capabilities = GPGCapabilities.parseListConfig(output)
+
+        #expect(capabilities.version == "2.5.20")
+        #expect(capabilities.supportsKyber)
+    }
+
+    @Test("GPG capabilities report unsupported when Kyber is missing")
+    func gpgCapabilities_reportsUnsupportedWhenKyberMissing() {
+        let output = """
+        cfg:version:2.4.8
+        cfg:pubkey:1;16;17;18;19;22
+        cfg:pubkeyname:RSA;ELG;DSA;ECDH;ECDSA;EDDSA
+        """
+
+        let capabilities = GPGCapabilities.parseListConfig(output)
+
+        #expect(capabilities.version == "2.4.8")
+        #expect(!capabilities.supportsKyber)
+    }
+
+    @Test("GPG capabilities fail closed for malformed config")
+    func gpgCapabilities_failClosedForMalformedConfig() {
+        let output = """
+        cfg
+        cfg:pubkey
+        pubkeyname:Kyber
+        """
+
+        let capabilities = GPGCapabilities.parseListConfig(output)
+
+        #expect(capabilities == .unsupported)
+    }
+
+    @Test("GPG capabilities fail closed for empty output")
+    func gpgCapabilities_failClosedForEmptyOutput() {
+        let capabilities = GPGCapabilities.parseListConfig("")
+
+        #expect(capabilities == .unsupported)
+    }
     
     // MARK: - Key List Parsing Tests
     

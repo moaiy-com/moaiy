@@ -223,6 +223,51 @@ actor GPGProcessExecutor {
     }
 }
 
+struct GPGCapabilities: Equatable {
+    let version: String?
+    let supportsKyber: Bool
+
+    static let unsupported = GPGCapabilities(version: nil, supportsKyber: false)
+
+    static func parseListConfig(_ output: String) -> GPGCapabilities {
+        var version: String?
+        var publicKeyAlgorithmIDs = Set<String>()
+        var publicKeyAlgorithmNames = Set<String>()
+
+        for rawLine in output.split(whereSeparator: \.isNewline) {
+            let fields = rawLine.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+            guard fields.count >= 3, fields[0] == "cfg" else {
+                continue
+            }
+
+            let key = fields[1].lowercased()
+            let values = fields[2]
+                .split(separator: ";", omittingEmptySubsequences: true)
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            switch key {
+            case "version":
+                version = fields[2].trimmingCharacters(in: .whitespacesAndNewlines)
+            case "pubkey":
+                publicKeyAlgorithmIDs.formUnion(values)
+            case "pubkeyname":
+                publicKeyAlgorithmNames.formUnion(values.map { $0.lowercased() })
+            default:
+                continue
+            }
+        }
+
+        let supportsKyberByName = publicKeyAlgorithmNames.contains { $0.contains("kyber") }
+        let supportsKyberByID = publicKeyAlgorithmIDs.contains("8")
+
+        return GPGCapabilities(
+            version: version?.isEmpty == false ? version : nil,
+            supportsKyber: supportsKyberByName || supportsKyberByID
+        )
+    }
+}
+
 /// Service class for GPG operations
 @MainActor
 @Observable
@@ -239,6 +284,7 @@ final class GPGService: SubkeyManaging {
     private(set) var isReady = false
     private(set) var gpgVersion: String?
     private(set) var isUsingExternalGPGHome = false
+    private(set) var capabilities = GPGCapabilities.unsupported
     
     // MARK: - Private Properties
     
@@ -313,10 +359,13 @@ final class GPGService: SubkeyManaging {
                 logger.info("GPG home directory: \(self.gpgHome?.path ?? "nil")")
                 try await verifyGPG()
                 logger.info("GPG version: \(self.gpgVersion ?? "unknown")")
+                self.capabilities = await detectCapabilities()
+                logger.info("GPG Kyber support: \(self.capabilities.supportsKyber)")
                 self.isReady = true
                 logger.info("Setup complete, isReady = true")
             } catch {
                 logger.error("Setup failed: \(error.localizedDescription)")
+                self.capabilities = .unsupported
                 self.isReady = false
             }
         }
@@ -460,6 +509,25 @@ final class GPGService: SubkeyManaging {
         if let output = result.stdout {
             let version = output.components(separatedBy: "\n").first ?? "Unknown"
             self.gpgVersion = version
+        }
+    }
+
+    private func detectCapabilities() async -> GPGCapabilities {
+        do {
+            let result = try await executeGPG(
+                arguments: ["--with-colons", "--list-config"],
+                timeout: 10
+            )
+
+            guard result.exitCode == 0 else {
+                logger.error("GPG capability detection failed with exit code \(result.exitCode)")
+                return .unsupported
+            }
+
+            return GPGCapabilities.parseListConfig(result.stdout ?? "")
+        } catch {
+            logger.error("GPG capability detection failed: \(error.localizedDescription)")
+            return .unsupported
         }
     }
 
