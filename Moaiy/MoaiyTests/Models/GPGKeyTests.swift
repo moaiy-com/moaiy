@@ -106,6 +106,56 @@ struct GPGKeyTests {
         
         #expect(key.displayKeyType == "EDDSA-256")
     }
+
+    @Test("algorithm summary formats post quantum hybrid names")
+    func algorithmSummary_formatsPostQuantumHybridNames() {
+        let summary = GPGKeyAlgorithmSummary.resolve(
+            primaryAlgorithm: "19",
+            primaryKeyLength: 384,
+            encryptionSubkeys: [
+                GPGSubkeyAlgorithmMetadata(
+                    algorithmID: "8",
+                    algorithmName: "Kyber",
+                    keyLength: 768,
+                    curveOrToken: "ky768_bp256"
+                )
+            ]
+        )
+        let key = TestKeyFactory.makeKey(
+            algorithm: "19",
+            keyLength: 384
+        )
+        let pqcKey = GPGKey(
+            id: key.id,
+            keyID: key.keyID,
+            fingerprint: key.fingerprint,
+            name: key.name,
+            email: key.email,
+            algorithm: key.algorithm,
+            keyLength: key.keyLength,
+            isSecret: key.isSecret,
+            createdAt: key.createdAt,
+            expiresAt: key.expiresAt,
+            trustLevel: key.trustLevel,
+            algorithmSummary: summary
+        )
+
+        #expect(pqcKey.isPostQuantumHybrid)
+        #expect(pqcKey.displayKeyType == "PQC Hybrid")
+        #expect(pqcKey.detailedKeyType == "Post-Quantum Hybrid (ML-KEM-768)")
+        #expect(pqcKey.technicalKeyType == "Kyber-768 + ECC")
+    }
+
+    @Test("algorithm summary keeps classical key display compatible")
+    func algorithmSummary_keepsClassicalDisplayCompatible() {
+        let rsaKey = TestKeyFactory.makeRSA2048Key()
+        let eccKey = TestKeyFactory.makeECCKey()
+
+        #expect(rsaKey.algorithmSummary.family == .rsa)
+        #expect(rsaKey.displayKeyType == "RSA-2048")
+        #expect(eccKey.algorithmSummary.family == .ecc)
+        #expect(eccKey.displayKeyType == "EDDSA-256")
+    }
     
     // MARK: - Identifiable Tests
     

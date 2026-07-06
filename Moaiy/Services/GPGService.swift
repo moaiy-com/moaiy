@@ -3924,6 +3924,7 @@ final class GPGService: SubkeyManaging {
             case "sub", "ssb":
                 // Ignore subkey fingerprints for key-level operations (edit uid/expiry).
                 isAwaitingPrimaryFingerprint = false
+                currentKey?.absorbEncryptionSubkey(encryptionSubkeyAlgorithmMetadata(from: fields))
                 if recordType == "ssb" {
                     currentKey?.absorbSecretMaterialToken(fields.count > 14 ? fields[14] : nil)
                 }
@@ -3957,6 +3958,22 @@ final class GPGService: SubkeyManaging {
         }
         
         return keys
+    }
+
+    private func encryptionSubkeyAlgorithmMetadata(from fields: [String]) -> GPGSubkeyAlgorithmMetadata? {
+        let usages = parseSubkeyUsages(from: fields)
+        guard usages.contains(.encrypt) else {
+            return nil
+        }
+
+        let algorithmID = fields.count > 3 ? fields[3] : ""
+        let curveOrToken = fields.indices.contains(16) ? fields[16] : nil
+        return GPGSubkeyAlgorithmMetadata(
+            algorithmID: algorithmID,
+            algorithmName: subkeyAlgorithmName(from: algorithmID),
+            keyLength: Int(fields.count > 2 ? fields[2] : "") ?? 0,
+            curveOrToken: curveOrToken
+        )
     }
 
     private func parseSubkeyList(_ output: String) -> [GPGSubkey] {
@@ -4073,6 +4090,8 @@ final class GPGService: SubkeyManaging {
         switch code {
         case "1":
             return "RSA"
+        case "8":
+            return "Kyber"
         case "17":
             return "DSA"
         case "18":
@@ -4746,6 +4765,124 @@ struct GPGSubkey: Identifiable, Hashable {
     }
 }
 
+struct GPGSubkeyAlgorithmMetadata: Hashable {
+    let algorithmID: String
+    let algorithmName: String
+    let keyLength: Int
+    let curveOrToken: String?
+
+    var isKyber768: Bool {
+        let normalizedAlgorithmID = algorithmID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedName = algorithmName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedToken = (curveOrToken ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        return normalizedAlgorithmID == "8"
+            || normalizedName.contains("kyber")
+            || normalizedToken == "ky768_bp256"
+            || normalizedToken.contains("kyber")
+    }
+}
+
+enum GPGKeyAlgorithmFamily: String, Hashable {
+    case rsa
+    case ecc
+    case postQuantumHybrid
+    case unknown
+}
+
+struct GPGKeyAlgorithmSummary: Hashable {
+    let family: GPGKeyAlgorithmFamily
+    let primaryAlgorithm: String
+    let primaryKeyLength: Int
+    let encryptionSubkeys: [GPGSubkeyAlgorithmMetadata]
+
+    var isPostQuantumHybrid: Bool {
+        family == .postQuantumHybrid
+    }
+
+    var shortDisplayName: String {
+        switch family {
+        case .postQuantumHybrid:
+            return "PQC Hybrid"
+        case .rsa, .ecc, .unknown:
+            return Self.classicalDisplayName(primaryAlgorithm: primaryAlgorithm, keyLength: primaryKeyLength)
+        }
+    }
+
+    var detailDisplayName: String {
+        switch family {
+        case .postQuantumHybrid:
+            return "Post-Quantum Hybrid (ML-KEM-768)"
+        case .rsa, .ecc, .unknown:
+            return shortDisplayName
+        }
+    }
+
+    var technicalDisplayName: String {
+        switch family {
+        case .postQuantumHybrid:
+            return "Kyber-768 + ECC"
+        case .rsa, .ecc, .unknown:
+            return shortDisplayName
+        }
+    }
+
+    static func resolve(
+        primaryAlgorithm: String,
+        primaryKeyLength: Int,
+        encryptionSubkeys: [GPGSubkeyAlgorithmMetadata]
+    ) -> GPGKeyAlgorithmSummary {
+        let family: GPGKeyAlgorithmFamily
+        if encryptionSubkeys.contains(where: \.isKyber768) {
+            family = .postQuantumHybrid
+        } else if isRSAAlgorithm(primaryAlgorithm) {
+            family = .rsa
+        } else if isECCAlgorithm(primaryAlgorithm) {
+            family = .ecc
+        } else {
+            family = .unknown
+        }
+
+        return GPGKeyAlgorithmSummary(
+            family: family,
+            primaryAlgorithm: primaryAlgorithm,
+            primaryKeyLength: primaryKeyLength,
+            encryptionSubkeys: encryptionSubkeys
+        )
+    }
+
+    private static func classicalDisplayName(primaryAlgorithm: String, keyLength: Int) -> String {
+        "\(displayAlgorithmName(primaryAlgorithm))-\(keyLength)"
+    }
+
+    private static func displayAlgorithmName(_ algorithm: String) -> String {
+        switch algorithm.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "rsa":
+            return "RSA"
+        case "18", "ecdh":
+            return "ECDH"
+        case "19", "ecdsa":
+            return "ECDSA"
+        case "22", "eddsa":
+            return "EDDSA"
+        default:
+            return algorithm.isEmpty ? "Unknown" : algorithm
+        }
+    }
+
+    private static func isRSAAlgorithm(_ algorithm: String) -> Bool {
+        let normalized = algorithm.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized == "1" || normalized == "rsa"
+    }
+
+    private static func isECCAlgorithm(_ algorithm: String) -> Bool {
+        let normalized = algorithm.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return ["18", "19", "22", "ecdh", "ecdsa", "eddsa"].contains(normalized)
+    }
+}
+
 /// GPG Key model
 struct GPGKey: Identifiable, Hashable {
     let id: String
@@ -4761,6 +4898,7 @@ struct GPGKey: Identifiable, Hashable {
     let trustLevel: TrustLevel
     let secretMaterial: SecretKeyMaterial
     let cardSerialNumber: String?
+    let algorithmSummary: GPGKeyAlgorithmSummary
 
     init(
         id: String,
@@ -4775,7 +4913,8 @@ struct GPGKey: Identifiable, Hashable {
         expiresAt: Date?,
         trustLevel: TrustLevel,
         secretMaterial: SecretKeyMaterial? = nil,
-        cardSerialNumber: String? = nil
+        cardSerialNumber: String? = nil,
+        algorithmSummary: GPGKeyAlgorithmSummary? = nil
     ) {
         self.id = id
         self.keyID = keyID
@@ -4790,11 +4929,28 @@ struct GPGKey: Identifiable, Hashable {
         self.trustLevel = trustLevel
         self.secretMaterial = secretMaterial ?? SecretKeyMaterial.defaultMaterial(for: isSecret)
         self.cardSerialNumber = cardSerialNumber
+        self.algorithmSummary = algorithmSummary ?? GPGKeyAlgorithmSummary.resolve(
+            primaryAlgorithm: algorithm,
+            primaryKeyLength: keyLength,
+            encryptionSubkeys: []
+        )
     }
     
     /// Display-friendly key type
     var displayKeyType: String {
-        "\(algorithm)-\(keyLength)"
+        algorithmSummary.shortDisplayName
+    }
+
+    var detailedKeyType: String {
+        algorithmSummary.detailDisplayName
+    }
+
+    var technicalKeyType: String {
+        algorithmSummary.technicalDisplayName
+    }
+
+    var isPostQuantumHybrid: Bool {
+        algorithmSummary.isPostQuantumHybrid
     }
     
     /// Check if key is expired
@@ -5060,6 +5216,12 @@ private class GPGKeyBuilder {
     var trustLevel: TrustLevel = .unknown
     var secretMaterial: SecretKeyMaterial = .none
     var cardSerialNumber: String?
+    var encryptionSubkeys: [GPGSubkeyAlgorithmMetadata] = []
+
+    func absorbEncryptionSubkey(_ metadata: GPGSubkeyAlgorithmMetadata?) {
+        guard let metadata else { return }
+        encryptionSubkeys.append(metadata)
+    }
 
     func absorbSecretMaterialToken(_ rawValue: String?) {
         guard isSecret else { return }
@@ -5110,7 +5272,12 @@ private class GPGKeyBuilder {
             expiresAt: expiresAt,
             trustLevel: trustLevel,
             secretMaterial: resolvedSecretMaterial,
-            cardSerialNumber: cardSerialNumber
+            cardSerialNumber: cardSerialNumber,
+            algorithmSummary: GPGKeyAlgorithmSummary.resolve(
+                primaryAlgorithm: algorithm,
+                primaryKeyLength: keyLength,
+                encryptionSubkeys: encryptionSubkeys
+            )
         )
     }
 }

@@ -267,6 +267,106 @@ struct GPGServiceTests {
         #expect(keys.first?.cardSerialNumber == nil)
     }
 
+    @Test("parseKeyList classifies secret PQC key from encryption subkey")
+    func parseKeyList_classifiesSecretPQCKey() {
+        let output = """
+        sec:u:384:19:004B610285CB1EF8:1783316923:::u:::scESC:::::brainpoolP384r1:23::0:
+        fpr:::::::::715BCBB9CDD7E0EDEF27149E004B610285CB1EF8:
+        uid:u::::1783316923::C38B438C18F0C9F1A681BDABECF32C0928442001::Moaiy PQC <pqc@example.test>::::::::::0:
+        ssb:u:768:8:C80CFBAC29A3EA59:1783316923::::::e:::::ky768_bp256:8 23:
+        fpr:::::::::C80CFBAC29A3EA590347042FAECE07A21522C0B429CEB09871FBF989C6F1C9DD:
+        """
+
+        let keys = parseKeyListOutput(output, secretOnly: true)
+
+        #expect(keys.count == 1)
+        #expect(keys.first?.algorithm == "19")
+        #expect(keys.first?.keyLength == 384)
+        #expect(keys.first?.isPostQuantumHybrid == true)
+        #expect(keys.first?.displayKeyType == "PQC Hybrid")
+        #expect(keys.first?.detailedKeyType == "Post-Quantum Hybrid (ML-KEM-768)")
+        #expect(keys.first?.technicalKeyType == "Kyber-768 + ECC")
+    }
+
+    @Test("parseKeyList classifies public PQC key from encryption subkey")
+    func parseKeyList_classifiesPublicPQCKey() {
+        let output = """
+        pub:u:384:19:004B610285CB1EF8:1783316923:::u:::scESC:::::brainpoolP384r1:23::0:
+        fpr:::::::::715BCBB9CDD7E0EDEF27149E004B610285CB1EF8:
+        uid:u::::1783316923::C38B438C18F0C9F1A681BDABECF32C0928442001::Moaiy PQC <pqc@example.test>::::::::::0:
+        sub:u:768:8:C80CFBAC29A3EA59:1783316923::::::e:::::ky768_bp256:8 23:
+        fpr:::::::::C80CFBAC29A3EA590347042FAECE07A21522C0B429CEB09871FBF989C6F1C9DD:
+        """
+
+        let keys = parseKeyListOutput(output, secretOnly: false)
+
+        #expect(keys.count == 1)
+        #expect(keys.first?.isPostQuantumHybrid == true)
+        #expect(keys.first?.algorithmSummary.encryptionSubkeys.first?.algorithmName == "Kyber")
+    }
+
+    @Test("parseKeyList detects Kyber by algorithm id only")
+    func parseKeyList_detectsKyberByIDOnly() {
+        let output = """
+        pub:u:384:19:004B610285CB1EF8:1783316923:::u:::scESC:::::brainpoolP384r1:23::0:
+        fpr:::::::::715BCBB9CDD7E0EDEF27149E004B610285CB1EF8:
+        uid:u::::1783316923::C38B438C18F0C9F1A681BDABECF32C0928442001::Moaiy PQC <pqc@example.test>::::::::::0:
+        sub:u:768:8:C80CFBAC29A3EA59:1783316923::::::e::::::8 23:
+        fpr:::::::::C80CFBAC29A3EA590347042FAECE07A21522C0B429CEB09871FBF989C6F1C9DD:
+        """
+
+        let keys = parseKeyListOutput(output, secretOnly: false)
+
+        #expect(keys.first?.isPostQuantumHybrid == true)
+    }
+
+    @Test("parseKeyList detects Kyber by token only")
+    func parseKeyList_detectsKyberByTokenOnly() {
+        let output = """
+        pub:u:384:19:004B610285CB1EF8:1783316923:::u:::scESC:::::brainpoolP384r1:23::0:
+        fpr:::::::::715BCBB9CDD7E0EDEF27149E004B610285CB1EF8:
+        uid:u::::1783316923::C38B438C18F0C9F1A681BDABECF32C0928442001::Moaiy PQC <pqc@example.test>::::::::::0:
+        sub:u:768:18:C80CFBAC29A3EA59:1783316923::::::e:::::kyber-test::
+        fpr:::::::::C80CFBAC29A3EA590347042FAECE07A21522C0B429CEB09871FBF989C6F1C9DD:
+        """
+
+        let keys = parseKeyListOutput(output, secretOnly: false)
+
+        #expect(keys.first?.isPostQuantumHybrid == true)
+    }
+
+    @Test("parseKeyList keeps ECC-only key as ECC")
+    func parseKeyList_keepsECCOnlyKeyAsECC() {
+        let output = """
+        pub:u:255:22:AFF61E980F814219:1774688367::::u:::scESC:::::ed25519:::0:
+        fpr:::::::::DADEED8EFF5EF22705285E12AFF61E980F814219:
+        uid:u::::1775291570::2C1D1D5D979714BE1FE6602C7B78DE27E251169F::ECC User <ecc@example.com>::::::::::0:
+        sub:u:255:18:A9491BDF1AEC49B2:1774688367::::::e:::::cv25519::
+        fpr:::::::::9DAF4148FF8A9D58E5BF22F7A9491BDF1AEC49B2:
+        """
+
+        let keys = parseKeyListOutput(output, secretOnly: false)
+
+        #expect(keys.first?.algorithmSummary.family == .ecc)
+        #expect(keys.first?.isPostQuantumHybrid == false)
+    }
+
+    @Test("parseKeyList keeps RSA key as RSA")
+    func parseKeyList_keepsRSAKeyAsRSA() {
+        let output = """
+        pub:u:4096:1:ABCDEF1234567890:1609459200:1704067200::u:::scESC:
+        fpr:::::::::ABCDEF1234567890ABCDEF1234567890ABCDEF12:
+        uid:u::::1609459200::B3F2E1D4C5A6B7C8D9E0F1A2B3C4D5E6F7A8B9C0::RSA User <rsa@example.com>:
+        sub:u:4096:1:1111222233334444:1609459200::::::e:
+        fpr:::::::::1111222233334444555566667777888899990000:
+        """
+
+        let keys = parseKeyListOutput(output, secretOnly: false)
+
+        #expect(keys.first?.algorithmSummary.family == .rsa)
+        #expect(keys.first?.isPostQuantumHybrid == false)
+    }
+
     @Test("Subkey algorithm token uses ECC curves for ECC primary keys")
     func subkeyAlgorithmToken_eccPrimary_usesExpectedCurves() {
         let encryptToken = GPGService.subkeyAlgorithmToken(
@@ -336,6 +436,23 @@ struct GPGServiceTests {
         #expect(subkeys[1].usages.contains(.sign))
         #expect(subkeys[1].usages.contains(.authenticate))
         #expect(subkeys[1].isSecretMaterial)
+    }
+
+    @Test("parseSubkeyList maps Kyber algorithm id")
+    func parseSubkeyList_mapsKyberAlgorithmID() {
+        let output = """
+        sec:u:384:19:004B610285CB1EF8:1783316923:::u:::scESC:::+::brainpoolP384r1:23::0:
+        fpr:::::::::715BCBB9CDD7E0EDEF27149E004B610285CB1EF8:
+        uid:u::::1783316923::C38B438C18F0C9F1A681BDABECF32C0928442001::Moaiy PQC <pqc@example.test>::::::::::0:
+        ssb:u:768:8:C80CFBAC29A3EA59:1783316923::::::e:::+::ky768_bp256:8 23:
+        fpr:::::::::C80CFBAC29A3EA590347042FAECE07A21522C0B429CEB09871FBF989C6F1C9DD:
+        """
+
+        let subkeys = parseSubkeyListOutput(output)
+
+        #expect(subkeys.count == 1)
+        #expect(subkeys.first?.algorithm == "Kyber")
+        #expect(subkeys.first?.keyLength == 768)
     }
 
     // MARK: - Command Builder Tests
@@ -871,6 +988,7 @@ private func parseKeyListOutput(_ output: String, secretOnly: Bool) -> [GPGKey] 
             }
         case "sub", "ssb":
             isAwaitingPrimaryFingerprint = false
+            currentKey?.absorbEncryptionSubkey(encryptionSubkeyAlgorithmMetadataOutput(fields))
             if recordType == "ssb" {
                 currentKey?.absorbSecretMaterialToken(fields.count > 14 ? fields[14] : nil)
             }
@@ -901,6 +1019,22 @@ private func parseKeyListOutput(_ output: String, secretOnly: Bool) -> [GPGKey] 
     }
     
     return keys
+}
+
+private func encryptionSubkeyAlgorithmMetadataOutput(_ fields: [String]) -> GPGSubkeyAlgorithmMetadata? {
+    let usages = parseSubkeyUsagesOutput(fields)
+    guard usages.contains(.encrypt) else {
+        return nil
+    }
+
+    let algorithmID = fields.count > 3 ? fields[3] : ""
+    let curveOrToken = fields.indices.contains(16) ? fields[16] : nil
+    return GPGSubkeyAlgorithmMetadata(
+        algorithmID: algorithmID,
+        algorithmName: subkeyAlgorithmName(algorithmID),
+        keyLength: Int(fields.count > 2 ? fields[2] : "") ?? 0,
+        curveOrToken: curveOrToken
+    )
 }
 
 private func parseSubkeyListOutput(_ output: String) -> [GPGSubkey] {
@@ -1014,6 +1148,8 @@ private func subkeyAlgorithmName(_ code: String) -> String {
     switch code {
     case "1":
         return "RSA"
+    case "8":
+        return "Kyber"
     case "17":
         return "DSA"
     case "18":
@@ -1221,6 +1357,12 @@ private class GPGKeyBuilder {
     var trustLevel: TrustLevel = .unknown
     var secretMaterial: SecretKeyMaterial = .none
     var cardSerialNumber: String?
+    var encryptionSubkeys: [GPGSubkeyAlgorithmMetadata] = []
+
+    func absorbEncryptionSubkey(_ metadata: GPGSubkeyAlgorithmMetadata?) {
+        guard let metadata else { return }
+        encryptionSubkeys.append(metadata)
+    }
 
     func absorbSecretMaterialToken(_ rawValue: String?) {
         guard isSecret else { return }
@@ -1270,7 +1412,12 @@ private class GPGKeyBuilder {
             expiresAt: expiresAt,
             trustLevel: trustLevel,
             secretMaterial: resolvedSecretMaterial,
-            cardSerialNumber: cardSerialNumber
+            cardSerialNumber: cardSerialNumber,
+            algorithmSummary: GPGKeyAlgorithmSummary.resolve(
+                primaryAlgorithm: algorithm,
+                primaryKeyLength: keyLength,
+                encryptionSubkeys: encryptionSubkeys
+            )
         )
     }
 }
