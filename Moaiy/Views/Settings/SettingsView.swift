@@ -75,6 +75,7 @@ struct SettingsView: View {
     @State private var selectedTeamPolicyTemplateID = ""
     @State private var isLoadingTeamPolicyTemplates = false
     @State private var isApplyingTeamPolicyTemplate = false
+    @State private var gpgService = GPGService.shared
     
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -98,6 +99,30 @@ struct SettingsView: View {
 
     private var selectedTeamPolicyTemplate: TeamPolicyTemplateDescriptor? {
         teamPolicyTemplates.first(where: { $0.id == selectedTeamPolicyTemplateID })
+    }
+
+    private var supportsPostQuantumDefaultKeyType: Bool {
+        gpgService.capabilities.supportsKyber
+    }
+
+    private var selectedDefaultKeyType: PersistedDefaultKeyType {
+        PersistedDefaultKeyType.resolved(rawValue: defaultKeyType)
+    }
+
+    private var isSavedPostQuantumDefaultUnavailable: Bool {
+        selectedDefaultKeyType == .postQuantumHybrid && !supportsPostQuantumDefaultKeyType
+    }
+
+    private var selectableDefaultKeyTypes: [PersistedDefaultKeyType] {
+        var options = PersistedDefaultKeyType.selectable(
+            supportsPostQuantum: supportsPostQuantumDefaultKeyType
+        )
+
+        if isSavedPostQuantumDefaultUnavailable && !options.contains(.postQuantumHybrid) {
+            options.append(.postQuantumHybrid)
+        }
+
+        return options
     }
     
     var body: some View {
@@ -124,21 +149,31 @@ struct SettingsView: View {
                         .fixedSize()
                     }
 
-                    HStack(alignment: .center) {
-                        Text("setting_default_key_type")
-                            .foregroundStyle(Color.moaiyTextSecondary)
+                    VStack(alignment: .leading, spacing: MoaiyUI.Spacing.xs) {
+                        HStack(alignment: .center) {
+                            Text("setting_default_key_type")
+                                .foregroundStyle(Color.moaiyTextSecondary)
 
-                        Spacer()
+                            Spacer()
 
-                        Picker("setting_default_key_type", selection: $defaultKeyType) {
-                            ForEach(PersistedDefaultKeyType.classicalCases) { option in
-                                Text(LocalizedStringKey(option.displayKey))
-                                    .tag(option.rawValue)
+                            Picker("setting_default_key_type", selection: $defaultKeyType) {
+                                ForEach(selectableDefaultKeyTypes) { option in
+                                    Text(LocalizedStringKey(option.displayKey))
+                                        .tag(option.rawValue)
+                                        .disabled(option == .postQuantumHybrid && !supportsPostQuantumDefaultKeyType)
+                                }
                             }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .frame(minWidth: 220, idealWidth: 280, maxWidth: 340, alignment: .trailing)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .frame(minWidth: 260, idealWidth: 340, maxWidth: 380, alignment: .trailing)
+
+                        if isSavedPostQuantumDefaultUnavailable {
+                            Text("setting_default_key_type_pqc_unavailable")
+                                .font(.caption)
+                                .foregroundStyle(Color.moaiyWarning)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
 
                     Toggle(isOn: $enableKeySigningMenu) {

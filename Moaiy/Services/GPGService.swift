@@ -4805,7 +4805,7 @@ struct GPGKeyAlgorithmSummary: Hashable {
     var shortDisplayName: String {
         switch family {
         case .postQuantumHybrid:
-            return "PQC Hybrid"
+            return AppLocalization.string("key_type_post_quantum_hybrid_short")
         case .rsa, .ecc, .unknown:
             return Self.classicalDisplayName(primaryAlgorithm: primaryAlgorithm, keyLength: primaryKeyLength)
         }
@@ -4814,7 +4814,7 @@ struct GPGKeyAlgorithmSummary: Hashable {
     var detailDisplayName: String {
         switch family {
         case .postQuantumHybrid:
-            return "Post-Quantum Hybrid (ML-KEM-768)"
+            return AppLocalization.string("key_type_post_quantum_hybrid_detail")
         case .rsa, .ecc, .unknown:
             return shortDisplayName
         }
@@ -4823,7 +4823,7 @@ struct GPGKeyAlgorithmSummary: Hashable {
     var technicalDisplayName: String {
         switch family {
         case .postQuantumHybrid:
-            return "Kyber-768 + ECC"
+            return AppLocalization.string("key_type_post_quantum_hybrid_technical")
         case .rsa, .ecc, .unknown:
             return shortDisplayName
         }

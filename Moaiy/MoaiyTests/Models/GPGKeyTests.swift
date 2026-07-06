@@ -141,9 +141,9 @@ struct GPGKeyTests {
         )
 
         #expect(pqcKey.isPostQuantumHybrid)
-        #expect(pqcKey.displayKeyType == "PQC Hybrid")
-        #expect(pqcKey.detailedKeyType == "Post-Quantum Hybrid (ML-KEM-768)")
-        #expect(pqcKey.technicalKeyType == "Kyber-768 + ECC")
+        #expect(pqcKey.displayKeyType == AppLocalization.string("key_type_post_quantum_hybrid_short"))
+        #expect(pqcKey.detailedKeyType == AppLocalization.string("key_type_post_quantum_hybrid_detail"))
+        #expect(pqcKey.technicalKeyType == AppLocalization.string("key_type_post_quantum_hybrid_technical"))
     }
 
     @Test("algorithm summary keeps classical key display compatible")

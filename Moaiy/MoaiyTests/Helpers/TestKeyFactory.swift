@@ -24,7 +24,8 @@ enum TestKeyFactory {
         isSecret: Bool = false,
         trustLevel: TrustLevel = .unknown,
         createdAt: Date? = Date(timeIntervalSinceNow: -86400 * 365), // 1 year ago
-        expiresAt: Date? = nil
+        expiresAt: Date? = nil,
+        algorithmSummary: GPGKeyAlgorithmSummary? = nil
     ) -> GPGKey {
         GPGKey(
             id: fingerprint,
@@ -37,7 +38,8 @@ enum TestKeyFactory {
             isSecret: isSecret,
             createdAt: createdAt,
             expiresAt: expiresAt,
-            trustLevel: trustLevel
+            trustLevel: trustLevel,
+            algorithmSummary: algorithmSummary
         )
     }
     
@@ -128,6 +130,35 @@ enum TestKeyFactory {
             keyID: "E5F6F1B2",
             algorithm: "RSA",
             keyLength: 2048
+        )
+    }
+
+    /// Create a post-quantum hybrid key
+    static func makePostQuantumHybridKey(
+        name: String = "PQC User",
+        email: String = "pqc@example.com",
+        isSecret: Bool = false
+    ) -> GPGKey {
+        makeKey(
+            name: name,
+            email: email,
+            fingerprint: "01B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F601B2",
+            keyID: "E5F601B2",
+            algorithm: "19",
+            keyLength: 384,
+            isSecret: isSecret,
+            algorithmSummary: GPGKeyAlgorithmSummary.resolve(
+                primaryAlgorithm: "19",
+                primaryKeyLength: 384,
+                encryptionSubkeys: [
+                    GPGSubkeyAlgorithmMetadata(
+                        algorithmID: "8",
+                        algorithmName: "Kyber",
+                        keyLength: 768,
+                        curveOrToken: "ky768_bp256"
+                    )
+                ]
+            )
         )
     }
     

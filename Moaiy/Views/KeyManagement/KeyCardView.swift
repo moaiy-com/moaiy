@@ -172,6 +172,20 @@ struct KeyCardView: View {
                                 .clipShape(Capsule())
                         }
 
+                        if key.isPostQuantumHybrid {
+                            Text("key_type_post_quantum_hybrid_short")
+                                .font(.caption)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.moaiyInfo.opacity(0.15))
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.moaiyInfo.opacity(0.35), lineWidth: 1)
+                                )
+                                .foregroundStyle(Color.moaiyInfo)
+                                .clipShape(Capsule())
+                        }
+
                         if key.isExpired {
                             Text("status_expired")
                                 .font(.caption)

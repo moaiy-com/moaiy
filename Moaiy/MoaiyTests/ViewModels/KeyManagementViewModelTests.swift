@@ -105,15 +105,20 @@ struct KeyManagementViewModelTests {
     func availableAlgorithms_returnsSortedUnique() async {
         let viewModel = KeyManagementViewModel()
         viewModel.keys = [
-            TestKeyFactory.makeKey(algorithm: "RSA"),
-            TestKeyFactory.makeKey(algorithm: "EDDSA"),
-            TestKeyFactory.makeKey(algorithm: "RSA"),
-            TestKeyFactory.makeKey(algorithm: "DSA")
+            TestKeyFactory.makeKey(algorithm: "RSA", keyLength: 4096),
+            TestKeyFactory.makeECCKey(),
+            TestKeyFactory.makePostQuantumHybridKey(),
+            TestKeyFactory.makePostQuantumHybridKey(name: "PQC User 2", email: "pqc2@example.com")
         ]
         
         let algorithms = viewModel.availableAlgorithms
+        let expectedAlgorithms = [
+            "EDDSA-256",
+            AppLocalization.string("key_type_post_quantum_hybrid_short"),
+            "RSA-4096"
+        ].sorted()
         
-        #expect(algorithms.count == 3) // RSA, EDDSA, DSA
+        #expect(algorithms == expectedAlgorithms)
         #expect(algorithms == algorithms.sorted())
     }
     

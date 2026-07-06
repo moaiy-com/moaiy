@@ -283,9 +283,9 @@ struct GPGServiceTests {
         #expect(keys.first?.algorithm == "19")
         #expect(keys.first?.keyLength == 384)
         #expect(keys.first?.isPostQuantumHybrid == true)
-        #expect(keys.first?.displayKeyType == "PQC Hybrid")
-        #expect(keys.first?.detailedKeyType == "Post-Quantum Hybrid (ML-KEM-768)")
-        #expect(keys.first?.technicalKeyType == "Kyber-768 + ECC")
+        #expect(keys.first?.displayKeyType == AppLocalization.string("key_type_post_quantum_hybrid_short"))
+        #expect(keys.first?.detailedKeyType == AppLocalization.string("key_type_post_quantum_hybrid_detail"))
+        #expect(keys.first?.technicalKeyType == AppLocalization.string("key_type_post_quantum_hybrid_technical"))
     }
 
     @Test("parseKeyList classifies public PQC key from encryption subkey")

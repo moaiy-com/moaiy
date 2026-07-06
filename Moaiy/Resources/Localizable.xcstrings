@@ -51788,6 +51788,574 @@
           }
         }
       }
+    },
+    "create_key_type_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key Type"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "密钥类型"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tipo de clave"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tipo de chave"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कुंजी प्रकार"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "نوع المفتاح"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type de clé"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schlüsseltyp"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キータイプ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "키 유형"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тип ключа"
+          }
+        }
+      }
+    },
+    "key_type_post_quantum_hybrid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Post-Quantum Hybrid (Kyber-768)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "抗量子混合（Kyber-768）"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Híbrido poscuántico (Kyber-768)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Híbrido pós-quântico (Kyber-768)"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "पोस्ट-क्वांटम हाइब्रिड (Kyber-768)"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "هجين ما بعد الكم (Kyber-768)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hybride post-quantique (Kyber-768)"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Post-Quanten-Hybrid (Kyber-768)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ポスト量子ハイブリッド（Kyber-768）"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "양자 내성 하이브리드(Kyber-768)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Постквантовый гибрид (Kyber-768)"
+          }
+        }
+      }
+    },
+    "key_type_post_quantum_hybrid_short": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PQC Hybrid"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PQC 混合"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Híbrido PQC"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Híbrido PQC"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PQC हाइब्रिड"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "هجين PQC"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hybride PQC"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PQC-Hybrid"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PQC ハイブリッド"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PQC 하이브리드"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Гибрид PQC"
+          }
+        }
+      }
+    },
+    "key_type_post_quantum_hybrid_detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Post-Quantum Hybrid (ML-KEM-768)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "抗量子混合（ML-KEM-768）"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Híbrido poscuántico (ML-KEM-768)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Híbrido pós-quântico (ML-KEM-768)"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "पोस्ट-क्वांटम हाइब्रिड (ML-KEM-768)"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "هجين ما بعد الكم (ML-KEM-768)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hybride post-quantique (ML-KEM-768)"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Post-Quanten-Hybrid (ML-KEM-768)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ポスト量子ハイブリッド（ML-KEM-768）"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "양자 내성 하이브리드(ML-KEM-768)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Постквантовый гибрид (ML-KEM-768)"
+          }
+        }
+      }
+    },
+    "key_type_post_quantum_hybrid_technical": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 + ECC"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 + ECC"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 + ECC"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 + ECC"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 + ECC"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 + ECC"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 + ECC"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 + ECC"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 + ECC"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 + ECC"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 + ECC"
+          }
+        }
+      }
+    },
+    "setting_default_key_type_pqc_unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The saved post-quantum default is unavailable because this GPG build does not support Kyber-768."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已保存的抗量子默认值不可用，因为当前 GPG 构建不支持 Kyber-768。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El valor predeterminado poscuántico guardado no está disponible porque esta versión de GPG no admite Kyber-768."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O padrão pós-quântico salvo não está disponível porque esta versão do GPG não oferece suporte ao Kyber-768."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "सहेजा गया पोस्ट-क्वांटम डिफ़ॉल्ट उपलब्ध नहीं है क्योंकि यह GPG बिल्ड Kyber-768 का समर्थन नहीं करता।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الإعداد الافتراضي المحفوظ لما بعد الكم غير متاح لأن إصدار GPG هذا لا يدعم Kyber-768."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La valeur post-quantique enregistrée n’est pas disponible, car cette version de GPG ne prend pas en charge Kyber-768."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der gespeicherte Post-Quanten-Standard ist nicht verfügbar, weil diese GPG-Version Kyber-768 nicht unterstützt."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存済みのポスト量子デフォルトは、この GPG ビルドが Kyber-768 に対応していないため使用できません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장된 양자 내성 기본값은 이 GPG 빌드가 Kyber-768을 지원하지 않아 사용할 수 없습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохраненный постквантовый вариант по умолчанию недоступен, потому что эта сборка GPG не поддерживает Kyber-768."
+          }
+        }
+      }
+    },
+    "create_key_pqc_compatibility_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 keys require OpenPGP apps with post-quantum support. Use RSA-4096 when broad compatibility matters."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 密钥需要支持抗量子的 OpenPGP 应用。需要广泛兼容时请使用 RSA-4096。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las claves Kyber-768 requieren apps OpenPGP con soporte poscuántico. Use RSA-4096 cuando necesite amplia compatibilidad."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaves Kyber-768 exigem apps OpenPGP com suporte pós-quântico. Use RSA-4096 quando a compatibilidade ampla for importante."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 कुंजियों के लिए पोस्ट-क्वांटम समर्थन वाले OpenPGP ऐप चाहिए। व्यापक अनुकूलता चाहिए तो RSA-4096 का उपयोग करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تتطلب مفاتيح Kyber-768 تطبيقات OpenPGP تدعم ما بعد الكم. استخدم RSA-4096 عند الحاجة إلى توافق واسع."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les clés Kyber-768 nécessitent des apps OpenPGP compatibles post-quantique. Utilisez RSA-4096 si une large compatibilité est importante."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768-Schlüssel erfordern OpenPGP-Apps mit Post-Quanten-Unterstützung. Verwenden Sie RSA-4096, wenn breite Kompatibilität wichtig ist."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 キーにはポスト量子対応の OpenPGP アプリが必要です。広い互換性が必要な場合は RSA-4096 を使用してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kyber-768 키에는 양자 내성 지원 OpenPGP 앱이 필요합니다. 폭넓은 호환성이 중요하면 RSA-4096을 사용하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ключам Kyber-768 нужны приложения OpenPGP с постквантовой поддержкой. Если важна широкая совместимость, используйте RSA-4096."
+          }
+        }
+      }
+    },
+    "create_key_pqc_unavailable_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The saved post-quantum default is unavailable in this GPG runtime. RSA-4096 is selected instead."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已保存的抗量子默认值在当前 GPG 运行时不可用，已改为选择 RSA-4096。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El valor predeterminado poscuántico guardado no está disponible en este entorno de GPG. Se seleccionó RSA-4096 en su lugar."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O padrão pós-quântico salvo não está disponível neste runtime do GPG. RSA-4096 foi selecionado no lugar."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "सहेजा गया पोस्ट-क्वांटम डिफ़ॉल्ट इस GPG रनटाइम में उपलब्ध नहीं है। इसके बजाय RSA-4096 चुना गया है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الإعداد الافتراضي المحفوظ لما بعد الكم غير متاح في بيئة GPG هذه. تم اختيار RSA-4096 بدلاً منه."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La valeur post-quantique enregistrée n’est pas disponible dans cet environnement GPG. RSA-4096 est sélectionné à la place."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der gespeicherte Post-Quanten-Standard ist in dieser GPG-Laufzeit nicht verfügbar. Stattdessen wurde RSA-4096 ausgewählt."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存済みのポスト量子デフォルトはこの GPG ランタイムでは使用できません。代わりに RSA-4096 が選択されています。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장된 양자 내성 기본값은 이 GPG 런타임에서 사용할 수 없습니다. 대신 RSA-4096이 선택되었습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохраненный постквантовый вариант по умолчанию недоступен в этой среде GPG. Вместо него выбран RSA-4096."
+          }
+        }
+      }
     }
   },
   "version": "1.0"
