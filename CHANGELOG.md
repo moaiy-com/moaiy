@@ -12,6 +12,42 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Release execution checklist for v0.5.0 (`doc/v0.5.0-minimal-release-checklist.md`)
 - Core flow validation list for v0.5.0 (`doc/v0.5.0-core-flow-validation.md`)
 
+## [0.9.0] - 2026-07-06
+
+### Added
+
+- Added Kyber-768 hybrid OpenPGP key generation support backed by bundled GnuPG 2.5.21.
+- Added post-quantum capability detection, key classification, and PQC-aware encryption/decryption validation.
+- Added UI, settings, and Pro policy gates for Kyber-768 availability with compatibility guidance.
+- Added backup, restore, migration, and interoperability regression coverage for post-quantum keys.
+
+### Changed
+
+- Updated bundled `gpg.bundle` to GnuPG 2.5.21 after validating Kyber secret-key import behavior.
+- Bumped app version metadata to `0.9.0`.
+- Extended release validation gates and generated release metadata with post-quantum compatibility caveats.
+
+### Fixed
+
+- Prevented unavailable Kyber defaults from being applied when the active bundled GPG does not advertise post-quantum support.
+
+### Added (zh-Hans)
+
+- 新增基于内置 GnuPG 2.5.21 的 Kyber-768 混合 OpenPGP 密钥生成支持。
+- 新增抗量子能力检测、密钥分类，以及面向 PQC 的加密/解密验证。
+- 新增 Kyber-768 可用性相关的 UI、设置与 Pro 策略门禁，并提供兼容性提示。
+- 新增抗量子密钥的备份、恢复、迁移与互操作回归覆盖。
+
+### Changed (zh-Hans)
+
+- 将内置 `gpg.bundle` 更新到 GnuPG 2.5.21，并验证 Kyber 私钥导入行为。
+- 将应用版本元数据升级到 `0.9.0`。
+- 扩展发布验证门禁与生成的发布元数据，加入抗量子兼容性说明。
+
+### Fixed (zh-Hans)
+
+- 当当前内置 GPG 未声明抗量子支持时，阻止应用不可用的 Kyber 默认策略。
+
 ## [0.8.2] - 2026-05-03
 
 ### Added
