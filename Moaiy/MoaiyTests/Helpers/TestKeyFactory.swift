@@ -277,7 +277,12 @@ final class TestGPGHome {
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tmpURL.path)
 
         let agentConfigURL = homeURL.appendingPathComponent("gpg-agent.conf")
-        try "allow-loopback-pinentry\n".write(to: agentConfigURL, atomically: true, encoding: .utf8)
+        try """
+        allow-loopback-pinentry
+        default-cache-ttl 0
+        max-cache-ttl 0
+        no-allow-external-cache
+        """.appending("\n").write(to: agentConfigURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: agentConfigURL.path)
 
         return TestGPGHome(rootURL: rootURL, homeURL: homeURL, bundleURL: bundleURL)
@@ -404,6 +409,17 @@ final class TestGPGHome {
     }
 
     func killAgent(timeout: TimeInterval = 10) async {
+        if let gpgConnectAgentURL, FileManager.default.fileExists(atPath: gpgConnectAgentURL.path) {
+            _ = try? await executor.execute(
+                executableURL: gpgConnectAgentURL,
+                arguments: ["--homedir", homeURL.path, "KILLAGENT", "/bye"],
+                environment: gpgToolEnvironment,
+                gpgHome: homeURL,
+                input: nil,
+                timeout: timeout
+            )
+        }
+
         guard let gpgConfURL, FileManager.default.fileExists(atPath: gpgConfURL.path) else {
             return
         }
