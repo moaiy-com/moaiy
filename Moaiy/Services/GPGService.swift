@@ -707,6 +707,10 @@ final class GPGService: SubkeyManaging {
         )
     }
 
+    func listKeys(atExternalGPGHome homeURL: URL, secretOnly: Bool = false) async throws -> [GPGKey] {
+        try await listKeys(at: homeURL, secretOnly: secretOnly)
+    }
+
     func migrateKeys(fromExternalGPGHome sourceHomeURL: URL) async throws -> KeyMigrationResult {
         let snapshot = try await inspectKeyring(at: sourceHomeURL)
 

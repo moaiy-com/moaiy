@@ -391,6 +391,31 @@ extension TestGPGHome {
         return output
     }
 
+    func exportSecretKey(keyID: String, passphrase: String) async throws -> String {
+        try await ensureAgentRunning()
+
+        let result = try await execute(
+            arguments: [
+                "--armor",
+                "--batch",
+                "--yes",
+                "--pinentry-mode", "loopback",
+                "--passphrase-fd", "0",
+                "--export-secret-key",
+                "--",
+                keyID
+            ],
+            input: passphrase + "\n"
+        )
+        guard result.exitCode == 0, let output = result.stdout, !output.isEmpty else {
+            if let credentialError = GPGService.credentialFailureError(from: result) {
+                throw credentialError
+            }
+            throw GPGError.exportFailed(result.stderr ?? result.stdout ?? "Failed to export secret key")
+        }
+        return output
+    }
+
     @discardableResult
     func importArmor(_ armor: String) async throws -> GPGExecutionResult {
         let result = try await execute(arguments: ["--batch", "--import"], input: armor)

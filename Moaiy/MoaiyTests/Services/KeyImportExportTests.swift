@@ -174,6 +174,64 @@ struct KeyImportExportTests {
 
         #expect(normalized(decrypted) == normalized(plaintext))
     }
+
+    @Test("PQC secret key export/import restores clean home decryption")
+    func pqcSecretKey_exportImport_restoredKeyDecryptsExistingCiphertext() async throws {
+        let senderHome = try TestGPGHome.make(prefix: "p7-secret-sender")
+        let sourceHome = try TestGPGHome.make(prefix: "p7-secret-source")
+        let restoredHome = try TestGPGHome.make(prefix: "p7-secret-restored")
+        defer {
+            senderHome.cleanup()
+            sourceHome.cleanup()
+            restoredHome.cleanup()
+        }
+
+        try await senderHome.requireKyberSupport()
+        try await sourceHome.requireKyberSupport()
+        try await restoredHome.requireKyberSupport()
+
+        let identity = makeIdentity(seed: "pqc-secret-restore")
+        let plaintext = "Moaiy PQC secret restore flow \(UUID().uuidString)"
+
+        let fingerprint = try await sourceHome.generatePostQuantumHybridKey(
+            name: identity.name,
+            email: identity.email,
+            passphrase: identity.passphrase
+        )
+        let publicKey = try await sourceHome.exportPublicKey(keyID: fingerprint)
+        _ = try await senderHome.importArmor(publicKey)
+
+        let ciphertext = try await senderHome.encryptText(
+            plaintext,
+            recipients: [fingerprint],
+            allowUntrustedRecipients: true
+        )
+
+        let secretKey = try await sourceHome.exportSecretKey(
+            keyID: fingerprint,
+            passphrase: identity.passphrase
+        )
+        #expect(secretKey.contains("BEGIN PGP PRIVATE KEY BLOCK"))
+
+        try await restoredHome.ensureAgentRunning()
+        let importResult = try await restoredHome.importArmor(secretKey)
+        let importOutput = [importResult.stdout, importResult.stderr]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+        #expect(importOutput.localizedCaseInsensitiveContains("imported"))
+
+        let secretListResult = try await restoredHome.execute(
+            arguments: ["--with-colons", "--fixed-list-mode", "--list-secret-keys", fingerprint]
+        )
+        #expect(secretListResult.exitCode == 0)
+        #expect(secretListResult.stdout?.contains(fingerprint) == true)
+
+        let decrypted = try await restoredHome.decryptText(
+            ciphertext,
+            passphrase: identity.passphrase
+        )
+        #expect(normalized(decrypted) == normalized(plaintext))
+    }
     
     // MARK: - Key Export Tests
     
