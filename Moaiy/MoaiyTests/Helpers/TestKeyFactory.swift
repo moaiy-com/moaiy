@@ -288,14 +288,52 @@ final class TestGPGHome {
         input: String? = nil,
         timeout: TimeInterval = Constants.GPG.defaultTimeout
     ) async throws -> GPGExecutionResult {
-        try await executor.execute(
+        if commandRequiresAgent(arguments) {
+            try await ensureAgentRunning()
+        }
+
+        return try await executor.execute(
             executableURL: gpgURL,
-            arguments: arguments,
+            arguments: gpgArguments(arguments),
             environment: gpgToolEnvironment,
             gpgHome: homeURL,
             input: input,
             timeout: timeout
         )
+    }
+
+    private func gpgArguments(_ arguments: [String]) -> [String] {
+        if arguments.contains("--homedir") {
+            return arguments
+        }
+        return ["--homedir", homeURL.path] + arguments
+    }
+
+    private func commandRequiresAgent(_ arguments: [String]) -> Bool {
+        let agentBackedOptions: Set<String> = [
+            "--quick-gen-key",
+            "--quick-generate-key",
+            "--quick-add-key",
+            "--quick-set-expire",
+            "--gen-key",
+            "--generate-key",
+            "--full-generate-key",
+            "--import",
+            "--encrypt",
+            "--decrypt",
+            "--sign",
+            "--clearsign",
+            "--detach-sign",
+            "--export-secret-key",
+            "--export-secret-keys",
+            "--change-passphrase",
+            "--passwd",
+            "--edit-key",
+            "--delete-secret-key",
+            "--delete-secret-and-public-key"
+        ]
+
+        return arguments.contains { agentBackedOptions.contains($0) }
     }
 
     func ensureAgentRunning(timeout: TimeInterval = 10) async throws {
