@@ -81,6 +81,8 @@ target_commit="$(jq -r '.target_commit' "$MANIFEST_PATH")"
 gate_mode="$(jq -r '.gate_mode' "$MANIFEST_PATH")"
 signing_mode="$(jq -r '.signing_mode' "$MANIFEST_PATH")"
 built_at_utc="$(jq -r '.built_at_utc' "$MANIFEST_PATH")"
+pqc_compatibility_caveat_enabled="$(jq -r '.pqc_compatibility_caveat.enabled // false' "$MANIFEST_PATH")"
+pqc_compatibility_algorithm="$(jq -r '.pqc_compatibility_caveat.algorithm // "Kyber-768"' "$MANIFEST_PATH")"
 
 asset_rows="$(jq -r '.artifacts[] | "| `\(.name)` | `\(.arch)` | `\(.sha256)` | \(.size_bytes) |"' "$MANIFEST_PATH")"
 
@@ -114,6 +116,13 @@ if [[ "$gate_mode" == "balanced" ]]; then
 - Balanced gate: x86_64 uses build + smoke fallback when Intel physical hardware is unavailable."
   known_issues_zh="$known_issues_zh
 - 在平衡校验策略下，无 Intel 实机时，x86_64 采用 build + smoke 回退验证。"
+fi
+
+if [[ "$pqc_compatibility_caveat_enabled" == "true" ]]; then
+  known_issues_en="$known_issues_en
+- $pqc_compatibility_algorithm keys require GnuPG 2.5.21+ or compatible OpenPGP implementations. Use RSA-4096 when sharing with older tools."
+  known_issues_zh="$known_issues_zh
+- $pqc_compatibility_algorithm 密钥需要 GnuPG 2.5.21+ 或兼容的 OpenPGP 实现。与旧工具共享时请使用 RSA-4096。"
 fi
 
 changelog_section="$(

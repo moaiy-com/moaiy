@@ -209,7 +209,7 @@ struct FilteringTests {
         
         let filtered = viewModel.filteredKeys
         
-        #expect(filtered.allSatisfy { $0.algorithm.localizedCaseInsensitiveContains("RSA") })
+        #expect(filtered.allSatisfy { $0.displayKeyType.localizedCaseInsensitiveContains("RSA") })
     }
     
     @Test("Filter by algorithm EDDSA")
@@ -225,7 +225,24 @@ struct FilteringTests {
         
         let filtered = viewModel.filteredKeys
         
-        #expect(filtered.allSatisfy { $0.algorithm.localizedCaseInsensitiveContains("EDDSA") })
+        #expect(filtered.allSatisfy { $0.displayKeyType.localizedCaseInsensitiveContains("EDDSA") })
+    }
+
+    @Test("Filter by algorithm PQC hybrid")
+    func filterByAlgorithm_pqcHybrid() async {
+        let viewModel = KeyManagementViewModel()
+        viewModel.keys = [
+            TestKeyFactory.makeKey(name: "RSA User", algorithm: "RSA"),
+            TestKeyFactory.makePostQuantumHybridKey()
+        ]
+        viewModel.filterAlgorithm = AppLocalization.string("key_type_post_quantum_hybrid_short")
+        viewModel.searchText = ""
+        viewModel.filterKeyType = .all
+
+        let filtered = viewModel.filteredKeys
+
+        #expect(filtered.count == 1)
+        #expect(filtered.allSatisfy { key in key.isPostQuantumHybrid })
     }
     
     // MARK: - Combined Filter Tests

@@ -127,6 +127,41 @@ struct GPGProcessExecutorTests {
         }
     }
 
+    @Test("Test GPG home uses private permissions")
+    func testGPGHome_usesPrivatePermissions() throws {
+        let home = try TestGPGHome.make()
+        defer { home.cleanup() }
+
+        #expect(home.homePermissions == 0o700)
+    }
+
+    @Test("Test GPG home executes bundled GPG with isolated GNUPGHOME")
+    func testGPGHome_executesBundledGPGWithIsolatedHome() async throws {
+        let home = try TestGPGHome.make()
+        defer { home.cleanup() }
+
+        let version = try await home.execute(arguments: ["--version"])
+        #expect(version.exitCode == 0)
+        #expect((version.stdout ?? "").contains("GnuPG"))
+
+        let listKeys = try await home.execute(arguments: ["--list-keys"])
+        #expect(listKeys.exitCode == 0)
+        #expect(FileManager.default.fileExists(atPath: home.homeURL.path))
+        #expect(FileManager.default.fileExists(atPath: home.homeURL.appendingPathComponent("pubring.kbx").path))
+    }
+
+    @Test("Test GPG home cleanup removes temporary root")
+    func testGPGHome_cleanupRemovesTemporaryRoot() throws {
+        let home = try TestGPGHome.make()
+        let rootPath = home.rootURL.path
+
+        #expect(FileManager.default.fileExists(atPath: rootPath))
+
+        home.cleanup()
+
+        #expect(!FileManager.default.fileExists(atPath: rootPath))
+    }
+
     private func waitForPID(_ recorder: PIDRecorder, timeout: TimeInterval) async throws -> Int32 {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {

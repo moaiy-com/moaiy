@@ -26,14 +26,26 @@ struct TeamPolicyTemplateDescriptor: Sendable, Codable, Equatable, Identifiable 
     let isManaged: Bool
 
     var defaultKeyTypeDisplayKey: String {
-        switch defaultKeyType {
-        case 1:
-            return "key_type_rsa2048"
-        case 2:
-            return "key_type_ecc_curve25519"
-        default:
-            return "key_type_rsa4096"
+        PersistedDefaultKeyType.resolved(rawValue: defaultKeyType).displayKey
+    }
+
+    var persistedDefaultKeyType: PersistedDefaultKeyType {
+        PersistedDefaultKeyType.resolved(rawValue: defaultKeyType)
+    }
+
+    var requiresPostQuantumDefaultKeyType: Bool {
+        persistedDefaultKeyType == .postQuantumHybrid
+    }
+
+    func isDefaultKeyTypeAvailable(supportsPostQuantum: Bool) -> Bool {
+        !requiresPostQuantumDefaultKeyType || supportsPostQuantum
+    }
+
+    static func isDefaultKeyTypeAvailable(rawValue: Int, supportsPostQuantum: Bool) -> Bool {
+        guard let resolved = PersistedDefaultKeyType(rawValue: rawValue) else {
+            return false
         }
+        return resolved != .postQuantumHybrid || supportsPostQuantum
     }
 
     static func parseList(from metadata: [String: String]) -> [TeamPolicyTemplateDescriptor] {
@@ -82,6 +94,7 @@ struct SettingsView: View {
     @State private var selectedTeamPolicyTemplateID = ""
     @State private var isLoadingTeamPolicyTemplates = false
     @State private var isApplyingTeamPolicyTemplate = false
+    @State private var gpgService = GPGService.shared
     
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -105,6 +118,39 @@ struct SettingsView: View {
 
     private var selectedTeamPolicyTemplate: TeamPolicyTemplateDescriptor? {
         teamPolicyTemplates.first(where: { $0.id == selectedTeamPolicyTemplateID })
+    }
+
+    private var supportsPostQuantumDefaultKeyType: Bool {
+        gpgService.capabilities.supportsKyber
+    }
+
+    private var selectedDefaultKeyType: PersistedDefaultKeyType {
+        PersistedDefaultKeyType.resolved(rawValue: defaultKeyType)
+    }
+
+    private var isSavedPostQuantumDefaultUnavailable: Bool {
+        selectedDefaultKeyType == .postQuantumHybrid && !supportsPostQuantumDefaultKeyType
+    }
+
+    private var selectableDefaultKeyTypes: [PersistedDefaultKeyType] {
+        var options = PersistedDefaultKeyType.selectable(
+            supportsPostQuantum: supportsPostQuantumDefaultKeyType
+        )
+
+        if isSavedPostQuantumDefaultUnavailable && !options.contains(.postQuantumHybrid) {
+            options.append(.postQuantumHybrid)
+        }
+
+        return options
+    }
+
+    private var isSelectedTeamPolicyTemplateDefaultUnavailable: Bool {
+        guard let selectedTeamPolicyTemplate else {
+            return false
+        }
+        return !selectedTeamPolicyTemplate.isDefaultKeyTypeAvailable(
+            supportsPostQuantum: supportsPostQuantumDefaultKeyType
+        )
     }
     
     var body: some View {
@@ -131,20 +177,31 @@ struct SettingsView: View {
                         .fixedSize()
                     }
 
-                    HStack(alignment: .center) {
-                        Text("setting_default_key_type")
-                            .foregroundStyle(Color.moaiyTextSecondary)
+                    VStack(alignment: .leading, spacing: MoaiyUI.Spacing.xs) {
+                        HStack(alignment: .center) {
+                            Text("setting_default_key_type")
+                                .foregroundStyle(Color.moaiyTextSecondary)
 
-                        Spacer()
+                            Spacer()
 
-                        Picker("setting_default_key_type", selection: $defaultKeyType) {
-                            Text("key_type_rsa4096").tag(0)
-                            Text("key_type_rsa2048").tag(1)
-                            Text("key_type_ecc_curve25519").tag(2)
+                            Picker("setting_default_key_type", selection: $defaultKeyType) {
+                                ForEach(selectableDefaultKeyTypes) { option in
+                                    Text(LocalizedStringKey(option.displayKey))
+                                        .tag(option.rawValue)
+                                        .disabled(option == .postQuantumHybrid && !supportsPostQuantumDefaultKeyType)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .frame(minWidth: 220, idealWidth: 280, maxWidth: 340, alignment: .trailing)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .frame(minWidth: 260, idealWidth: 340, maxWidth: 380, alignment: .trailing)
+
+                        if isSavedPostQuantumDefaultUnavailable {
+                            Text("setting_default_key_type_pqc_unavailable")
+                                .font(.caption)
+                                .foregroundStyle(Color.moaiyWarning)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
 
                     Toggle(isOn: $enableKeySigningMenu) {
@@ -304,6 +361,13 @@ struct SettingsView: View {
                                             .foregroundStyle(Color.moaiyTextPrimary)
                                     }
 
+                                    if isSelectedTeamPolicyTemplateDefaultUnavailable {
+                                        Text("pro_team_policy_templates_pqc_unavailable_note")
+                                            .font(.caption)
+                                            .foregroundStyle(Color.moaiyWarning)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+
                                     HStack(alignment: .firstTextBaseline) {
                                         Text("setting_enable_key_signing")
                                             .foregroundStyle(Color.moaiyTextSecondary)
@@ -347,6 +411,7 @@ struct SettingsView: View {
                                     .buttonStyle(.borderedProminent)
                                     .disabled(
                                         selectedTeamPolicyTemplate == nil
+                                            || isSelectedTeamPolicyTemplateDefaultUnavailable
                                             || isLoadingTeamPolicyTemplates
                                             || isApplyingTeamPolicyTemplate
                                     )
@@ -544,6 +609,16 @@ struct SettingsView: View {
         guard let descriptor = teamPolicyTemplatesDescriptor else { return }
         guard let selectedTemplate = selectedTeamPolicyTemplate else { return }
 
+        guard selectedTemplate.isDefaultKeyTypeAvailable(
+            supportsPostQuantum: supportsPostQuantumDefaultKeyType
+        ) else {
+            promptAlert = .info(
+                title: LocalizedStringKey(descriptor.titleKey),
+                message: AppLocalization.string("pro_team_policy_templates_pqc_unavailable_note")
+            )
+            return
+        }
+
         isApplyingTeamPolicyTemplate = true
         defer { isApplyingTeamPolicyTemplate = false }
 
@@ -561,6 +636,7 @@ struct SettingsView: View {
                 let resolvedDefaultKeyType = Int(
                     result.metadata[TeamPolicyTemplateMetadataKey.appliedDefaultKeyType] ?? ""
                 ),
+                PersistedDefaultKeyType(rawValue: resolvedDefaultKeyType) != nil,
                 let resolvedSigningState = TeamPolicyTemplateDescriptor.parseBool(
                     result.metadata[TeamPolicyTemplateMetadataKey.appliedEnableKeySigningMenu]
                 )
@@ -568,6 +644,17 @@ struct SettingsView: View {
                 promptAlert = .failure(
                     title: "pro_feature_locked_title",
                     message: AppLocalization.string("pro_team_policy_templates_operation_failed_message")
+                )
+                return
+            }
+
+            guard TeamPolicyTemplateDescriptor.isDefaultKeyTypeAvailable(
+                rawValue: resolvedDefaultKeyType,
+                supportsPostQuantum: supportsPostQuantumDefaultKeyType
+            ) else {
+                promptAlert = .info(
+                    title: LocalizedStringKey(descriptor.titleKey),
+                    message: AppLocalization.string("pro_team_policy_templates_pqc_unavailable_note")
                 )
                 return
             }

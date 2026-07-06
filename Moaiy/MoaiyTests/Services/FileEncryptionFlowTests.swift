@@ -97,6 +97,77 @@ struct FileEncryptionFlowTests {
         }
     }
 
+    @Test("PQC file encrypt/decrypt roundtrip succeeds in isolated homes")
+    func pqcFileEncryptDecrypt_roundtrip() async throws {
+        let senderHome = try TestGPGHome.make(prefix: "p6-file-sender")
+        let recipientHome = try TestGPGHome.make(prefix: "p6-file-recipient")
+        defer {
+            senderHome.cleanup()
+            recipientHome.cleanup()
+        }
+
+        try await senderHome.requireKyberSupport()
+        try await recipientHome.requireKyberSupport()
+
+        let fileManager = FileManager.default
+        let identity = makeIdentity(seed: "pqc-file")
+        let plaintext = "Moaiy PQC file flow \(UUID().uuidString)\nline-2"
+        let tempDirectory = try makeTempDirectory(label: "pqc-file-roundtrip")
+
+        defer {
+            try? fileManager.removeItem(at: tempDirectory)
+        }
+
+        let fingerprint = try await recipientHome.generatePostQuantumHybridKey(
+            name: identity.name,
+            email: identity.email,
+            passphrase: identity.passphrase
+        )
+
+        let publicKey = try await recipientHome.exportPublicKey(keyID: fingerprint)
+        try await senderHome.importArmor(publicKey)
+
+        let sourceURL = tempDirectory.appendingPathComponent("plain.txt")
+        let encryptedURL = tempDirectory.appendingPathComponent("plain.txt.moy")
+        let decryptedURL = tempDirectory.appendingPathComponent("plain.decrypted.txt")
+        let wrongPassphraseURL = tempDirectory.appendingPathComponent("wrong-passphrase.txt")
+
+        try Data(plaintext.utf8).write(to: sourceURL, options: .atomic)
+
+        let encryptedOutputURL = try await senderHome.encryptFile(
+            sourceURL: sourceURL,
+            destinationURL: encryptedURL,
+            recipients: [fingerprint],
+            allowUntrustedRecipients: true
+        )
+        #expect(fileManager.fileExists(atPath: encryptedOutputURL.path))
+
+        let decryptedOutputURL = try await recipientHome.decryptFile(
+            sourceURL: encryptedOutputURL,
+            destinationURL: decryptedURL,
+            passphrase: identity.passphrase
+        )
+        #expect(fileManager.fileExists(atPath: decryptedOutputURL.path))
+
+        let decryptedText = try String(contentsOf: decryptedOutputURL, encoding: .utf8)
+        #expect(normalized(decryptedText) == normalized(plaintext))
+
+        await recipientHome.killAgent()
+
+        let wrongPassphraseResult = try await recipientHome.decryptFileResult(
+            sourceURL: encryptedOutputURL,
+            destinationURL: wrongPassphraseURL,
+            passphrase: "\(identity.passphrase)-wrong"
+        )
+        #expect(wrongPassphraseResult.exitCode != 0)
+        #expect(fileManager.fileExists(atPath: wrongPassphraseURL.path) == false)
+
+        guard case .invalidPassphrase? = GPGService.credentialFailureError(from: wrongPassphraseResult) else {
+            Issue.record("Expected wrong PQC file passphrase to map to invalidPassphrase")
+            return
+        }
+    }
+
     @Test("decryptFile respects preferred secret key and fails when mismatched")
     func decryptFile_preferredSecretKey_mismatchFails() async throws {
         let service = GPGService.shared

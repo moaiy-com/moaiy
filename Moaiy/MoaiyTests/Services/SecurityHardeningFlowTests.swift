@@ -598,6 +598,70 @@ struct SecurityHardeningFlowTests {
         }
     }
 
+    @Test("Migration from external PQC keyring preserves post-quantum classification")
+    func migration_externalPQCKeyring_preservesPostQuantumClassification() async throws {
+        let service = GPGService.shared
+        try await waitForServiceReady(service)
+
+        guard service.capabilities.supportsKyber else {
+            throw GPGError.unsupportedKeyType("Kyber-768")
+        }
+
+        let externalHome = try TestGPGHome.make(prefix: "p7-migration-pqc")
+        defer {
+            externalHome.cleanup()
+        }
+
+        try await externalHome.requireKyberSupport()
+        let identity = makeIdentity(seed: "migration-pqc")
+        var migratedFingerprint: String?
+
+        do {
+            let fingerprint = try await externalHome.generatePostQuantumHybridKey(
+                name: identity.name,
+                email: identity.email,
+                passphrase: nil
+            )
+            migratedFingerprint = fingerprint
+
+            let sourceSecretKeys = try await service.listKeys(
+                atExternalGPGHome: externalHome.homeURL,
+                secretOnly: true
+            )
+            guard let sourceKey = sourceSecretKeys.first(where: { $0.fingerprint == fingerprint }) else {
+                Issue.record("Expected external PQC secret key to be visible before migration")
+                return
+            }
+            #expect(sourceKey.isPostQuantumHybrid)
+
+            let migrationResult = try await service.migrateKeys(fromExternalGPGHome: externalHome.homeURL)
+            #expect(migrationResult.sourcePublicKeyCount >= 1)
+            #expect(migrationResult.sourceSecretKeyCount >= 1)
+            #expect(migrationResult.secretKeysMigrated)
+            #expect((migrationResult.imported + migrationResult.unchanged) >= 1)
+
+            let migratedSecretKeys = try await service.listKeys(secretOnly: true)
+            guard let migratedKey = migratedSecretKeys.first(where: { $0.fingerprint == fingerprint }) else {
+                Issue.record("Expected migrated PQC secret key to appear in the app keyring")
+                return
+            }
+            #expect(migratedKey.isSecret)
+            #expect(migratedKey.isPostQuantumHybrid)
+            let hasPostQuantumEncryptionSubkey = migratedKey.algorithmSummary.encryptionSubkeys
+                .contains(where: { $0.isKyber768 })
+            #expect(hasPostQuantumEncryptionSubkey)
+        } catch {
+            if let migratedFingerprint {
+                await cleanupKey(fingerprint: migratedFingerprint, service: service)
+            }
+            throw error
+        }
+
+        if let migratedFingerprint {
+            await cleanupKey(fingerprint: migratedFingerprint, service: service)
+        }
+    }
+
     @Test("Subkey lifecycle supports add update disable enable and revoke")
     func subkeyLifecycle_addUpdateDisableEnableAndRevoke() async throws {
         let service = GPGService.shared

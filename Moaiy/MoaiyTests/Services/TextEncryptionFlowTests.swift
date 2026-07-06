@@ -54,6 +54,59 @@ struct TextEncryptionFlowTests {
         }
     }
 
+    @Test("PQC text encrypt/decrypt roundtrip succeeds in isolated homes")
+    func pqcTextEncryptDecrypt_roundtrip() async throws {
+        let senderHome = try TestGPGHome.make(prefix: "p6-text-sender")
+        let recipientHome = try TestGPGHome.make(prefix: "p6-text-recipient")
+        defer {
+            senderHome.cleanup()
+            recipientHome.cleanup()
+        }
+
+        try await senderHome.requireKyberSupport()
+        try await recipientHome.requireKyberSupport()
+
+        let identity = makeIdentity(seed: "pqc-text")
+        let plaintext = "Moaiy PQC text flow \(UUID().uuidString)"
+
+        let fingerprint = try await recipientHome.generatePostQuantumHybridKey(
+            name: identity.name,
+            email: identity.email,
+            passphrase: identity.passphrase
+        )
+
+        let publicKey = try await recipientHome.exportPublicKey(keyID: fingerprint)
+        #expect(publicKey.contains("BEGIN PGP PUBLIC KEY BLOCK"))
+
+        try await senderHome.importArmor(publicKey)
+
+        let ciphertext = try await senderHome.encryptText(
+            plaintext,
+            recipients: [fingerprint],
+            allowUntrustedRecipients: true
+        )
+        #expect(ciphertext.contains("BEGIN PGP MESSAGE"))
+
+        let decrypted = try await recipientHome.decryptText(
+            ciphertext,
+            passphrase: identity.passphrase
+        )
+        #expect(normalized(decrypted) == normalized(plaintext))
+
+        await recipientHome.killAgent()
+
+        let wrongPassphraseResult = try await recipientHome.decryptTextResult(
+            ciphertext,
+            passphrase: "\(identity.passphrase)-wrong"
+        )
+        #expect(wrongPassphraseResult.exitCode != 0)
+
+        guard case .invalidPassphrase? = GPGService.credentialFailureError(from: wrongPassphraseResult) else {
+            Issue.record("Expected wrong PQC passphrase to map to invalidPassphrase")
+            return
+        }
+    }
+
     @Test("Text decrypt fails with invalid passphrase")
     func textDecrypt_invalidPassphrase_fails() async throws {
         let service = GPGService.shared

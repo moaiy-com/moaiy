@@ -22,6 +22,8 @@ struct CreateKeyView: View {
     @State private var showSuccess = false
     @State private var createdKeyFingerprint: String?
     @State private var promptAlert: PromptAlertContent?
+    @State private var selectedDefaultKeyType: PersistedDefaultKeyType = .rsa4096
+    @State private var gpgService = GPGService.shared
 
     var body: some View {
         VStack(spacing: 16) {
@@ -49,6 +51,15 @@ struct CreateKeyView: View {
         }
         .moaiyModalAdaptiveSize(minWidth: 500, idealWidth: 580, maxWidth: 720, minHeight: 520, idealHeight: 640)
         .moaiyPromptAlertHost(alert: $promptAlert)
+        .onAppear {
+            syncSelectedKeyTypeFromDefaults()
+        }
+        .onChange(of: defaultKeyTypeSetting) { _, _ in
+            syncSelectedKeyTypeFromDefaults()
+        }
+        .onChange(of: gpgService.capabilities.supportsKyber) { _, _ in
+            syncSelectedKeyTypeFromDefaults()
+        }
     }
 
     private var headerView: some View {
@@ -90,15 +101,16 @@ struct CreateKeyView: View {
                         .textContentType(.emailAddress)
                         .autocorrectionDisabled()
 
-                    HStack {
-                        Text("setting_default_key_type")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text(selectedKeyType.rawValue)
-                            .fontWeight(.medium)
+                    Picker("create_key_type_label", selection: $selectedDefaultKeyType) {
+                        ForEach(selectableDefaultKeyTypes) { option in
+                            Text(LocalizedStringKey(option.displayKey))
+                                .tag(option)
+                        }
                     }
+                    .pickerStyle(.menu)
                 } footer: {
-                    Text("create_key_default_type_hint")
+                    Text(LocalizedStringKey(keyTypeFooterKey))
+                        .foregroundStyle(isSavedPostQuantumDefaultUnavailable ? Color.moaiyWarning : .secondary)
                 }
 
                 Section {
@@ -170,17 +182,46 @@ struct CreateKeyView: View {
     }
 
     private var selectedKeyType: KeyType {
-        switch defaultKeyTypeSetting {
-        case 1:
-            return .rsa2048
-        case 2:
-            return .ecc
-        default:
-            return .rsa4096
+        selectedDefaultKeyType.keyType
+    }
+
+    private var persistedDefaultKeyType: PersistedDefaultKeyType {
+        PersistedDefaultKeyType.resolved(rawValue: defaultKeyTypeSetting)
+    }
+
+    private var supportsPostQuantumKeyType: Bool {
+        gpgService.capabilities.supportsKyber
+    }
+
+    private var selectableDefaultKeyTypes: [PersistedDefaultKeyType] {
+        PersistedDefaultKeyType.selectable(supportsPostQuantum: supportsPostQuantumKeyType)
+    }
+
+    private var selectedKeyTypeIsSupported: Bool {
+        selectedDefaultKeyType != .postQuantumHybrid || supportsPostQuantumKeyType
+    }
+
+    private var isSavedPostQuantumDefaultUnavailable: Bool {
+        persistedDefaultKeyType == .postQuantumHybrid && !supportsPostQuantumKeyType
+    }
+
+    private var keyTypeFooterKey: String {
+        if selectedDefaultKeyType == .postQuantumHybrid {
+            return "create_key_pqc_compatibility_note"
         }
+
+        if isSavedPostQuantumDefaultUnavailable {
+            return "create_key_pqc_unavailable_note"
+        }
+
+        return "create_key_default_type_hint"
     }
 
     private var canCreate: Bool {
+        guard selectedKeyTypeIsSupported else {
+            return false
+        }
+
         guard !name.isEmpty, !email.isEmpty, isValidEmail(email) else {
             return false
         }
@@ -196,6 +237,10 @@ struct CreateKeyView: View {
     }
 
     private func handleCreateButtonTapped() {
+        guard canCreate else {
+            return
+        }
+
         errorMessage = nil
         if password.isEmpty {
             promptAlert = PromptAlertContent.destructiveConfirmation(
@@ -210,6 +255,11 @@ struct CreateKeyView: View {
     }
 
     private func createKey() {
+        guard selectedKeyTypeIsSupported else {
+            errorMessage = AppLocalization.string("create_key_pqc_unavailable_note")
+            return
+        }
+
         isCreating = true
         errorMessage = nil
 
@@ -238,6 +288,14 @@ struct CreateKeyView: View {
     private func isValidEmail(_ email: String) -> Bool {
         let emailPattern = #"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"#
         return email.range(of: emailPattern, options: .regularExpression) != nil
+    }
+
+    private func syncSelectedKeyTypeFromDefaults() {
+        if selectableDefaultKeyTypes.contains(persistedDefaultKeyType) {
+            selectedDefaultKeyType = persistedDefaultKeyType
+        } else {
+            selectedDefaultKeyType = .rsa4096
+        }
     }
 }
 

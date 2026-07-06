@@ -88,7 +88,9 @@ final class KeyManagementViewModel {
 
         // Algorithm filter
         if let algorithm = filterAlgorithm {
-            result = result.filter { $0.algorithm.localizedCaseInsensitiveContains(algorithm) }
+            result = result.filter { key in
+                keyMatchesAlgorithmFilter(key, filter: algorithm)
+            }
         }
 
         // Expired keys filter
@@ -100,7 +102,7 @@ final class KeyManagementViewModel {
     }
 
     var availableAlgorithms: [String] {
-        let algorithms = Set(keys.map { $0.algorithm })
+        let algorithms = Set(keys.map(\.displayKeyType))
         return Array(algorithms).sorted()
     }
     
@@ -114,6 +116,17 @@ final class KeyManagementViewModel {
     
     var hasKeys: Bool {
         !keys.isEmpty
+    }
+
+    private func keyMatchesAlgorithmFilter(_ key: GPGKey, filter: String) -> Bool {
+        [
+            key.displayKeyType,
+            key.detailedKeyType,
+            key.technicalKeyType,
+            key.algorithm
+        ].contains { candidate in
+            candidate.localizedCaseInsensitiveContains(filter)
+        }
     }
     
     // MARK: - Initialization
@@ -177,7 +190,8 @@ final class KeyManagementViewModel {
                         expiresAt: secretKey.expiresAt,
                         trustLevel: secretKey.trustLevel,
                         secretMaterial: secretKey.secretMaterial,
-                        cardSerialNumber: secretKey.cardSerialNumber
+                        cardSerialNumber: secretKey.cardSerialNumber,
+                        algorithmSummary: secretKey.algorithmSummary
                     )
                 } else {
                     allKeys.append(secretKey)

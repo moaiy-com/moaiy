@@ -297,7 +297,7 @@ private struct KeyStatisticsSnapshot {
                 trustedKeys += 1
             }
 
-            algorithmCounts[key.algorithm, default: 0] += 1
+            algorithmCounts[key.displayKeyType, default: 0] += 1
             trustCounts[key.trustLevel, default: 0] += 1
 
             guard let expiresAt = key.expiresAt else {

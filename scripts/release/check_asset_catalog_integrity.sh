@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT_FILE="$ROOT_DIR/Moaiy/Moaiy.xcodeproj/project.pbxproj"
 ASSET_ICON_DIR="$ROOT_DIR/Moaiy/Resources/Assets.xcassets/moaiy_icon.icon"
+APP_ICONSET_DIR="$ROOT_DIR/Moaiy/Resources/Assets.xcassets/moaiy_icon.appiconset"
 LEGACY_ICON_DIR="$ROOT_DIR/Moaiy/Resources/moaiy_icon.icon"
 
 failed=0
@@ -35,6 +36,32 @@ fi
 if [[ ! -d "$ASSET_ICON_DIR" ]]; then
   echo "ERROR: expected icon asset directory missing: $ASSET_ICON_DIR"
   failed=1
+fi
+
+if [[ ! -d "$APP_ICONSET_DIR" ]]; then
+  echo "ERROR: expected generated app icon set missing: $APP_ICONSET_DIR"
+  failed=1
+else
+  required_icon_files=(
+    Contents.json
+    icon_16x16.png
+    icon_16x16@2x.png
+    icon_32x32.png
+    icon_32x32@2x.png
+    icon_128x128.png
+    icon_128x128@2x.png
+    icon_256x256.png
+    icon_256x256@2x.png
+    icon_512x512.png
+    icon_512x512@2x.png
+  )
+
+  for icon_file in "${required_icon_files[@]}"; do
+    if [[ ! -f "$APP_ICONSET_DIR/$icon_file" ]]; then
+      echo "ERROR: generated app icon set missing file: $APP_ICONSET_DIR/$icon_file"
+      failed=1
+    fi
+  done
 fi
 
 if [[ -d "$LEGACY_ICON_DIR" ]]; then

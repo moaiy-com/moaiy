@@ -118,7 +118,7 @@ copy_gpg_executables() {
             cp "$gpg_bin/$exe" "$TEMP_BUNDLE/bin/"
             chmod +x "$TEMP_BUNDLE/bin/$exe"
             success "Copied: $exe"
-            ((copied_count++))
+            ((copied_count+=1))
         else
             warning "Not found (optional): $exe"
         fi
@@ -160,7 +160,7 @@ copy_libraries() {
         if [ -n "$actual_path" ] && [ -f "$actual_path" ]; then
             cp "$actual_path" "$TEMP_BUNDLE/lib/$lib_name"
             success "Copied: $lib_name"
-            ((lib_count++))
+            ((lib_count+=1))
         else
             warning "Library not found: $lib_name (from $dep)"
         fi
@@ -190,7 +190,7 @@ copy_libraries() {
                 if [ ! -f "$TEMP_BUNDLE/lib/$target_name" ]; then
                     cp "$lib_path" "$TEMP_BUNDLE/lib/$target_name"
                     success "Copied: $target_name"
-                    ((lib_count++))
+                    ((lib_count+=1))
                 fi
                 found=1
                 break
@@ -291,7 +291,7 @@ sign_binaries() {
             # Sign with ad-hoc signature
             if codesign -s - "$lib" 2>/dev/null; then
                 success "Signed: $lib_name"
-                ((sign_count++))
+                ((sign_count+=1))
             else
                 warning "Failed to sign: $lib_name"
             fi
@@ -309,7 +309,7 @@ sign_binaries() {
             # Sign with ad-hoc signature
             if codesign -s - "$exe" 2>/dev/null; then
                 success "Signed: $exe_name"
-                ((sign_count++))
+                ((sign_count+=1))
             else
                 warning "Failed to sign: $exe_name"
             fi

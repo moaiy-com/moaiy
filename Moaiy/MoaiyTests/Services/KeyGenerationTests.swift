@@ -46,6 +46,16 @@ struct KeyGenerationTests {
         #expect(keyType.gpgSubkeyType == "ECDH")
         #expect(keyType.curve == "cv25519")
     }
+
+    @Test("PQC generation metadata is quick mode")
+    func pqc_generationMetadata() async throws {
+        let keyType = KeyType.postQuantumHybrid
+
+        #expect(keyType.generationMode == .quick)
+        #expect(keyType.gpgKeyType == "pqc")
+        #expect(keyType.gpgSubkeyType == "default")
+        #expect(keyType.subkeyLength == 768)
+    }
     
     // MARK: - Key Generation Input Validation Tests
     
@@ -133,6 +143,16 @@ struct KeyGenerationTests {
         #expect(fingerprint == "ENCRYPTED1234567890ABCDEF1234567890AB")
         #expect(mockService.lastGenerateKeyParams?.passphrase == passphrase)
     }
+
+    @Test("PQC quick generation creates unprotected key in isolated GNUPGHOME")
+    func pqcQuickGeneration_emptyPassphrase_isolatedHome() async throws {
+        try await assertPostQuantumHybridGeneration(passphrase: nil)
+    }
+
+    @Test("PQC quick generation creates passphrase protected key in isolated GNUPGHOME")
+    func pqcQuickGeneration_withPassphrase_isolatedHome() async throws {
+        try await assertPostQuantumHybridGeneration(passphrase: "moaiy-pqc-test-passphrase")
+    }
     
     // MARK: - KeyType Selection Tests
     
@@ -170,6 +190,45 @@ struct KeyGenerationTests {
         let fingerprint = "ABCDEF1234567890ABCDEF1234567890ABCDEF12"
         
         #expect(fingerprint.allSatisfy { $0.isHexDigit })
+    }
+
+    private func assertPostQuantumHybridGeneration(passphrase: String?) async throws {
+        let home = try TestGPGHome.make(prefix: "moaiy-test-pqc-generation")
+        defer {
+            home.cleanup()
+        }
+
+        let userID = "Moaiy PQC Test \(UUID().uuidString) <moaiy-pqc@example.test>"
+        let result = try await home.execute(
+            arguments: GPGCommandBuilder.postQuantumHybridKeyGenerationArguments(userID: userID),
+            input: GPGCommandBuilder.postQuantumHybridKeyGenerationInput(passphrase: passphrase),
+            timeout: 120
+        )
+
+        guard result.exitCode == 0 else {
+            Issue.record("PQC key generation should succeed: \(result.stderr ?? "missing stderr")")
+            await home.killAgent()
+            return
+        }
+
+        guard let output = result.stdout,
+              let fingerprint = GPGService.keyCreatedFingerprint(from: output) else {
+            Issue.record("PQC key generation should emit KEY_CREATED status")
+            await home.killAgent()
+            return
+        }
+
+        let listResult = try await home.execute(
+            arguments: ["--with-colons", "--fixed-list-mode", "--list-keys"],
+            timeout: 10
+        )
+        let keyListOutput = listResult.stdout ?? ""
+
+        #expect(listResult.exitCode == 0)
+        #expect(keyListOutput.contains(fingerprint))
+        #expect(keyListOutput.contains("ky768"))
+
+        await home.killAgent()
     }
 }
 

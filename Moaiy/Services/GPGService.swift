@@ -223,6 +223,51 @@ actor GPGProcessExecutor {
     }
 }
 
+struct GPGCapabilities: Equatable {
+    let version: String?
+    let supportsKyber: Bool
+
+    static let unsupported = GPGCapabilities(version: nil, supportsKyber: false)
+
+    static func parseListConfig(_ output: String) -> GPGCapabilities {
+        var version: String?
+        var publicKeyAlgorithmIDs = Set<String>()
+        var publicKeyAlgorithmNames = Set<String>()
+
+        for rawLine in output.split(whereSeparator: \.isNewline) {
+            let fields = rawLine.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+            guard fields.count >= 3, fields[0] == "cfg" else {
+                continue
+            }
+
+            let key = fields[1].lowercased()
+            let values = fields[2]
+                .split(separator: ";", omittingEmptySubsequences: true)
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            switch key {
+            case "version":
+                version = fields[2].trimmingCharacters(in: .whitespacesAndNewlines)
+            case "pubkey":
+                publicKeyAlgorithmIDs.formUnion(values)
+            case "pubkeyname":
+                publicKeyAlgorithmNames.formUnion(values.map { $0.lowercased() })
+            default:
+                continue
+            }
+        }
+
+        let supportsKyberByName = publicKeyAlgorithmNames.contains { $0.contains("kyber") }
+        let supportsKyberByID = publicKeyAlgorithmIDs.contains("8")
+
+        return GPGCapabilities(
+            version: version?.isEmpty == false ? version : nil,
+            supportsKyber: supportsKyberByName || supportsKyberByID
+        )
+    }
+}
+
 /// Service class for GPG operations
 @MainActor
 @Observable
@@ -239,6 +284,7 @@ final class GPGService: SubkeyManaging {
     private(set) var isReady = false
     private(set) var gpgVersion: String?
     private(set) var isUsingExternalGPGHome = false
+    private(set) var capabilities = GPGCapabilities.unsupported
     
     // MARK: - Private Properties
     
@@ -313,10 +359,13 @@ final class GPGService: SubkeyManaging {
                 logger.info("GPG home directory: \(self.gpgHome?.path ?? "nil")")
                 try await verifyGPG()
                 logger.info("GPG version: \(self.gpgVersion ?? "unknown")")
+                self.capabilities = await detectCapabilities()
+                logger.info("GPG Kyber support: \(self.capabilities.supportsKyber)")
                 self.isReady = true
                 logger.info("Setup complete, isReady = true")
             } catch {
                 logger.error("Setup failed: \(error.localizedDescription)")
+                self.capabilities = .unsupported
                 self.isReady = false
             }
         }
@@ -460,6 +509,25 @@ final class GPGService: SubkeyManaging {
         if let output = result.stdout {
             let version = output.components(separatedBy: "\n").first ?? "Unknown"
             self.gpgVersion = version
+        }
+    }
+
+    private func detectCapabilities() async -> GPGCapabilities {
+        do {
+            let result = try await executeGPG(
+                arguments: ["--with-colons", "--list-config"],
+                timeout: 10
+            )
+
+            guard result.exitCode == 0 else {
+                logger.error("GPG capability detection failed with exit code \(result.exitCode)")
+                return .unsupported
+            }
+
+            return GPGCapabilities.parseListConfig(result.stdout ?? "")
+        } catch {
+            logger.error("GPG capability detection failed: \(error.localizedDescription)")
+            return .unsupported
         }
     }
 
@@ -639,6 +707,10 @@ final class GPGService: SubkeyManaging {
         )
     }
 
+    func listKeys(atExternalGPGHome homeURL: URL, secretOnly: Bool = false) async throws -> [GPGKey] {
+        try await listKeys(at: homeURL, secretOnly: secretOnly)
+    }
+
     func migrateKeys(fromExternalGPGHome sourceHomeURL: URL) async throws -> KeyMigrationResult {
         let snapshot = try await inspectKeyring(at: sourceHomeURL)
 
@@ -697,7 +769,7 @@ final class GPGService: SubkeyManaging {
     /// - Parameters:
     ///   - name: User's name
     ///   - email: User's email
-    ///   - keyType: Key type (RSA-4096, RSA-2048, ECC)
+    ///   - keyType: Key type (RSA-4096, RSA-2048, ECC, or PQC hybrid)
     ///   - passphrase: Optional passphrase for the key
     /// - Returns: Fingerprint of the generated key
     func generateKey(name: String, email: String, keyType: KeyType, passphrase: String? = nil) async throws -> String {
@@ -706,6 +778,35 @@ final class GPGService: SubkeyManaging {
         let operationStartedAt = Date()
         let beforeFingerprints = Set(try await listKeys(secretOnly: false).map(\.fingerprint))
 
+        switch keyType.generationMode {
+        case .batch:
+            return try await generateClassicalKey(
+                name: name,
+                email: email,
+                keyType: keyType,
+                passphrase: passphrase,
+                operationStartedAt: operationStartedAt,
+                beforeFingerprints: beforeFingerprints
+            )
+        case .quick:
+            return try await generatePostQuantumHybridKey(
+                name: name,
+                email: email,
+                passphrase: passphrase,
+                operationStartedAt: operationStartedAt,
+                beforeFingerprints: beforeFingerprints
+            )
+        }
+    }
+
+    private func generateClassicalKey(
+        name: String,
+        email: String,
+        keyType: KeyType,
+        passphrase: String?,
+        operationStartedAt: Date,
+        beforeFingerprints: Set<String>
+    ) async throws -> String {
         // Build key generation parameters
         let keyParams = buildKeyGenerationParams(
             name: name,
@@ -724,26 +825,79 @@ final class GPGService: SubkeyManaging {
             throw GPGError.keyGenerationFailed(result.stderr ?? "Unknown error (exit code: \(result.exitCode))")
         }
 
-        // Extract fingerprint from output
         guard let output = result.stdout else {
             throw GPGError.keyGenerationFailed("No output from GPG")
         }
 
-        // Try to find KEY_CREATED pattern: [GNUPG:] KEY_CREATED <type> <fingerprint>
-        // Example: [GNUPG:] KEY_CREATED P 1A2B3C4D5E6F7A8B9C0D1E2F3A4B5C6D7E8F9A0B
-        let lines = output.components(separatedBy: "\n")
-        for line in lines {
-            if line.contains("KEY_CREATED") {
-                let parts = line.components(separatedBy: " ")
-                // KEY_CREATED has format: [GNUPG:] KEY_CREATED <type> <fingerprint>
-                if parts.count >= 4 {
-                    let fingerprint = parts[3].trimmingCharacters(in: .whitespaces)
-                    if fingerprint.count == 40 {
-                        logger.info("Generated key with fingerprint: \(fingerprint)")
-                        return fingerprint
-                    }
-                }
+        return try await resolveGeneratedKeyFingerprint(
+            from: output,
+            email: email,
+            operationStartedAt: operationStartedAt,
+            beforeFingerprints: beforeFingerprints
+        )
+    }
+
+    private func generatePostQuantumHybridKey(
+        name: String,
+        email: String,
+        passphrase: String?,
+        operationStartedAt: Date,
+        beforeFingerprints: Set<String>
+    ) async throws -> String {
+        try Self.validatePostQuantumHybridGenerationSupport(capabilities: capabilities)
+
+        let userID = quickGenerationUserID(name: name, email: email)
+        let result = try await executeGPG(
+            arguments: GPGCommandBuilder.postQuantumHybridKeyGenerationArguments(userID: userID),
+            input: GPGCommandBuilder.postQuantumHybridKeyGenerationInput(passphrase: passphrase),
+            timeout: 120
+        )
+
+        if result.exitCode != 0 {
+            throw GPGError.keyGenerationFailed(result.stderr ?? "Unknown error (exit code: \(result.exitCode))")
+        }
+
+        guard let output = result.stdout else {
+            throw GPGError.keyGenerationFailed("No output from GPG")
+        }
+
+        return try await resolveGeneratedKeyFingerprint(
+            from: output,
+            email: email,
+            operationStartedAt: operationStartedAt,
+            beforeFingerprints: beforeFingerprints
+        )
+    }
+
+    nonisolated static func validatePostQuantumHybridGenerationSupport(capabilities: GPGCapabilities) throws {
+        guard capabilities.supportsKyber else {
+            throw GPGError.unsupportedKeyType("Kyber-768")
+        }
+    }
+
+    nonisolated static func keyCreatedFingerprint(from output: String) -> String? {
+        for line in output.split(whereSeparator: \.isNewline) where line.contains("KEY_CREATED") {
+            let parts = line.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+            guard parts.count >= 4 else { continue }
+
+            let fingerprint = parts[3].trimmingCharacters(in: .whitespacesAndNewlines)
+            if fingerprint.count == 40, fingerprint.allSatisfy({ $0.isHexDigit }) {
+                return fingerprint
             }
+        }
+
+        return nil
+    }
+
+    private func resolveGeneratedKeyFingerprint(
+        from output: String,
+        email: String,
+        operationStartedAt: Date,
+        beforeFingerprints: Set<String>
+    ) async throws -> String {
+        if let fingerprint = Self.keyCreatedFingerprint(from: output) {
+            logger.info("Generated key with fingerprint: \(fingerprint)")
+            return fingerprint
         }
 
         // If we get here, the key might have been created but output format is different
@@ -763,6 +917,19 @@ final class GPGService: SubkeyManaging {
 
         logger.error("Could not find KEY_CREATED pattern in GPG output")
         throw GPGError.keyGenerationFailed("Failed to get key fingerprint")
+    }
+
+    private func quickGenerationUserID(name: String, email: String) -> String {
+        let sanitizedName = sanitizeBatchField(name)
+        let sanitizedEmail = sanitizeBatchField(email)
+
+        if sanitizedName.isEmpty {
+            return sanitizedEmail
+        }
+        if sanitizedEmail.isEmpty {
+            return sanitizedName
+        }
+        return "\(sanitizedName) <\(sanitizedEmail)>"
     }
     
     /// Import a key from file
@@ -1108,7 +1275,7 @@ final class GPGService: SubkeyManaging {
 
         let result = try await executeGPG(arguments: arguments, input: input)
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
@@ -1147,7 +1314,7 @@ final class GPGService: SubkeyManaging {
 
         let result = try await executeGPG(arguments: arguments, input: input)
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
@@ -1172,7 +1339,7 @@ final class GPGService: SubkeyManaging {
             if result.exitCode == 0 {
                 return
             }
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
@@ -1184,7 +1351,7 @@ final class GPGService: SubkeyManaging {
         if unprotectedResult.exitCode == 0 {
             return
         }
-        if credentialFailureError(from: unprotectedResult) == nil {
+        if Self.credentialFailureError(from: unprotectedResult) == nil {
             throw GPGError.executionFailed(unprotectedResult.stderr ?? "Exit code \(unprotectedResult.exitCode)")
         }
 
@@ -1193,7 +1360,7 @@ final class GPGService: SubkeyManaging {
         if protectedResult.exitCode == 0 {
             return
         }
-        if let credentialError = credentialFailureError(from: protectedResult) {
+        if let credentialError = Self.credentialFailureError(from: protectedResult) {
             throw credentialError
         }
         throw GPGError.executionFailed(protectedResult.stderr ?? "Exit code \(protectedResult.exitCode)")
@@ -1265,7 +1432,7 @@ final class GPGService: SubkeyManaging {
         )
 
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
@@ -1330,7 +1497,7 @@ final class GPGService: SubkeyManaging {
         )
 
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
@@ -1393,7 +1560,7 @@ final class GPGService: SubkeyManaging {
         )
 
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
@@ -1679,7 +1846,7 @@ final class GPGService: SubkeyManaging {
         )
 
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
 
@@ -2029,7 +2196,7 @@ final class GPGService: SubkeyManaging {
         )
 
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
 
@@ -2426,7 +2593,7 @@ final class GPGService: SubkeyManaging {
         )
 
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Failed to generate revocation certificate")
@@ -2722,17 +2889,17 @@ final class GPGService: SubkeyManaging {
             || normalized.contains("ecdsa")
     }
 
-    private func credentialFailureError(from result: GPGExecutionResult) -> GPGError? {
-        if isBadPIN(result) {
+    nonisolated static func credentialFailureError(from result: GPGExecutionResult) -> GPGError? {
+        if Self.isBadPIN(result) {
             return .smartCardPinInvalid
         }
-        if isBadPassphrase(result) {
+        if Self.isBadPassphrase(result) {
             return .invalidPassphrase
         }
         return nil
     }
 
-    private func isBadPassphrase(_ result: GPGExecutionResult) -> Bool {
+    private nonisolated static func isBadPassphrase(_ result: GPGExecutionResult) -> Bool {
         let stderr = result.stderr ?? ""
         let stdout = result.stdout ?? ""
         let combined = "\(stderr)\n\(stdout)".lowercased()
@@ -2743,7 +2910,7 @@ final class GPGService: SubkeyManaging {
             || combined.contains("no passphrase given")
     }
 
-    private func isBadPIN(_ result: GPGExecutionResult) -> Bool {
+    private nonisolated static func isBadPIN(_ result: GPGExecutionResult) -> Bool {
         let stderr = result.stderr ?? ""
         let stdout = result.stdout ?? ""
         let combined = "\(stderr)\n\(stdout)".lowercased()
@@ -3423,7 +3590,7 @@ final class GPGService: SubkeyManaging {
             return false
         }
 
-        if credentialFailureError(from: result) != nil {
+        if Self.credentialFailureError(from: result) != nil {
             return true
         }
 
@@ -3761,6 +3928,7 @@ final class GPGService: SubkeyManaging {
             case "sub", "ssb":
                 // Ignore subkey fingerprints for key-level operations (edit uid/expiry).
                 isAwaitingPrimaryFingerprint = false
+                currentKey?.absorbEncryptionSubkey(encryptionSubkeyAlgorithmMetadata(from: fields))
                 if recordType == "ssb" {
                     currentKey?.absorbSecretMaterialToken(fields.count > 14 ? fields[14] : nil)
                 }
@@ -3794,6 +3962,22 @@ final class GPGService: SubkeyManaging {
         }
         
         return keys
+    }
+
+    private func encryptionSubkeyAlgorithmMetadata(from fields: [String]) -> GPGSubkeyAlgorithmMetadata? {
+        let usages = parseSubkeyUsages(from: fields)
+        guard usages.contains(.encrypt) else {
+            return nil
+        }
+
+        let algorithmID = fields.count > 3 ? fields[3] : ""
+        let curveOrToken = fields.indices.contains(16) ? fields[16] : nil
+        return GPGSubkeyAlgorithmMetadata(
+            algorithmID: algorithmID,
+            algorithmName: subkeyAlgorithmName(from: algorithmID),
+            keyLength: Int(fields.count > 2 ? fields[2] : "") ?? 0,
+            curveOrToken: curveOrToken
+        )
     }
 
     private func parseSubkeyList(_ output: String) -> [GPGSubkey] {
@@ -3910,6 +4094,8 @@ final class GPGService: SubkeyManaging {
         switch code {
         case "1":
             return "RSA"
+        case "8":
+            return "Kyber"
         case "17":
             return "DSA"
         case "18":
@@ -3990,6 +4176,8 @@ final class GPGService: SubkeyManaging {
             Expire-Date: 0
 
             """
+        case .postQuantumHybrid:
+            preconditionFailure("Post-quantum hybrid keys use quick generation")
         }
 
         if let passphrase = passphrase, !passphrase.isEmpty {
@@ -4290,6 +4478,24 @@ enum RevocationReason: String, CaseIterable, Identifiable {
 }
 
 enum GPGCommandBuilder {
+    static func postQuantumHybridKeyGenerationArguments(userID: String) -> [String] {
+        [
+            "--batch",
+            "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0",
+            "--status-fd", "1",
+            "--quick-gen-key",
+            userID,
+            "pqc",
+            "default",
+            "never"
+        ]
+    }
+
+    static func postQuantumHybridKeyGenerationInput(passphrase: String?) -> String {
+        (passphrase ?? "") + "\n"
+    }
+
     static func exportOwnerTrustArguments() -> [String] {
         ["--export-ownertrust"]
     }
@@ -4563,6 +4769,124 @@ struct GPGSubkey: Identifiable, Hashable {
     }
 }
 
+struct GPGSubkeyAlgorithmMetadata: Hashable {
+    let algorithmID: String
+    let algorithmName: String
+    let keyLength: Int
+    let curveOrToken: String?
+
+    var isKyber768: Bool {
+        let normalizedAlgorithmID = algorithmID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedName = algorithmName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedToken = (curveOrToken ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        return normalizedAlgorithmID == "8"
+            || normalizedName.contains("kyber")
+            || normalizedToken == "ky768_bp256"
+            || normalizedToken.contains("kyber")
+    }
+}
+
+enum GPGKeyAlgorithmFamily: String, Hashable {
+    case rsa
+    case ecc
+    case postQuantumHybrid
+    case unknown
+}
+
+struct GPGKeyAlgorithmSummary: Hashable {
+    let family: GPGKeyAlgorithmFamily
+    let primaryAlgorithm: String
+    let primaryKeyLength: Int
+    let encryptionSubkeys: [GPGSubkeyAlgorithmMetadata]
+
+    var isPostQuantumHybrid: Bool {
+        family == .postQuantumHybrid
+    }
+
+    var shortDisplayName: String {
+        switch family {
+        case .postQuantumHybrid:
+            return AppLocalization.string("key_type_post_quantum_hybrid_short")
+        case .rsa, .ecc, .unknown:
+            return Self.classicalDisplayName(primaryAlgorithm: primaryAlgorithm, keyLength: primaryKeyLength)
+        }
+    }
+
+    var detailDisplayName: String {
+        switch family {
+        case .postQuantumHybrid:
+            return AppLocalization.string("key_type_post_quantum_hybrid_detail")
+        case .rsa, .ecc, .unknown:
+            return shortDisplayName
+        }
+    }
+
+    var technicalDisplayName: String {
+        switch family {
+        case .postQuantumHybrid:
+            return AppLocalization.string("key_type_post_quantum_hybrid_technical")
+        case .rsa, .ecc, .unknown:
+            return shortDisplayName
+        }
+    }
+
+    static func resolve(
+        primaryAlgorithm: String,
+        primaryKeyLength: Int,
+        encryptionSubkeys: [GPGSubkeyAlgorithmMetadata]
+    ) -> GPGKeyAlgorithmSummary {
+        let family: GPGKeyAlgorithmFamily
+        if encryptionSubkeys.contains(where: \.isKyber768) {
+            family = .postQuantumHybrid
+        } else if isRSAAlgorithm(primaryAlgorithm) {
+            family = .rsa
+        } else if isECCAlgorithm(primaryAlgorithm) {
+            family = .ecc
+        } else {
+            family = .unknown
+        }
+
+        return GPGKeyAlgorithmSummary(
+            family: family,
+            primaryAlgorithm: primaryAlgorithm,
+            primaryKeyLength: primaryKeyLength,
+            encryptionSubkeys: encryptionSubkeys
+        )
+    }
+
+    private static func classicalDisplayName(primaryAlgorithm: String, keyLength: Int) -> String {
+        "\(displayAlgorithmName(primaryAlgorithm))-\(keyLength)"
+    }
+
+    private static func displayAlgorithmName(_ algorithm: String) -> String {
+        switch algorithm.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "rsa":
+            return "RSA"
+        case "18", "ecdh":
+            return "ECDH"
+        case "19", "ecdsa":
+            return "ECDSA"
+        case "22", "eddsa":
+            return "EDDSA"
+        default:
+            return algorithm.isEmpty ? "Unknown" : algorithm
+        }
+    }
+
+    private static func isRSAAlgorithm(_ algorithm: String) -> Bool {
+        let normalized = algorithm.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized == "1" || normalized == "rsa"
+    }
+
+    private static func isECCAlgorithm(_ algorithm: String) -> Bool {
+        let normalized = algorithm.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return ["18", "19", "22", "ecdh", "ecdsa", "eddsa"].contains(normalized)
+    }
+}
+
 /// GPG Key model
 struct GPGKey: Identifiable, Hashable {
     let id: String
@@ -4578,6 +4902,7 @@ struct GPGKey: Identifiable, Hashable {
     let trustLevel: TrustLevel
     let secretMaterial: SecretKeyMaterial
     let cardSerialNumber: String?
+    let algorithmSummary: GPGKeyAlgorithmSummary
 
     init(
         id: String,
@@ -4592,7 +4917,8 @@ struct GPGKey: Identifiable, Hashable {
         expiresAt: Date?,
         trustLevel: TrustLevel,
         secretMaterial: SecretKeyMaterial? = nil,
-        cardSerialNumber: String? = nil
+        cardSerialNumber: String? = nil,
+        algorithmSummary: GPGKeyAlgorithmSummary? = nil
     ) {
         self.id = id
         self.keyID = keyID
@@ -4607,11 +4933,28 @@ struct GPGKey: Identifiable, Hashable {
         self.trustLevel = trustLevel
         self.secretMaterial = secretMaterial ?? SecretKeyMaterial.defaultMaterial(for: isSecret)
         self.cardSerialNumber = cardSerialNumber
+        self.algorithmSummary = algorithmSummary ?? GPGKeyAlgorithmSummary.resolve(
+            primaryAlgorithm: algorithm,
+            primaryKeyLength: keyLength,
+            encryptionSubkeys: []
+        )
     }
     
     /// Display-friendly key type
     var displayKeyType: String {
-        "\(algorithm)-\(keyLength)"
+        algorithmSummary.shortDisplayName
+    }
+
+    var detailedKeyType: String {
+        algorithmSummary.detailDisplayName
+    }
+
+    var technicalKeyType: String {
+        algorithmSummary.technicalDisplayName
+    }
+
+    var isPostQuantumHybrid: Bool {
+        algorithmSummary.isPostQuantumHybrid
     }
     
     /// Check if key is expired
@@ -4684,18 +5027,117 @@ struct KeyTrustDetails {
     }
 }
 
+enum KeyGenerationMode: Equatable {
+    case batch
+    case quick
+}
+
+enum KeyCompatibilityLevel: Equatable {
+    case broad
+    case modern
+    case experimentalInterop
+}
+
+enum PersistedDefaultKeyType: Int, CaseIterable, Identifiable {
+    case rsa4096 = 0
+    case rsa2048 = 1
+    case ecc = 2
+    case postQuantumHybrid = 3
+
+    var id: Int { rawValue }
+
+    static let classicalCases: [PersistedDefaultKeyType] = [
+        .rsa4096,
+        .rsa2048,
+        .ecc
+    ]
+
+    static func resolved(rawValue: Int) -> PersistedDefaultKeyType {
+        PersistedDefaultKeyType(rawValue: rawValue) ?? .rsa4096
+    }
+
+    static func selectable(supportsPostQuantum: Bool) -> [PersistedDefaultKeyType] {
+        supportsPostQuantum ? allCases : classicalCases
+    }
+
+    var keyType: KeyType {
+        switch self {
+        case .rsa4096:
+            return .rsa4096
+        case .rsa2048:
+            return .rsa2048
+        case .ecc:
+            return .ecc
+        case .postQuantumHybrid:
+            return .postQuantumHybrid
+        }
+    }
+
+    var displayKey: String {
+        keyType.localizedDisplayKey
+    }
+}
+
 /// Key type enum
 enum KeyType: String, CaseIterable, Identifiable {
     case rsa4096 = "RSA-4096"
     case rsa2048 = "RSA-2048"
     case ecc = "ECC"
+    case postQuantumHybrid = "Post-Quantum Hybrid"
     
     var id: String { rawValue }
+
+    var generationMode: KeyGenerationMode {
+        switch self {
+        case .rsa4096, .rsa2048, .ecc:
+            return .batch
+        case .postQuantumHybrid:
+            return .quick
+        }
+    }
+
+    var compatibilityLevel: KeyCompatibilityLevel {
+        switch self {
+        case .rsa4096, .rsa2048:
+            return .broad
+        case .ecc:
+            return .modern
+        case .postQuantumHybrid:
+            return .experimentalInterop
+        }
+    }
+
+    var localizedDisplayKey: String {
+        switch self {
+        case .rsa4096:
+            return "key_type_rsa4096"
+        case .rsa2048:
+            return "key_type_rsa2048"
+        case .ecc:
+            return "key_type_ecc_curve25519"
+        case .postQuantumHybrid:
+            return "key_type_post_quantum_hybrid"
+        }
+    }
+
+    var localizedShortDisplayKey: String {
+        switch self {
+        case .rsa4096:
+            return "key_type_rsa4096"
+        case .rsa2048:
+            return "key_type_rsa2048"
+        case .ecc:
+            return "key_type_ecc_curve25519"
+        case .postQuantumHybrid:
+            return "key_type_post_quantum_hybrid_short"
+        }
+    }
     
     var gpgKeyType: String {
         switch self {
         case .rsa4096, .rsa2048: return "RSA"
         case .ecc: return "EDDSA"
+        case .postQuantumHybrid: return "pqc"
         }
     }
     
@@ -4703,6 +5145,7 @@ enum KeyType: String, CaseIterable, Identifiable {
         switch self {
         case .rsa4096, .rsa2048: return "RSA"
         case .ecc: return "ECDH"
+        case .postQuantumHybrid: return "default"
         }
     }
     
@@ -4711,6 +5154,7 @@ enum KeyType: String, CaseIterable, Identifiable {
         case .rsa4096: return 4096
         case .rsa2048: return 2048
         case .ecc: return 0 // Curve25519 doesn't use length
+        case .postQuantumHybrid: return 0 // Quick generation controls the composite primary key
         }
     }
     
@@ -4719,13 +5163,14 @@ enum KeyType: String, CaseIterable, Identifiable {
         case .rsa4096: return 4096
         case .rsa2048: return 2048
         case .ecc: return 0 // Curve25519 doesn't use length
+        case .postQuantumHybrid: return 768
         }
     }
     
     var curve: String? {
         switch self {
         case .ecc: return "cv25519"
-        default: return nil
+        case .rsa4096, .rsa2048, .postQuantumHybrid: return nil
         }
     }
 }
@@ -4775,6 +5220,12 @@ private class GPGKeyBuilder {
     var trustLevel: TrustLevel = .unknown
     var secretMaterial: SecretKeyMaterial = .none
     var cardSerialNumber: String?
+    var encryptionSubkeys: [GPGSubkeyAlgorithmMetadata] = []
+
+    func absorbEncryptionSubkey(_ metadata: GPGSubkeyAlgorithmMetadata?) {
+        guard let metadata else { return }
+        encryptionSubkeys.append(metadata)
+    }
 
     func absorbSecretMaterialToken(_ rawValue: String?) {
         guard isSecret else { return }
@@ -4825,7 +5276,12 @@ private class GPGKeyBuilder {
             expiresAt: expiresAt,
             trustLevel: trustLevel,
             secretMaterial: resolvedSecretMaterial,
-            cardSerialNumber: cardSerialNumber
+            cardSerialNumber: cardSerialNumber,
+            algorithmSummary: GPGKeyAlgorithmSummary.resolve(
+                primaryAlgorithm: algorithm,
+                primaryKeyLength: keyLength,
+                encryptionSubkeys: encryptionSubkeys
+            )
         )
     }
 }
