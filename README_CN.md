@@ -8,18 +8,32 @@ Moaiy 是一个开源的 macOS 原生应用，专注于加密与恢复工作流�
 
 **[English Version](./README.md)**
 
-当前稳定版本：`v0.8.0`  
-当前进行中的迭代：`v0.8.1`
+当前稳定版本：`v0.9.0`
+当前发布重点：Kyber-768 混合抗量子加密支持
 
 ## 应用截图
 
 ![Moaiy 主界面（密钥管理视图）](./doc/images/moaiy-main-ui.png)
+
+## v0.9.0 主要升级
+
+Moaiy v0.9.0 新增 Kyber-768 混合 OpenPGP 支持，在保留熟悉 GPG 工作流的同时，为需要抗量子准备的用户提供新的加密路径。
+
+- 新增基于内置 GnuPG 运行时的 Kyber-768 混合密钥生成。
+- 将内置 `gpg.bundle` 更新到 GnuPG 2.5.21，并启用 Kyber 公钥算法支持。
+- 新增抗量子能力自动检测、密钥分类和 PQC 密钥 UI 标识。
+- 新增 Kyber 密钥的文本与文件加密/解密验证覆盖。
+- 新增抗量子密钥的备份、恢复、迁移和互操作验证。
+- 新增 Pro/团队策略保护，只有当前 GPG 运行时支持 Kyber 时才允许应用 Kyber 默认策略。
+- 新增发布兼容性提示：Kyber-768 混合密钥需要 GnuPG 2.5.21+ 或兼容 OpenPGP 实现；与旧工具共享时建议使用 RSA-4096。
+- 修复应用图标打包问题，确保生成的 DMG 包含正确的 `moaiy_icon.icns` 资源。
 
 ## 功能特性
 
 - 生成、导入、导出和删除密钥
 - 文本加密与解密
 - 文件加密与解密
+- 生成和使用 Kyber-768 混合 OpenPGP 密钥
 - 信任管理、密钥签名与密钥编辑流程
 - 备份与恢复流程
 - 支持在沙盒环境中使用内置 GPG 运行时
@@ -34,6 +48,8 @@ Moaiy 是一个开源的 macOS 原生应用，专注于加密与恢复工作流�
 ### 方式 1：下载发布版本
 
 - 从 [GitHub Releases](https://github.com/moaiy-com/moaiy/releases) 下载最新 `.dmg`
+- Apple Silicon 芯片 Mac：`Moaiy-0.9.0-macos-apple-silicon.dmg`
+- Intel 芯片 Mac：`Moaiy-0.9.0-macos-intel-chip.dmg`
 
 ### 方式 2：源码构建
 

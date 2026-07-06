@@ -8,18 +8,32 @@ Moaiy is an open-source macOS app for encryption and recovery workflows, designe
 
 **[Chinese Version](./README_CN.md)**
 
-Latest stable release: `v0.8.0`  
-Current rollout in progress: `v0.8.1`
+Latest stable release: `v0.9.0`
+Current rollout: Kyber-768 hybrid post-quantum encryption support
 
 ## App Screenshot
 
 ![Moaiy main key management view](./doc/images/moaiy-main-ui.png)
+
+## What's New in v0.9.0
+
+Moaiy v0.9.0 adds Kyber-768 hybrid OpenPGP support for users who want a post-quantum-ready encryption path while keeping familiar GPG workflows.
+
+- Added Kyber-768 hybrid key generation through the bundled GnuPG runtime.
+- Updated the embedded `gpg.bundle` to GnuPG 2.5.21 with Kyber public-key support.
+- Added automatic post-quantum capability detection, key classification, and UI badges for PQC keys.
+- Added text and file encryption/decryption coverage for Kyber-backed keys.
+- Added backup, restore, migration, and interoperability validation for post-quantum keys.
+- Added Pro/team policy safeguards so Kyber defaults are only applied when the active GPG runtime supports them.
+- Added release compatibility notes: Kyber-768 hybrid keys require GnuPG 2.5.21+ or compatible OpenPGP implementations; use RSA-4096 when sharing with older tools.
+- Fixed app icon packaging so generated DMGs include the correct `moaiy_icon.icns` resource.
 
 ## Features
 
 - Generate, import, export, and delete keys
 - Encrypt and decrypt text
 - Encrypt and decrypt files
+- Generate and use Kyber-768 hybrid OpenPGP keys
 - Trust management, key signing, and key editing flows
 - Backup and restore workflows
 - Bundled GPG runtime support for sandboxed app environments
@@ -34,6 +48,8 @@ Current rollout in progress: `v0.8.1`
 ### Option 1: Download Release
 
 - Download the latest `.dmg` from [GitHub Releases](https://github.com/moaiy-com/moaiy/releases)
+- Apple Silicon Macs: `Moaiy-0.9.0-macos-apple-silicon.dmg`
+- Intel Macs: `Moaiy-0.9.0-macos-intel-chip.dmg`
 
 ### Option 2: Build from Source
 
