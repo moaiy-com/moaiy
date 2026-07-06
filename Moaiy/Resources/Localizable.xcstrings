@@ -51439,6 +51439,77 @@
         }
       }
     },
+    "pro_team_policy_templates_pqc_unavailable_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This template requires Kyber-768 support in the embedded GPG runtime. Update GPG before applying it."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此模板需要内置 GPG 运行时支持 Kyber-768。请先更新 GPG 后再应用。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta plantilla requiere soporte Kyber-768 en el entorno GPG integrado. Actualice GPG antes de aplicarla."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este modelo requer suporte a Kyber-768 no runtime GPG integrado. Atualize o GPG antes de aplicá-lo."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "इस टेम्पलेट के लिए एम्बेडेड GPG रनटाइम में Kyber-768 समर्थन आवश्यक है। इसे लागू करने से पहले GPG अपडेट करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يتطلب هذا القالب دعم Kyber-768 في بيئة GPG المضمنة. حدّث GPG قبل تطبيقه."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce modèle nécessite la prise en charge de Kyber-768 dans l’environnement GPG intégré. Mettez GPG à jour avant de l’appliquer."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Vorlage erfordert Kyber-768-Unterstützung in der eingebetteten GPG-Laufzeit. Aktualisieren Sie GPG, bevor Sie sie anwenden."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このテンプレートには内蔵 GPG ランタイムの Kyber-768 対応が必要です。適用する前に GPG を更新してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 템플릿은 내장 GPG 런타임의 Kyber-768 지원이 필요합니다. 적용하기 전에 GPG를 업데이트하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для этого шаблона нужна поддержка Kyber-768 во встроенной среде GPG. Обновите GPG перед применением."
+          }
+        }
+      }
+    },
     "pro_team_policy_templates_picker_label": {
       "localizations": {
         "en": {

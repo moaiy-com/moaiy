@@ -267,6 +267,10 @@ cat > "$MANIFEST_PATH" <<EOF
   },
   "gate_mode": "$GATE",
   "signing_mode": "$EFFECTIVE_SIGNING_MODE",
+  "pqc_compatibility_caveat": {
+    "enabled": true,
+    "algorithm": "Kyber-768 hybrid OpenPGP"
+  },
   "built_at_utc": "$built_at_utc"
 }
 EOF

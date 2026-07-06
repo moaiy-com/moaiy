@@ -151,6 +151,7 @@ else
 fi
 
 FULL_TARGETS=(
+  "MoaiyTests/BundledGPGTests"
   "MoaiyTests/KeyGenerationTests"
   "MoaiyTests/KeyImportExportTests"
   "MoaiyTests/KeyManagementIntegrationTests"
@@ -160,11 +161,14 @@ FULL_TARGETS=(
   "MoaiyTests/KeyActionBatchResultPlannerTests"
   "MoaiyTests/KeyActionMenuAvailabilityTests"
   "MoaiyTests/BackupExportSummaryTests"
+  "MoaiyTests/BackupIntegrityVerifierTests"
+  "MoaiyTests/SecurityHardeningFlowTests"
   "MoaiyTests/TextEncryptionFlowTests"
   "MoaiyTests/FileEncryptionFlowTests"
 )
 
 SMOKE_TARGETS=(
+  "MoaiyTests/BundledGPGTests"
   "MoaiyTests/KeyGenerationTests"
   "MoaiyTests/KeyImportExportTests"
   "MoaiyTests/BackupExportSummaryTests"

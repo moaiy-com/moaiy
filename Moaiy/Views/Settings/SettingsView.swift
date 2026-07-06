@@ -29,6 +29,25 @@ struct TeamPolicyTemplateDescriptor: Sendable, Codable, Equatable, Identifiable 
         PersistedDefaultKeyType.resolved(rawValue: defaultKeyType).displayKey
     }
 
+    var persistedDefaultKeyType: PersistedDefaultKeyType {
+        PersistedDefaultKeyType.resolved(rawValue: defaultKeyType)
+    }
+
+    var requiresPostQuantumDefaultKeyType: Bool {
+        persistedDefaultKeyType == .postQuantumHybrid
+    }
+
+    func isDefaultKeyTypeAvailable(supportsPostQuantum: Bool) -> Bool {
+        !requiresPostQuantumDefaultKeyType || supportsPostQuantum
+    }
+
+    static func isDefaultKeyTypeAvailable(rawValue: Int, supportsPostQuantum: Bool) -> Bool {
+        guard let resolved = PersistedDefaultKeyType(rawValue: rawValue) else {
+            return false
+        }
+        return resolved != .postQuantumHybrid || supportsPostQuantum
+    }
+
     static func parseList(from metadata: [String: String]) -> [TeamPolicyTemplateDescriptor] {
         guard
             let rawTemplates = metadata[TeamPolicyTemplateMetadataKey.templates],
@@ -123,6 +142,15 @@ struct SettingsView: View {
         }
 
         return options
+    }
+
+    private var isSelectedTeamPolicyTemplateDefaultUnavailable: Bool {
+        guard let selectedTeamPolicyTemplate else {
+            return false
+        }
+        return !selectedTeamPolicyTemplate.isDefaultKeyTypeAvailable(
+            supportsPostQuantum: supportsPostQuantumDefaultKeyType
+        )
     }
     
     var body: some View {
@@ -333,6 +361,13 @@ struct SettingsView: View {
                                             .foregroundStyle(Color.moaiyTextPrimary)
                                     }
 
+                                    if isSelectedTeamPolicyTemplateDefaultUnavailable {
+                                        Text("pro_team_policy_templates_pqc_unavailable_note")
+                                            .font(.caption)
+                                            .foregroundStyle(Color.moaiyWarning)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+
                                     HStack(alignment: .firstTextBaseline) {
                                         Text("setting_enable_key_signing")
                                             .foregroundStyle(Color.moaiyTextSecondary)
@@ -376,6 +411,7 @@ struct SettingsView: View {
                                     .buttonStyle(.borderedProminent)
                                     .disabled(
                                         selectedTeamPolicyTemplate == nil
+                                            || isSelectedTeamPolicyTemplateDefaultUnavailable
                                             || isLoadingTeamPolicyTemplates
                                             || isApplyingTeamPolicyTemplate
                                     )
@@ -573,6 +609,16 @@ struct SettingsView: View {
         guard let descriptor = teamPolicyTemplatesDescriptor else { return }
         guard let selectedTemplate = selectedTeamPolicyTemplate else { return }
 
+        guard selectedTemplate.isDefaultKeyTypeAvailable(
+            supportsPostQuantum: supportsPostQuantumDefaultKeyType
+        ) else {
+            promptAlert = .info(
+                title: LocalizedStringKey(descriptor.titleKey),
+                message: AppLocalization.string("pro_team_policy_templates_pqc_unavailable_note")
+            )
+            return
+        }
+
         isApplyingTeamPolicyTemplate = true
         defer { isApplyingTeamPolicyTemplate = false }
 
@@ -598,6 +644,17 @@ struct SettingsView: View {
                 promptAlert = .failure(
                     title: "pro_feature_locked_title",
                     message: AppLocalization.string("pro_team_policy_templates_operation_failed_message")
+                )
+                return
+            }
+
+            guard TeamPolicyTemplateDescriptor.isDefaultKeyTypeAvailable(
+                rawValue: resolvedDefaultKeyType,
+                supportsPostQuantum: supportsPostQuantumDefaultKeyType
+            ) else {
+                promptAlert = .info(
+                    title: LocalizedStringKey(descriptor.titleKey),
+                    message: AppLocalization.string("pro_team_policy_templates_pqc_unavailable_note")
                 )
                 return
             }

@@ -256,6 +256,43 @@ struct ProContractsTests {
         #expect(templates.first?.defaultKeyTypeDisplayKey == "key_type_post_quantum_hybrid")
     }
 
+    @Test("Team policy post quantum default key type is gated by capability")
+    func teamPolicyTemplateDefaultKeyTypeAvailability_gatesPostQuantumCapability() {
+        let classicalTemplate = TeamPolicyTemplateDescriptor(
+            id: "team-classical",
+            name: "Team Classical",
+            summary: "Classical defaults",
+            defaultKeyType: 2,
+            enableKeySigningMenu: true,
+            isManaged: true
+        )
+        let postQuantumTemplate = TeamPolicyTemplateDescriptor(
+            id: "team-pqc",
+            name: "Team PQC",
+            summary: "Post-quantum defaults",
+            defaultKeyType: 3,
+            enableKeySigningMenu: false,
+            isManaged: true
+        )
+
+        #expect(classicalTemplate.isDefaultKeyTypeAvailable(supportsPostQuantum: false))
+        #expect(postQuantumTemplate.requiresPostQuantumDefaultKeyType)
+        #expect(!postQuantumTemplate.isDefaultKeyTypeAvailable(supportsPostQuantum: false))
+        #expect(postQuantumTemplate.isDefaultKeyTypeAvailable(supportsPostQuantum: true))
+        #expect(
+            TeamPolicyTemplateDescriptor.isDefaultKeyTypeAvailable(
+                rawValue: 3,
+                supportsPostQuantum: false
+            ) == false
+        )
+        #expect(
+            TeamPolicyTemplateDescriptor.isDefaultKeyTypeAvailable(
+                rawValue: 3,
+                supportsPostQuantum: true
+            )
+        )
+    }
+
     @Test("Team policy bool parser supports canonical values")
     func teamPolicyTemplateBoolParser_supportsCanonicalValues() {
         #expect(TeamPolicyTemplateDescriptor.parseBool("true") == true)
