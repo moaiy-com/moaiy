@@ -46,6 +46,16 @@ struct KeyGenerationTests {
         #expect(keyType.gpgSubkeyType == "ECDH")
         #expect(keyType.curve == "cv25519")
     }
+
+    @Test("PQC generation metadata is quick mode")
+    func pqc_generationMetadata() async throws {
+        let keyType = KeyType.postQuantumHybrid
+
+        #expect(keyType.generationMode == .quick)
+        #expect(keyType.gpgKeyType == "pqc")
+        #expect(keyType.gpgSubkeyType == "default")
+        #expect(keyType.subkeyLength == 768)
+    }
     
     // MARK: - Key Generation Input Validation Tests
     

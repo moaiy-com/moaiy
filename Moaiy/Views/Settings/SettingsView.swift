@@ -26,14 +26,7 @@ struct TeamPolicyTemplateDescriptor: Sendable, Codable, Equatable, Identifiable 
     let isManaged: Bool
 
     var defaultKeyTypeDisplayKey: String {
-        switch defaultKeyType {
-        case 1:
-            return "key_type_rsa2048"
-        case 2:
-            return "key_type_ecc_curve25519"
-        default:
-            return "key_type_rsa4096"
-        }
+        PersistedDefaultKeyType.resolved(rawValue: defaultKeyType).displayKey
     }
 
     static func parseList(from metadata: [String: String]) -> [TeamPolicyTemplateDescriptor] {
@@ -138,9 +131,10 @@ struct SettingsView: View {
                         Spacer()
 
                         Picker("setting_default_key_type", selection: $defaultKeyType) {
-                            Text("key_type_rsa4096").tag(0)
-                            Text("key_type_rsa2048").tag(1)
-                            Text("key_type_ecc_curve25519").tag(2)
+                            ForEach(PersistedDefaultKeyType.classicalCases) { option in
+                                Text(LocalizedStringKey(option.displayKey))
+                                    .tag(option.rawValue)
+                            }
                         }
                         .labelsHidden()
                         .pickerStyle(.segmented)
@@ -561,6 +555,7 @@ struct SettingsView: View {
                 let resolvedDefaultKeyType = Int(
                     result.metadata[TeamPolicyTemplateMetadataKey.appliedDefaultKeyType] ?? ""
                 ),
+                PersistedDefaultKeyType(rawValue: resolvedDefaultKeyType) != nil,
                 let resolvedSigningState = TeamPolicyTemplateDescriptor.parseBool(
                     result.metadata[TeamPolicyTemplateMetadataKey.appliedEnableKeySigningMenu]
                 )

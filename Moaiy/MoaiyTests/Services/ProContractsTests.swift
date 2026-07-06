@@ -233,6 +233,29 @@ struct ProContractsTests {
         #expect(templates.first?.enableKeySigningMenu == true)
     }
 
+    @Test("Team policy template parser accepts post quantum default key type")
+    func teamPolicyTemplateListParser_acceptsPostQuantumDefaultKeyType() {
+        let metadata: [String: String] = [
+            "policy.templates": """
+            [
+              {
+                "defaultKeyType": 3,
+                "enableKeySigningMenu": false,
+                "id": "team-pqc",
+                "isManaged": true,
+                "name": "Team PQC",
+                "summary": "Post-quantum defaults"
+              }
+            ]
+            """
+        ]
+
+        let templates = TeamPolicyTemplateDescriptor.parseList(from: metadata)
+        #expect(templates.count == 1)
+        #expect(templates.first?.defaultKeyType == 3)
+        #expect(templates.first?.defaultKeyTypeDisplayKey == "key_type_post_quantum_hybrid")
+    }
+
     @Test("Team policy bool parser supports canonical values")
     func teamPolicyTemplateBoolParser_supportsCanonicalValues() {
         #expect(TeamPolicyTemplateDescriptor.parseBool("true") == true)

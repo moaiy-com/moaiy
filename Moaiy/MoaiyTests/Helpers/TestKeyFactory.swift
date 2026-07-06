@@ -185,7 +185,8 @@ extension KeyType {
     static let allTestCases: [KeyType] = [
         .rsa2048,
         .rsa4096,
-        .ecc
+        .ecc,
+        .postQuantumHybrid
     ]
 }
 

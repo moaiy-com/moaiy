@@ -92,6 +92,32 @@ struct KeyTypeTests {
     func ecc_curve() {
         #expect(KeyType.ecc.curve == "cv25519")
     }
+
+    // MARK: - Post-Quantum Hybrid Tests
+
+    @Test("Post-Quantum Hybrid uses quick generation")
+    func postQuantumHybrid_generationMode() {
+        #expect(KeyType.postQuantumHybrid.generationMode == .quick)
+    }
+
+    @Test("Post-Quantum Hybrid returns expected metadata")
+    func postQuantumHybrid_metadata() {
+        let keyType = KeyType.postQuantumHybrid
+
+        #expect(keyType.keyLength == 0)
+        #expect(keyType.subkeyLength == 768)
+        #expect(keyType.gpgKeyType == "pqc")
+        #expect(keyType.gpgSubkeyType == "default")
+        #expect(keyType.curve == nil)
+        #expect(keyType.compatibilityLevel == .experimentalInterop)
+    }
+
+    @Test("Classical key types use batch generation")
+    func classicalKeyTypes_generationMode() {
+        #expect(KeyType.rsa4096.generationMode == .batch)
+        #expect(KeyType.rsa2048.generationMode == .batch)
+        #expect(KeyType.ecc.generationMode == .batch)
+    }
     
     // MARK: - Raw Value Tests
     
@@ -100,6 +126,7 @@ struct KeyTypeTests {
         #expect(KeyType.rsa4096.rawValue == "RSA-4096")
         #expect(KeyType.rsa2048.rawValue == "RSA-2048")
         #expect(KeyType.ecc.rawValue == "ECC")
+        #expect(KeyType.postQuantumHybrid.rawValue == "Post-Quantum Hybrid")
     }
     
     // MARK: - Identifiable Tests
@@ -109,6 +136,7 @@ struct KeyTypeTests {
         #expect(KeyType.rsa4096.id == "RSA-4096")
         #expect(KeyType.rsa2048.id == "RSA-2048")
         #expect(KeyType.ecc.id == "ECC")
+        #expect(KeyType.postQuantumHybrid.id == "Post-Quantum Hybrid")
     }
     
     // MARK: - CaseIterable Tests
@@ -120,7 +148,40 @@ struct KeyTypeTests {
         #expect(allCases.contains(.rsa2048))
         #expect(allCases.contains(.rsa4096))
         #expect(allCases.contains(.ecc))
-        #expect(allCases.count == 3)
+        #expect(allCases.contains(.postQuantumHybrid))
+        #expect(allCases.count == 4)
+    }
+
+    // MARK: - Persisted Default Key Type Tests
+
+    @Test("Persisted default key type maps raw values")
+    func persistedDefaultKeyType_mapsRawValues() {
+        #expect(PersistedDefaultKeyType.rsa4096.rawValue == 0)
+        #expect(PersistedDefaultKeyType.rsa2048.rawValue == 1)
+        #expect(PersistedDefaultKeyType.ecc.rawValue == 2)
+        #expect(PersistedDefaultKeyType.postQuantumHybrid.rawValue == 3)
+        #expect(PersistedDefaultKeyType.postQuantumHybrid.keyType == .postQuantumHybrid)
+    }
+
+    @Test("Persisted default key type recovers unknown values")
+    func persistedDefaultKeyType_recoversUnknownValues() {
+        #expect(PersistedDefaultKeyType.resolved(rawValue: -1) == .rsa4096)
+        #expect(PersistedDefaultKeyType.resolved(rawValue: 99) == .rsa4096)
+        #expect(PersistedDefaultKeyType.resolved(rawValue: 3) == .postQuantumHybrid)
+    }
+
+    @Test("Persisted selectable key types gate post quantum option")
+    func persistedDefaultKeyType_selectableGatesPostQuantum() {
+        #expect(PersistedDefaultKeyType.selectable(supportsPostQuantum: false) == [.rsa4096, .rsa2048, .ecc])
+        #expect(PersistedDefaultKeyType.selectable(supportsPostQuantum: true).contains(.postQuantumHybrid))
+    }
+
+    @Test("Display keys are stable")
+    func displayKeys_areStable() {
+        #expect(KeyType.rsa4096.localizedDisplayKey == "key_type_rsa4096")
+        #expect(KeyType.rsa2048.localizedDisplayKey == "key_type_rsa2048")
+        #expect(KeyType.ecc.localizedDisplayKey == "key_type_ecc_curve25519")
+        #expect(KeyType.postQuantumHybrid.localizedDisplayKey == "key_type_post_quantum_hybrid")
     }
     
     // MARK: - Comparison Tests

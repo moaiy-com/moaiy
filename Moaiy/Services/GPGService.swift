@@ -697,11 +697,15 @@ final class GPGService: SubkeyManaging {
     /// - Parameters:
     ///   - name: User's name
     ///   - email: User's email
-    ///   - keyType: Key type (RSA-4096, RSA-2048, ECC)
+    ///   - keyType: Key type (RSA-4096, RSA-2048, ECC, or PQC hybrid)
     ///   - passphrase: Optional passphrase for the key
     /// - Returns: Fingerprint of the generated key
     func generateKey(name: String, email: String, keyType: KeyType, passphrase: String? = nil) async throws -> String {
         try await ensureGPGAgentRunningIfNeeded()
+
+        guard keyType.generationMode == .batch else {
+            throw GPGError.unsupportedKeyType(keyType.rawValue)
+        }
 
         let operationStartedAt = Date()
         let beforeFingerprints = Set(try await listKeys(secretOnly: false).map(\.fingerprint))
@@ -3990,6 +3994,8 @@ final class GPGService: SubkeyManaging {
             Expire-Date: 0
 
             """
+        case .postQuantumHybrid:
+            preconditionFailure("Post-quantum hybrid keys use quick generation")
         }
 
         if let passphrase = passphrase, !passphrase.isEmpty {
@@ -4684,18 +4690,117 @@ struct KeyTrustDetails {
     }
 }
 
+enum KeyGenerationMode: Equatable {
+    case batch
+    case quick
+}
+
+enum KeyCompatibilityLevel: Equatable {
+    case broad
+    case modern
+    case experimentalInterop
+}
+
+enum PersistedDefaultKeyType: Int, CaseIterable, Identifiable {
+    case rsa4096 = 0
+    case rsa2048 = 1
+    case ecc = 2
+    case postQuantumHybrid = 3
+
+    var id: Int { rawValue }
+
+    static let classicalCases: [PersistedDefaultKeyType] = [
+        .rsa4096,
+        .rsa2048,
+        .ecc
+    ]
+
+    static func resolved(rawValue: Int) -> PersistedDefaultKeyType {
+        PersistedDefaultKeyType(rawValue: rawValue) ?? .rsa4096
+    }
+
+    static func selectable(supportsPostQuantum: Bool) -> [PersistedDefaultKeyType] {
+        supportsPostQuantum ? allCases : classicalCases
+    }
+
+    var keyType: KeyType {
+        switch self {
+        case .rsa4096:
+            return .rsa4096
+        case .rsa2048:
+            return .rsa2048
+        case .ecc:
+            return .ecc
+        case .postQuantumHybrid:
+            return .postQuantumHybrid
+        }
+    }
+
+    var displayKey: String {
+        keyType.localizedDisplayKey
+    }
+}
+
 /// Key type enum
 enum KeyType: String, CaseIterable, Identifiable {
     case rsa4096 = "RSA-4096"
     case rsa2048 = "RSA-2048"
     case ecc = "ECC"
+    case postQuantumHybrid = "Post-Quantum Hybrid"
     
     var id: String { rawValue }
+
+    var generationMode: KeyGenerationMode {
+        switch self {
+        case .rsa4096, .rsa2048, .ecc:
+            return .batch
+        case .postQuantumHybrid:
+            return .quick
+        }
+    }
+
+    var compatibilityLevel: KeyCompatibilityLevel {
+        switch self {
+        case .rsa4096, .rsa2048:
+            return .broad
+        case .ecc:
+            return .modern
+        case .postQuantumHybrid:
+            return .experimentalInterop
+        }
+    }
+
+    var localizedDisplayKey: String {
+        switch self {
+        case .rsa4096:
+            return "key_type_rsa4096"
+        case .rsa2048:
+            return "key_type_rsa2048"
+        case .ecc:
+            return "key_type_ecc_curve25519"
+        case .postQuantumHybrid:
+            return "key_type_post_quantum_hybrid"
+        }
+    }
+
+    var localizedShortDisplayKey: String {
+        switch self {
+        case .rsa4096:
+            return "key_type_rsa4096"
+        case .rsa2048:
+            return "key_type_rsa2048"
+        case .ecc:
+            return "key_type_ecc_curve25519"
+        case .postQuantumHybrid:
+            return "key_type_post_quantum_hybrid_short"
+        }
+    }
     
     var gpgKeyType: String {
         switch self {
         case .rsa4096, .rsa2048: return "RSA"
         case .ecc: return "EDDSA"
+        case .postQuantumHybrid: return "pqc"
         }
     }
     
@@ -4703,6 +4808,7 @@ enum KeyType: String, CaseIterable, Identifiable {
         switch self {
         case .rsa4096, .rsa2048: return "RSA"
         case .ecc: return "ECDH"
+        case .postQuantumHybrid: return "default"
         }
     }
     
@@ -4711,6 +4817,7 @@ enum KeyType: String, CaseIterable, Identifiable {
         case .rsa4096: return 4096
         case .rsa2048: return 2048
         case .ecc: return 0 // Curve25519 doesn't use length
+        case .postQuantumHybrid: return 0 // Quick generation controls the composite primary key
         }
     }
     
@@ -4719,13 +4826,14 @@ enum KeyType: String, CaseIterable, Identifiable {
         case .rsa4096: return 4096
         case .rsa2048: return 2048
         case .ecc: return 0 // Curve25519 doesn't use length
+        case .postQuantumHybrid: return 768
         }
     }
     
     var curve: String? {
         switch self {
         case .ecc: return "cv25519"
-        default: return nil
+        case .rsa4096, .rsa2048, .postQuantumHybrid: return nil
         }
     }
 }

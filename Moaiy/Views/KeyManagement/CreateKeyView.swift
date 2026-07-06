@@ -170,14 +170,7 @@ struct CreateKeyView: View {
     }
 
     private var selectedKeyType: KeyType {
-        switch defaultKeyTypeSetting {
-        case 1:
-            return .rsa2048
-        case 2:
-            return .ecc
-        default:
-            return .rsa4096
-        }
+        PersistedDefaultKeyType.resolved(rawValue: defaultKeyTypeSetting).keyType
     }
 
     private var canCreate: Bool {
