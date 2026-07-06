@@ -1271,7 +1271,7 @@ final class GPGService: SubkeyManaging {
 
         let result = try await executeGPG(arguments: arguments, input: input)
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
@@ -1310,7 +1310,7 @@ final class GPGService: SubkeyManaging {
 
         let result = try await executeGPG(arguments: arguments, input: input)
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
@@ -1335,7 +1335,7 @@ final class GPGService: SubkeyManaging {
             if result.exitCode == 0 {
                 return
             }
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
@@ -1347,7 +1347,7 @@ final class GPGService: SubkeyManaging {
         if unprotectedResult.exitCode == 0 {
             return
         }
-        if credentialFailureError(from: unprotectedResult) == nil {
+        if Self.credentialFailureError(from: unprotectedResult) == nil {
             throw GPGError.executionFailed(unprotectedResult.stderr ?? "Exit code \(unprotectedResult.exitCode)")
         }
 
@@ -1356,7 +1356,7 @@ final class GPGService: SubkeyManaging {
         if protectedResult.exitCode == 0 {
             return
         }
-        if let credentialError = credentialFailureError(from: protectedResult) {
+        if let credentialError = Self.credentialFailureError(from: protectedResult) {
             throw credentialError
         }
         throw GPGError.executionFailed(protectedResult.stderr ?? "Exit code \(protectedResult.exitCode)")
@@ -1428,7 +1428,7 @@ final class GPGService: SubkeyManaging {
         )
 
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
@@ -1493,7 +1493,7 @@ final class GPGService: SubkeyManaging {
         )
 
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
@@ -1556,7 +1556,7 @@ final class GPGService: SubkeyManaging {
         )
 
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Exit code \(result.exitCode)")
@@ -1842,7 +1842,7 @@ final class GPGService: SubkeyManaging {
         )
 
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
 
@@ -2192,7 +2192,7 @@ final class GPGService: SubkeyManaging {
         )
 
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
 
@@ -2589,7 +2589,7 @@ final class GPGService: SubkeyManaging {
         )
 
         if result.exitCode != 0 {
-            if let credentialError = credentialFailureError(from: result) {
+            if let credentialError = Self.credentialFailureError(from: result) {
                 throw credentialError
             }
             throw GPGError.executionFailed(result.stderr ?? "Failed to generate revocation certificate")
@@ -2885,17 +2885,17 @@ final class GPGService: SubkeyManaging {
             || normalized.contains("ecdsa")
     }
 
-    private func credentialFailureError(from result: GPGExecutionResult) -> GPGError? {
-        if isBadPIN(result) {
+    nonisolated static func credentialFailureError(from result: GPGExecutionResult) -> GPGError? {
+        if Self.isBadPIN(result) {
             return .smartCardPinInvalid
         }
-        if isBadPassphrase(result) {
+        if Self.isBadPassphrase(result) {
             return .invalidPassphrase
         }
         return nil
     }
 
-    private func isBadPassphrase(_ result: GPGExecutionResult) -> Bool {
+    private nonisolated static func isBadPassphrase(_ result: GPGExecutionResult) -> Bool {
         let stderr = result.stderr ?? ""
         let stdout = result.stdout ?? ""
         let combined = "\(stderr)\n\(stdout)".lowercased()
@@ -2906,7 +2906,7 @@ final class GPGService: SubkeyManaging {
             || combined.contains("no passphrase given")
     }
 
-    private func isBadPIN(_ result: GPGExecutionResult) -> Bool {
+    private nonisolated static func isBadPIN(_ result: GPGExecutionResult) -> Bool {
         let stderr = result.stderr ?? ""
         let stdout = result.stdout ?? ""
         let combined = "\(stderr)\n\(stdout)".lowercased()
@@ -3586,7 +3586,7 @@ final class GPGService: SubkeyManaging {
             return false
         }
 
-        if credentialFailureError(from: result) != nil {
+        if Self.credentialFailureError(from: result) != nil {
             return true
         }
 

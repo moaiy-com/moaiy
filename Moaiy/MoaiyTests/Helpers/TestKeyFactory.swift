@@ -347,3 +347,175 @@ enum TestGPGHomeError: Error, CustomStringConvertible {
         }
     }
 }
+
+extension TestGPGHome {
+    func requireKyberSupport() async throws {
+        let result = try await execute(arguments: ["--with-colons", "--list-config"])
+        let capabilities = GPGCapabilities.parseListConfig(result.stdout ?? "")
+        guard capabilities.supportsKyber else {
+            throw GPGError.unsupportedKeyType("Kyber-768")
+        }
+    }
+
+    func generatePostQuantumHybridKey(
+        name: String,
+        email: String,
+        passphrase: String?
+    ) async throws -> String {
+        try await ensureAgentRunning()
+
+        let userID = "\(name) <\(email)>"
+        let result = try await execute(
+            arguments: GPGCommandBuilder.postQuantumHybridKeyGenerationArguments(userID: userID),
+            input: GPGCommandBuilder.postQuantumHybridKeyGenerationInput(passphrase: passphrase),
+            timeout: 60
+        )
+
+        guard result.exitCode == 0 else {
+            throw GPGError.keyGenerationFailed(result.stderr ?? result.stdout ?? "PQC key generation failed")
+        }
+
+        guard let output = result.stdout,
+              let fingerprint = GPGService.keyCreatedFingerprint(from: output) else {
+            throw GPGError.keyGenerationFailed("Missing generated PQC key fingerprint")
+        }
+
+        return fingerprint
+    }
+
+    func exportPublicKey(keyID: String) async throws -> String {
+        let result = try await execute(arguments: ["--armor", "--export", keyID])
+        guard result.exitCode == 0, let output = result.stdout, !output.isEmpty else {
+            throw GPGError.exportFailed(result.stderr ?? "Failed to export public key")
+        }
+        return output
+    }
+
+    @discardableResult
+    func importArmor(_ armor: String) async throws -> GPGExecutionResult {
+        let result = try await execute(arguments: ["--batch", "--import"], input: armor)
+        guard result.exitCode == 0 else {
+            throw GPGError.importFailed(result.stderr ?? result.stdout ?? "Failed to import armored key")
+        }
+        return result
+    }
+
+    func encryptText(
+        _ plaintext: String,
+        recipients: [String],
+        allowUntrustedRecipients: Bool
+    ) async throws -> String {
+        var arguments = [
+            "--encrypt",
+            "--armor",
+            "--batch",
+            "--cipher-algo", Constants.GPG.defaultCipherAlgorithm
+        ]
+
+        if allowUntrustedRecipients {
+            arguments.append(contentsOf: ["--trust-model", "always"])
+        }
+
+        for recipient in recipients {
+            arguments.append(contentsOf: ["--recipient", recipient])
+        }
+
+        let result = try await execute(arguments: arguments, input: plaintext)
+        guard result.exitCode == 0, let output = result.stdout, !output.isEmpty else {
+            throw GPGError.encryptionFailed(result.stderr ?? result.stdout ?? "PQC text encryption failed")
+        }
+        return output
+    }
+
+    func decryptTextResult(_ ciphertext: String, passphrase: String) async throws -> GPGExecutionResult {
+        try await ensureAgentRunning()
+        return try await execute(
+            arguments: ["--decrypt", "--batch", "--pinentry-mode", "loopback", "--passphrase-fd", "0"],
+            input: passphrase + "\n" + ciphertext
+        )
+    }
+
+    func decryptText(_ ciphertext: String, passphrase: String) async throws -> String {
+        let result = try await decryptTextResult(ciphertext, passphrase: passphrase)
+        guard result.exitCode == 0, let output = result.stdout, !output.isEmpty else {
+            if let credentialError = GPGService.credentialFailureError(from: result) {
+                throw credentialError
+            }
+            throw GPGError.decryptionFailed(result.stderr ?? result.stdout ?? "PQC text decryption failed")
+        }
+        return output
+    }
+
+    func encryptFile(
+        sourceURL: URL,
+        destinationURL: URL,
+        recipients: [String],
+        allowUntrustedRecipients: Bool
+    ) async throws -> URL {
+        var arguments = [
+            "--encrypt",
+            "--batch",
+            "--yes",
+            "--cipher-algo", Constants.GPG.defaultCipherAlgorithm
+        ]
+
+        if allowUntrustedRecipients {
+            arguments.append(contentsOf: ["--trust-model", "always"])
+        }
+
+        for recipient in recipients {
+            arguments.append(contentsOf: ["--recipient", recipient])
+        }
+
+        arguments.append(contentsOf: ["--output", destinationURL.path, "--", sourceURL.path])
+
+        let result = try await execute(arguments: arguments)
+        guard result.exitCode == 0, FileManager.default.fileExists(atPath: destinationURL.path) else {
+            throw GPGError.encryptionFailed(result.stderr ?? result.stdout ?? "PQC file encryption failed")
+        }
+
+        return destinationURL
+    }
+
+    func decryptFileResult(
+        sourceURL: URL,
+        destinationURL: URL,
+        passphrase: String
+    ) async throws -> GPGExecutionResult {
+        try await ensureAgentRunning()
+        return try await execute(
+            arguments: [
+                "--decrypt",
+                "--batch",
+                "--yes",
+                "--pinentry-mode", "loopback",
+                "--passphrase-fd", "0",
+                "--status-fd", "1",
+                "--output", destinationURL.path,
+                "--", sourceURL.path
+            ],
+            input: passphrase + "\n"
+        )
+    }
+
+    func decryptFile(
+        sourceURL: URL,
+        destinationURL: URL,
+        passphrase: String
+    ) async throws -> URL {
+        let result = try await decryptFileResult(
+            sourceURL: sourceURL,
+            destinationURL: destinationURL,
+            passphrase: passphrase
+        )
+
+        guard result.exitCode == 0, FileManager.default.fileExists(atPath: destinationURL.path) else {
+            if let credentialError = GPGService.credentialFailureError(from: result) {
+                throw credentialError
+            }
+            throw GPGError.decryptionFailed(result.stderr ?? result.stdout ?? "PQC file decryption failed")
+        }
+
+        return destinationURL
+    }
+}

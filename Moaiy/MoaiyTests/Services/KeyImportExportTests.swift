@@ -111,6 +111,69 @@ struct KeyImportExportTests {
         #expect(result.unchanged == 1)
         #expect(result.newKeyIDs.count == 3)
     }
+
+    @Test("PQC public key export/import roundtrip requires explicit trust override")
+    func pqcPublicKey_exportImport_requiresTrustOverride() async throws {
+        let senderHome = try TestGPGHome.make(prefix: "p6-import-sender")
+        let recipientHome = try TestGPGHome.make(prefix: "p6-import-recipient")
+        defer {
+            senderHome.cleanup()
+            recipientHome.cleanup()
+        }
+
+        try await senderHome.requireKyberSupport()
+        try await recipientHome.requireKyberSupport()
+
+        let identity = makeIdentity(seed: "pqc-import")
+        let plaintext = "Moaiy PQC import flow \(UUID().uuidString)"
+
+        let fingerprint = try await recipientHome.generatePostQuantumHybridKey(
+            name: identity.name,
+            email: identity.email,
+            passphrase: identity.passphrase
+        )
+
+        let publicKey = try await recipientHome.exportPublicKey(keyID: fingerprint)
+        #expect(publicKey.contains("BEGIN PGP PUBLIC KEY BLOCK"))
+
+        let importResult = try await senderHome.importArmor(publicKey)
+        let importOutput = [importResult.stdout, importResult.stderr]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+        #expect(importOutput.localizedCaseInsensitiveContains("imported"))
+
+        let listResult = try await senderHome.execute(
+            arguments: ["--with-colons", "--fixed-list-mode", "--list-keys", fingerprint]
+        )
+        #expect(listResult.exitCode == 0)
+        #expect(listResult.stdout?.contains(fingerprint) == true)
+
+        do {
+            _ = try await senderHome.encryptText(
+                plaintext,
+                recipients: [fingerprint],
+                allowUntrustedRecipients: false
+            )
+            Issue.record("Expected imported PQC public key encryption to require explicit trust override")
+        } catch let error as GPGError {
+            guard case .encryptionFailed = error else {
+                Issue.record("Expected encryptionFailed for untrusted imported PQC recipient, got \(error)")
+                return
+            }
+        }
+
+        let ciphertext = try await senderHome.encryptText(
+            plaintext,
+            recipients: [fingerprint],
+            allowUntrustedRecipients: true
+        )
+        let decrypted = try await recipientHome.decryptText(
+            ciphertext,
+            passphrase: identity.passphrase
+        )
+
+        #expect(normalized(decrypted) == normalized(plaintext))
+    }
     
     // MARK: - Key Export Tests
     
@@ -215,6 +278,20 @@ struct KeyImportExportTests {
         #expect(result.unchanged == 3)
         #expect(result.newKeyIDs.isEmpty)
     }
+}
+
+private func makeIdentity(seed: String) -> (name: String, email: String, passphrase: String) {
+    let token = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12)
+    let suffix = "\(seed)-\(token)"
+    return (
+        name: "Moaiy \(suffix)",
+        email: "moaiy-\(suffix)@example.com",
+        passphrase: "Moaiy-\(suffix)-Passphrase-123!"
+    )
+}
+
+private func normalized(_ value: String) -> String {
+    value.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
 // MARK: - KeyImportResult Tests
