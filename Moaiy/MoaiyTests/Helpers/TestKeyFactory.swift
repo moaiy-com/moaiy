@@ -219,8 +219,13 @@ final class TestGPGHome {
             throw TestGPGHomeError.bundleNotFound
         }
 
+        let safePrefix = prefix.filter { character in
+            character.isLetter || character.isNumber || character == "-"
+        }
+        let shortPrefix = String((safePrefix.isEmpty ? "gpg" : safePrefix).prefix(6))
+        let uniqueSuffix = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))
         let rootURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("\(shortPrefix)-\(uniqueSuffix)", isDirectory: true)
         let homeURL = rootURL.appendingPathComponent("gnupg", isDirectory: true)
 
         try FileManager.default.createDirectory(

@@ -340,6 +340,67 @@ struct GPGServiceTests {
 
     // MARK: - Command Builder Tests
 
+    @Test("Post-quantum hybrid generation command uses expected argument order")
+    func commandBuilder_postQuantumHybridGenerationArguments() {
+        let userID = "Test User <test@example.com>"
+        let arguments = GPGCommandBuilder.postQuantumHybridKeyGenerationArguments(userID: userID)
+
+        #expect(arguments == [
+            "--batch",
+            "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0",
+            "--status-fd", "1",
+            "--quick-gen-key",
+            userID,
+            "pqc",
+            "default",
+            "never"
+        ])
+    }
+
+    @Test("Post-quantum hybrid generation input keeps passphrase in stdin")
+    func commandBuilder_postQuantumHybridGenerationInputPassphrase() {
+        let input = GPGCommandBuilder.postQuantumHybridKeyGenerationInput(passphrase: "secret-pass")
+
+        #expect(input == "secret-pass\n")
+    }
+
+    @Test("Post-quantum hybrid generation input sends newline without passphrase")
+    func commandBuilder_postQuantumHybridGenerationInputNoPassphrase() {
+        let input = GPGCommandBuilder.postQuantumHybridKeyGenerationInput(passphrase: nil)
+
+        #expect(input == "\n")
+    }
+
+    @Test("KEY_CREATED status parser extracts generated fingerprint")
+    func keyCreatedFingerprint_extractsFingerprint() {
+        let output = """
+        [GNUPG:] KEY_CONSIDERED 0123456789ABCDEF0123456789ABCDEF01234567 0
+        [GNUPG:] KEY_CREATED B 0123456789ABCDEF0123456789ABCDEF01234567
+        """
+
+        #expect(GPGService.keyCreatedFingerprint(from: output) == "0123456789ABCDEF0123456789ABCDEF01234567")
+    }
+
+    @Test("KEY_CREATED status parser ignores malformed fingerprints")
+    func keyCreatedFingerprint_ignoresMalformedFingerprint() {
+        let output = "[GNUPG:] KEY_CREATED B NOT_A_VALID_FINGERPRINT"
+
+        #expect(GPGService.keyCreatedFingerprint(from: output) == nil)
+    }
+
+    @Test("Post-quantum hybrid capability gate fails closed")
+    func postQuantumHybridCapabilityGate_failsClosed() {
+        do {
+            try GPGService.validatePostQuantumHybridGenerationSupport(capabilities: .unsupported)
+            Issue.record("Expected unsupported key type when Kyber is unavailable")
+        } catch GPGError.unsupportedKeyType(let value) {
+            #expect(value == "Kyber-768")
+        } catch {
+            Issue.record("Expected unsupported key type, got \(error)")
+        }
+    }
+
     @Test("Revocation reason codes map to expected GPG numeric values")
     func revocationReasonCodes_matchExpectedNumbers() {
         #expect(RevocationReason.noLongerUsed.gpgReasonCode == "0")

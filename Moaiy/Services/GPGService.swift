@@ -771,13 +771,38 @@ final class GPGService: SubkeyManaging {
     func generateKey(name: String, email: String, keyType: KeyType, passphrase: String? = nil) async throws -> String {
         try await ensureGPGAgentRunningIfNeeded()
 
-        guard keyType.generationMode == .batch else {
-            throw GPGError.unsupportedKeyType(keyType.rawValue)
-        }
-
         let operationStartedAt = Date()
         let beforeFingerprints = Set(try await listKeys(secretOnly: false).map(\.fingerprint))
 
+        switch keyType.generationMode {
+        case .batch:
+            return try await generateClassicalKey(
+                name: name,
+                email: email,
+                keyType: keyType,
+                passphrase: passphrase,
+                operationStartedAt: operationStartedAt,
+                beforeFingerprints: beforeFingerprints
+            )
+        case .quick:
+            return try await generatePostQuantumHybridKey(
+                name: name,
+                email: email,
+                passphrase: passphrase,
+                operationStartedAt: operationStartedAt,
+                beforeFingerprints: beforeFingerprints
+            )
+        }
+    }
+
+    private func generateClassicalKey(
+        name: String,
+        email: String,
+        keyType: KeyType,
+        passphrase: String?,
+        operationStartedAt: Date,
+        beforeFingerprints: Set<String>
+    ) async throws -> String {
         // Build key generation parameters
         let keyParams = buildKeyGenerationParams(
             name: name,
@@ -796,26 +821,79 @@ final class GPGService: SubkeyManaging {
             throw GPGError.keyGenerationFailed(result.stderr ?? "Unknown error (exit code: \(result.exitCode))")
         }
 
-        // Extract fingerprint from output
         guard let output = result.stdout else {
             throw GPGError.keyGenerationFailed("No output from GPG")
         }
 
-        // Try to find KEY_CREATED pattern: [GNUPG:] KEY_CREATED <type> <fingerprint>
-        // Example: [GNUPG:] KEY_CREATED P 1A2B3C4D5E6F7A8B9C0D1E2F3A4B5C6D7E8F9A0B
-        let lines = output.components(separatedBy: "\n")
-        for line in lines {
-            if line.contains("KEY_CREATED") {
-                let parts = line.components(separatedBy: " ")
-                // KEY_CREATED has format: [GNUPG:] KEY_CREATED <type> <fingerprint>
-                if parts.count >= 4 {
-                    let fingerprint = parts[3].trimmingCharacters(in: .whitespaces)
-                    if fingerprint.count == 40 {
-                        logger.info("Generated key with fingerprint: \(fingerprint)")
-                        return fingerprint
-                    }
-                }
+        return try await resolveGeneratedKeyFingerprint(
+            from: output,
+            email: email,
+            operationStartedAt: operationStartedAt,
+            beforeFingerprints: beforeFingerprints
+        )
+    }
+
+    private func generatePostQuantumHybridKey(
+        name: String,
+        email: String,
+        passphrase: String?,
+        operationStartedAt: Date,
+        beforeFingerprints: Set<String>
+    ) async throws -> String {
+        try Self.validatePostQuantumHybridGenerationSupport(capabilities: capabilities)
+
+        let userID = quickGenerationUserID(name: name, email: email)
+        let result = try await executeGPG(
+            arguments: GPGCommandBuilder.postQuantumHybridKeyGenerationArguments(userID: userID),
+            input: GPGCommandBuilder.postQuantumHybridKeyGenerationInput(passphrase: passphrase),
+            timeout: 120
+        )
+
+        if result.exitCode != 0 {
+            throw GPGError.keyGenerationFailed(result.stderr ?? "Unknown error (exit code: \(result.exitCode))")
+        }
+
+        guard let output = result.stdout else {
+            throw GPGError.keyGenerationFailed("No output from GPG")
+        }
+
+        return try await resolveGeneratedKeyFingerprint(
+            from: output,
+            email: email,
+            operationStartedAt: operationStartedAt,
+            beforeFingerprints: beforeFingerprints
+        )
+    }
+
+    nonisolated static func validatePostQuantumHybridGenerationSupport(capabilities: GPGCapabilities) throws {
+        guard capabilities.supportsKyber else {
+            throw GPGError.unsupportedKeyType("Kyber-768")
+        }
+    }
+
+    nonisolated static func keyCreatedFingerprint(from output: String) -> String? {
+        for line in output.split(whereSeparator: \.isNewline) where line.contains("KEY_CREATED") {
+            let parts = line.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+            guard parts.count >= 4 else { continue }
+
+            let fingerprint = parts[3].trimmingCharacters(in: .whitespacesAndNewlines)
+            if fingerprint.count == 40, fingerprint.allSatisfy({ $0.isHexDigit }) {
+                return fingerprint
             }
+        }
+
+        return nil
+    }
+
+    private func resolveGeneratedKeyFingerprint(
+        from output: String,
+        email: String,
+        operationStartedAt: Date,
+        beforeFingerprints: Set<String>
+    ) async throws -> String {
+        if let fingerprint = Self.keyCreatedFingerprint(from: output) {
+            logger.info("Generated key with fingerprint: \(fingerprint)")
+            return fingerprint
         }
 
         // If we get here, the key might have been created but output format is different
@@ -835,6 +913,19 @@ final class GPGService: SubkeyManaging {
 
         logger.error("Could not find KEY_CREATED pattern in GPG output")
         throw GPGError.keyGenerationFailed("Failed to get key fingerprint")
+    }
+
+    private func quickGenerationUserID(name: String, email: String) -> String {
+        let sanitizedName = sanitizeBatchField(name)
+        let sanitizedEmail = sanitizeBatchField(email)
+
+        if sanitizedName.isEmpty {
+            return sanitizedEmail
+        }
+        if sanitizedEmail.isEmpty {
+            return sanitizedName
+        }
+        return "\(sanitizedName) <\(sanitizedEmail)>"
     }
     
     /// Import a key from file
@@ -4364,6 +4455,24 @@ enum RevocationReason: String, CaseIterable, Identifiable {
 }
 
 enum GPGCommandBuilder {
+    static func postQuantumHybridKeyGenerationArguments(userID: String) -> [String] {
+        [
+            "--batch",
+            "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0",
+            "--status-fd", "1",
+            "--quick-gen-key",
+            userID,
+            "pqc",
+            "default",
+            "never"
+        ]
+    }
+
+    static func postQuantumHybridKeyGenerationInput(passphrase: String?) -> String {
+        (passphrase ?? "") + "\n"
+    }
+
     static func exportOwnerTrustArguments() -> [String] {
         ["--export-ownertrust"]
     }
