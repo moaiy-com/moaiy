@@ -227,6 +227,7 @@ final class TestGPGHome {
     let rootURL: URL
     let homeURL: URL
     let gpgURL: URL
+    let gpgAgentURL: URL?
     let gpgConnectAgentURL: URL?
     let gpgConfURL: URL?
 
@@ -236,9 +237,11 @@ final class TestGPGHome {
     private init(rootURL: URL, homeURL: URL, bundleURL: URL) {
         self.rootURL = rootURL
         self.homeURL = homeURL
-        self.gpgURL = bundleURL.appendingPathComponent("bin/gpg")
-        self.gpgConnectAgentURL = bundleURL.appendingPathComponent("bin/gpg-connect-agent")
-        self.gpgConfURL = bundleURL.appendingPathComponent("bin/gpgconf")
+        let binURL = bundleURL.appendingPathComponent("bin", isDirectory: true)
+        self.gpgURL = binURL.appendingPathComponent("gpg")
+        self.gpgAgentURL = binURL.appendingPathComponent("gpg-agent")
+        self.gpgConnectAgentURL = binURL.appendingPathComponent("gpg-connect-agent")
+        self.gpgConfURL = binURL.appendingPathComponent("gpgconf")
     }
 
     deinit {
@@ -258,13 +261,24 @@ final class TestGPGHome {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(shortPrefix)-\(uniqueSuffix)", isDirectory: true)
         let homeURL = rootURL.appendingPathComponent("gnupg", isDirectory: true)
+        let tmpURL = rootURL.appendingPathComponent("tmp", isDirectory: true)
 
         try FileManager.default.createDirectory(
             at: homeURL,
             withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]
         )
+        try FileManager.default.createDirectory(
+            at: tmpURL,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: homeURL.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tmpURL.path)
+
+        let agentConfigURL = homeURL.appendingPathComponent("gpg-agent.conf")
+        try "allow-loopback-pinentry\n".write(to: agentConfigURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: agentConfigURL.path)
 
         return TestGPGHome(rootURL: rootURL, homeURL: homeURL, bundleURL: bundleURL)
     }
@@ -277,7 +291,7 @@ final class TestGPGHome {
         try await executor.execute(
             executableURL: gpgURL,
             arguments: arguments,
-            environment: [:],
+            environment: gpgToolEnvironment,
             gpgHome: homeURL,
             input: input,
             timeout: timeout
@@ -289,18 +303,66 @@ final class TestGPGHome {
             return
         }
 
-        let result = try await executor.execute(
-            executableURL: gpgConnectAgentURL,
-            arguments: ["/bye"],
-            environment: [:],
+        if await canConnectToAgent(timeout: min(timeout, 5)) {
+            return
+        }
+
+        guard let gpgAgentURL, FileManager.default.fileExists(atPath: gpgAgentURL.path) else {
+            throw TestGPGHomeError.agentStartFailed("gpg-agent was not found in gpg.bundle")
+        }
+
+        let launchResult = try await executor.execute(
+            executableURL: gpgAgentURL,
+            arguments: ["--homedir", homeURL.path, "--daemon"],
+            environment: gpgToolEnvironment,
             gpgHome: homeURL,
             input: nil,
             timeout: timeout
         )
 
-        guard result.exitCode == 0 else {
-            throw TestGPGHomeError.agentStartFailed(result.stderr ?? "gpg-connect-agent failed")
+        guard launchResult.exitCode == 0 else {
+            let output = [launchResult.stderr, launchResult.stdout]
+                .compactMap { $0 }
+                .joined(separator: "\n")
+            throw TestGPGHomeError.agentStartFailed(output.isEmpty ? "gpg-agent failed to launch" : output)
         }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await canConnectToAgent(timeout: 2) {
+                return
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        throw TestGPGHomeError.agentStartFailed("gpg-agent is not reachable after launch")
+    }
+
+    private var gpgToolEnvironment: [String: String] {
+        let binPath = gpgURL.deletingLastPathComponent().path
+        let inheritedPath = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        return [
+            "GNUPGHOME": homeURL.path,
+            "HOME": rootURL.path,
+            "TMPDIR": rootURL.appendingPathComponent("tmp", isDirectory: true).path,
+            "PATH": "\(binPath):\(inheritedPath)",
+            "GPG_AGENT_INFO": ""
+        ]
+    }
+
+    private func canConnectToAgent(timeout: TimeInterval) async -> Bool {
+        guard let gpgConnectAgentURL else { return false }
+
+        let result = try? await executor.execute(
+            executableURL: gpgConnectAgentURL,
+            arguments: ["--homedir", homeURL.path, "/bye"],
+            environment: gpgToolEnvironment,
+            gpgHome: homeURL,
+            input: nil,
+            timeout: timeout
+        )
+
+        return result?.exitCode == 0
     }
 
     func killAgent(timeout: TimeInterval = 10) async {
@@ -310,8 +372,8 @@ final class TestGPGHome {
 
         _ = try? await executor.execute(
             executableURL: gpgConfURL,
-            arguments: ["--kill", "gpg-agent"],
-            environment: [:],
+            arguments: ["--homedir", homeURL.path, "--kill", "gpg-agent"],
+            environment: gpgToolEnvironment,
             gpgHome: homeURL,
             input: nil,
             timeout: timeout
