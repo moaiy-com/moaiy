@@ -188,3 +188,125 @@ extension KeyType {
         .ecc
     ]
 }
+
+// MARK: - Isolated GPG Home Test Helper
+
+final class TestGPGHome {
+    let rootURL: URL
+    let homeURL: URL
+    let gpgURL: URL
+    let gpgConnectAgentURL: URL?
+    let gpgConfURL: URL?
+
+    private let executor = GPGProcessExecutor()
+    private var didCleanup = false
+
+    private init(rootURL: URL, homeURL: URL, bundleURL: URL) {
+        self.rootURL = rootURL
+        self.homeURL = homeURL
+        self.gpgURL = bundleURL.appendingPathComponent("bin/gpg")
+        self.gpgConnectAgentURL = bundleURL.appendingPathComponent("bin/gpg-connect-agent")
+        self.gpgConfURL = bundleURL.appendingPathComponent("bin/gpgconf")
+    }
+
+    deinit {
+        cleanup()
+    }
+
+    static func make(prefix: String = "moaiy-test-gpg-home") throws -> TestGPGHome {
+        guard let bundleURL = Bundle.main.url(forResource: "gpg", withExtension: "bundle") else {
+            throw TestGPGHomeError.bundleNotFound
+        }
+
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)
+        let homeURL = rootURL.appendingPathComponent("gnupg", isDirectory: true)
+
+        try FileManager.default.createDirectory(
+            at: homeURL,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: homeURL.path)
+
+        return TestGPGHome(rootURL: rootURL, homeURL: homeURL, bundleURL: bundleURL)
+    }
+
+    func execute(
+        arguments: [String],
+        input: String? = nil,
+        timeout: TimeInterval = Constants.GPG.defaultTimeout
+    ) async throws -> GPGExecutionResult {
+        try await executor.execute(
+            executableURL: gpgURL,
+            arguments: arguments,
+            environment: [:],
+            gpgHome: homeURL,
+            input: input,
+            timeout: timeout
+        )
+    }
+
+    func ensureAgentRunning(timeout: TimeInterval = 10) async throws {
+        guard let gpgConnectAgentURL, FileManager.default.fileExists(atPath: gpgConnectAgentURL.path) else {
+            return
+        }
+
+        let result = try await executor.execute(
+            executableURL: gpgConnectAgentURL,
+            arguments: ["/bye"],
+            environment: [:],
+            gpgHome: homeURL,
+            input: nil,
+            timeout: timeout
+        )
+
+        guard result.exitCode == 0 else {
+            throw TestGPGHomeError.agentStartFailed(result.stderr ?? "gpg-connect-agent failed")
+        }
+    }
+
+    func killAgent(timeout: TimeInterval = 10) async {
+        guard let gpgConfURL, FileManager.default.fileExists(atPath: gpgConfURL.path) else {
+            return
+        }
+
+        _ = try? await executor.execute(
+            executableURL: gpgConfURL,
+            arguments: ["--kill", "gpg-agent"],
+            environment: [:],
+            gpgHome: homeURL,
+            input: nil,
+            timeout: timeout
+        )
+    }
+
+    var homePermissions: Int? {
+        guard
+            let permissions = try? FileManager.default.attributesOfItem(atPath: homeURL.path)[.posixPermissions] as? NSNumber
+        else {
+            return nil
+        }
+        return permissions.intValue & 0o777
+    }
+
+    func cleanup() {
+        guard !didCleanup else { return }
+        didCleanup = true
+        try? FileManager.default.removeItem(at: rootURL)
+    }
+}
+
+enum TestGPGHomeError: Error, CustomStringConvertible {
+    case bundleNotFound
+    case agentStartFailed(String)
+
+    var description: String {
+        switch self {
+        case .bundleNotFound:
+            return "gpg.bundle was not found in the test bundle"
+        case .agentStartFailed(let message):
+            return "Failed to start gpg-agent: \(message)"
+        }
+    }
+}
