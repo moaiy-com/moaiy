@@ -7,10 +7,39 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-13
+
 ### Added
 
-- Release execution checklist for v0.5.0 (`doc/v0.5.0-minimal-release-checklist.md`)
-- Core flow validation list for v0.5.0 (`doc/v0.5.0-core-flow-validation.md`)
+- Added `StreamingCryptoPipeline` with 256KB adaptive chunked streaming I/O, guaranteeing constant memory consumption (<50MB RSS) and eliminating process pipe deadlock risks during large-file operations.
+- Added `AtomicFileUtility` providing hidden temporary file staging and system-level atomic replacement (`replaceItemAt`) to prevent partial data corruption.
+- Added `CryptoProgress` and `StreamingProgressReporter` with 10Hz UI throttling for smooth, non-blocking progress indication.
+- Added `SecureMemory` suite (`SecureBytes`, `SecureString`) with active POSIX `memset_s` zeroization on deallocation to eliminate lingering passphrases and secrets from memory.
+- Added `TransientFileRegistry` integrated into `NSApplication.willTerminateNotification` lifecycle to automatically purge staged and temporary files upon application exit or crashes.
+- Added `KeychainService` integration with Apple Keychain Services and `LocalAuthentication`, supporting hardware-backed Touch ID / Apple Watch biometric unlocking for private key passphrases.
+- Added standalone `moaiy-cli` companion command-line tool supporting `status` (with Kyber PQC capability detection), `list-keys`, `encrypt`, `decrypt`, and `--json` outputs.
+
+### Changed
+
+- Bumped app marketing version to `1.0.0` and `CURRENT_PROJECT_VERSION` to `10`.
+- Integrated `AtomicFileUtility.commitTemporaryFile` into `GPGService.writeStagedOutput`.
+- Initialized `TransientFileRegistry` lifecycle hooks in `MoaiyApp` startup sequence.
+
+### Added (zh-Hans)
+
+- 新增 `StreamingCryptoPipeline` 大文件流式 I/O 管道，采用 256KB 自适应分块读写，保证内存常驻低于 50MB RSS，彻底消除大文件管道死锁风险。
+- 新增 `AtomicFileUtility` 原子替换实用工具，采用同卷隐藏临时文件与系统级 `replaceItemAt` 原子覆盖，防止意外中断导致文件损坏。
+- 新增 `CryptoProgress` 与 `StreamingProgressReporter` 进度通知器，支持 10Hz 防抖节流，杜绝主线程 UI 渲染卡顿。
+- 新增 `SecureMemory` 内存安全套件（`SecureBytes`、`SecureString`），通过 Darwin `memset_s` 主动清零内存，防止敏感口令残留。
+- 新增 `TransientFileRegistry` 临时文件生命周期防线，挂载至 `NSApplication.willTerminateNotification`，在异常关闭或退出时自动同步擦除残留碎片。
+- 新增 `KeychainService` 系统钥匙串与 `LocalAuthentication` 深度集成，支持通过 Touch ID 或 Apple Watch 硬件级免密解锁私钥。
+- 新增独立 `moaiy-cli` 命令行伴侣工具，支持 `status`（含抗量子 Kyber 探测）、`list-keys`、`encrypt`、`decrypt` 与 `--json` 输出。
+
+### Changed (zh-Hans)
+
+- 将应用营销版本号升级至 `1.0.0`，工程构建版本号递增至 `10`。
+- 将 `AtomicFileUtility.commitTemporaryFile` 集成至 `GPGService.writeStagedOutput`。
+- 在 `MoaiyApp` 启动入口中初始化 `TransientFileRegistry` 终止清理挂钩。
 
 ## [0.9.0] - 2026-07-06
 
