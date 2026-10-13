@@ -21,6 +21,7 @@ struct MoaiyApp: App {
 
     init() {
         SecureTempStorage.cleanupStaleDirectories()
+        TransientFileRegistry.shared.setupLifecycleHooks()
         AppFontRegistrar.registerBundledFonts()
         logger.notice("========== Moaiy App Starting ==========")
         logger.notice("GPGService.isReady: \(GPGService.shared.isReady)")
