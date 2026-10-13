@@ -2762,11 +2762,7 @@ final class GPGService: SubkeyManaging {
     /// For sandboxed save-panel flows, changing the destination path can invalidate
     /// the user-granted write scope, so we overwrite in place when needed.
     private func writeStagedOutput(from stagedURL: URL, to destinationURL: URL) throws -> URL {
-        let fileManager = FileManager.default
-        if fileManager.fileExists(atPath: destinationURL.path) {
-            try fileManager.removeItem(at: destinationURL)
-        }
-        try fileManager.copyItem(at: stagedURL, to: destinationURL)
+        try AtomicFileUtility.commitTemporaryFile(from: stagedURL, to: destinationURL)
         return destinationURL
     }
 
