@@ -1,0 +1,29 @@
+# Moaiy Engineering Invariants & AI Agent Rules (.cursorrules)
+
+## 1. Architecture & Design Principles
+- **Pattern**: Strict MVVM + Swift Concurrency (`async`/`await`, `AsyncSequence`).
+- **Open-Core Contract**: Preserve clear separation between Core open-source capabilities and external/Pro interfaces. Views must never bypass ViewModels to interact with Services directly.
+- **Dependency Flow**: Views -> ViewModels -> Domain Services / Crypto Wrappers (`GPGService`, `AgeService`, `PQCService`).
+
+## 2. macOS App Sandbox Safety Invariants (Critical)
+- **Security-Scoped Bookmarks**: Whenever accessing user-dragged files or selected directories, you MUST access security-scoped resources in a strictly paired block:
+  ```swift
+  guard url.startAccessingSecurityScopedResource() else {
+      throw SandboxError.accessDenied(url)
+  }
+  defer {
+      url.stopAccessingSecurityScopedResource()
+  }
+  ```
+- **Temporary Files**: All scratch and intermediate files MUST reside in standard sandbox temporary directories (`FileManager.default.temporaryDirectory`) or target volume hidden temporary paths.
+- **Sandbox Test Target**: Changes touching file system access, process spawning, or bookmark persistence MUST pass `MoaiySandboxTest`.
+
+## 3. Cryptographic & Process Streaming Invariants
+- **No Synchronous Pipe Deadlocks**: NEVER call blocking read APIs such as `pipe.fileHandleForReading.readDataToEndOfFile()` on the main thread or without chunked stream draining. Standard output and standard error pipes MUST be consumed concurrently or asynchronously to prevent deadlock when processing files >64KB.
+- **Memory Zeroization**: Plaintext passwords, passphrases, and decrypted key materials must be zeroized in memory immediately after use. Avoid holding sensitive strings in long-lived immutable Swift `String` allocations when raw byte buffers (`[UInt8]` / `Data`) can be securely cleared.
+- **Streaming by Default**: All file encryption and decryption routines must support chunked streaming I/O (`AsyncStream<Data>`) with bounded peak memory usage (<50MB constant RSS regardless of file size).
+
+## 4. Code Quality & Conventions
+- **Swift Version**: Swift 6.0+ concurrency safety mode compliant (`Sendable` annotations, actor isolation).
+- **Localization**: Never hardcode user-facing strings in UI Views. Always register localized keys and verify against `runtime-localization-guard.yml`.
+- **Atomic Operations**: File writes must be atomic. Never overwrite or truncate target files in-place without write-to-temp-then-rename guarantees.
