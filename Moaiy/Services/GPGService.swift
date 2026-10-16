@@ -1217,7 +1217,7 @@ final class GPGService: SubkeyManaging {
 
         let result = try await executeGPG(
             arguments: arguments,
-            input: passphrase + "\n"
+            input: resolvedPassphrase + "\n"
         )
         try ensureSuccess(result, as: GPGError.exportFailed)
 
@@ -1797,6 +1797,112 @@ final class GPGService: SubkeyManaging {
 
         return try writeStagedOutput(from: stagedOutputURL, to: destinationURL)
     }
+
+    // MARK: - Streaming & Keychain Integration
+
+    private let streamingPipeline = StreamingCryptoPipeline()
+
+    /// Encrypt a file using chunked streaming I/O with progress callbacks
+    func encryptFileStreaming(
+        sourceURL: URL,
+        destinationURL: URL,
+        recipients: [String],
+        armor: Bool = false,
+        allowUntrustedRecipients: Bool = false,
+        progressHandler: (@Sendable (CryptoProgress) -> Void)? = nil
+    ) async throws -> URL {
+        guard let gpgURL else {
+            throw GPGError.gpgNotFound
+        }
+
+        var arguments = [
+            "--encrypt",
+            "--batch",
+            "--yes",
+            "--cipher-algo", Constants.GPG.defaultCipherAlgorithm
+        ]
+
+        if allowUntrustedRecipients {
+            arguments.append(contentsOf: ["--trust-model", "always"])
+        }
+
+        for recipient in recipients {
+            arguments.append(contentsOf: ["--recipient", recipient])
+        }
+
+        if armor {
+            arguments.append("--armor")
+        }
+
+        return try await streamingPipeline.executeStreamingFileOperation(
+            executableURL: gpgURL,
+            arguments: arguments,
+            environment: [:],
+            gpgHome: gpgHome,
+            sourceURL: sourceURL,
+            destinationURL: destinationURL,
+            isDecryption: false,
+            passphrase: nil,
+            progressHandler: progressHandler
+        )
+    }
+
+    /// Decrypt a file using chunked streaming I/O with progress callbacks
+    func decryptFileStreaming(
+        sourceURL: URL,
+        destinationURL: URL,
+        passphrase: SecureString? = nil,
+        preferredSecretKey: String? = nil,
+        progressHandler: (@Sendable (CryptoProgress) -> Void)? = nil
+    ) async throws -> URL {
+        try await ensureGPGAgentRunningIfNeeded()
+        guard let gpgURL else {
+            throw GPGError.gpgNotFound
+        }
+
+        var arguments = [
+            "--decrypt",
+            "--batch",
+            "--yes"
+        ]
+
+        if let preferredSecretKey, let normalized = normalizeKeyReference(preferredSecretKey) {
+            arguments.append(contentsOf: ["--try-secret-key", normalized])
+        }
+
+        var activePassphrase = passphrase
+        if activePassphrase == nil, let preferredSecretKey {
+            if let saved = try? await KeychainService.shared.retrievePassphrase(for: preferredSecretKey) {
+                activePassphrase = saved
+            }
+        }
+
+        return try await streamingPipeline.executeStreamingFileOperation(
+            executableURL: gpgURL,
+            arguments: arguments,
+            environment: [:],
+            gpgHome: gpgHome,
+            sourceURL: sourceURL,
+            destinationURL: destinationURL,
+            isDecryption: true,
+            passphrase: activePassphrase,
+            progressHandler: progressHandler
+        )
+    }
+
+    /// Stores a passphrase for a key fingerprint in the macOS Keychain
+    func storePassphraseInKeychain(for keyFingerprint: String, passphrase: String, requireBiometrics: Bool = false) throws {
+        let secure = SecureString(passphrase)
+        try KeychainService.shared.savePassphrase(secure, for: keyFingerprint, requireBiometrics: requireBiometrics)
+    }
+
+    /// Looks up a saved passphrase in Keychain for a key fingerprint
+    func lookupPassphraseInKeychain(for keyFingerprint: String, contextReason: String? = nil) async -> String? {
+        if let secure = try? await KeychainService.shared.retrievePassphrase(for: keyFingerprint, contextReason: contextReason) {
+            return secure.revealString()
+        }
+        return nil
+    }
     
     /// Decrypt a file
     /// - Parameters:
@@ -1811,6 +1917,13 @@ final class GPGService: SubkeyManaging {
         preferredSecretKey: String? = nil
     ) async throws -> URL {
         try await ensureGPGAgentRunningIfNeeded()
+
+        var resolvedPassphrase = passphrase
+        if resolvedPassphrase.isEmpty, let preferredSecretKey {
+            if let saved = try? await KeychainService.shared.retrievePassphrase(for: preferredSecretKey) {
+                resolvedPassphrase = saved.revealString()
+            }
+        }
 
         let fileManager = FileManager.default
         let stagingDirectory = try secureOperationDirectory(prefix: "file-op")

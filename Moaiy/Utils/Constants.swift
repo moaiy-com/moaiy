@@ -308,7 +308,13 @@ enum SecureTempStorage {
         let dir = base.appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+        TransientFileRegistry.shared.register(url: dir)
         return dir
+    }
+
+    static func removeOperationDirectory(_ url: URL) {
+        TransientFileRegistry.shared.unregister(url: url)
+        try? fileManager.removeItem(at: url)
     }
 
     static func cleanupStaleDirectories(olderThan ttl: TimeInterval = staleTTL) {

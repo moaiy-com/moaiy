@@ -2,15 +2,17 @@
 //  SecureMemory.swift
 //  Moaiy
 //
-//  Cryptographic memory zeroization utilities.
-//  Guarantees memory buffers containing passphrases and keys are actively
-//  cleared using memset_s before deallocation.
+//  Cryptographic memory zeroization utilities (best-effort).
+//  Provides internal byte buffer clearing via POSIX memset_s to reduce
+//  passphrase memory residency duration.
 //
 
 import Foundation
 import Darwin
 
-/// A container for sensitive byte buffers that actively wipes memory using `memset_s` on deallocation.
+/// A container for sensitive byte buffers that attempts to clear its internal memory using `memset_s` on deallocation.
+/// Note: This provides best-effort clearing of its own internal buffer. Any prior Swift String/Data allocations
+/// from which this buffer was initialized may still linger in heap/autorelease pools outside this class's control.
 public final class SecureBytes: @unchecked Sendable {
     private var buffer: [UInt8]
     private let lock = NSLock()
@@ -36,7 +38,7 @@ public final class SecureBytes: @unchecked Sendable {
         zeroize()
     }
 
-    /// Explicitly zeroizes the underlying buffer using POSIX memset_s to avoid compiler dead-code elimination.
+    /// Best-effort zeroizes the internal buffer using POSIX memset_s to reduce memory residency.
     public func zeroize() {
         lock.lock()
         defer { lock.unlock() }
@@ -52,7 +54,7 @@ public final class SecureBytes: @unchecked Sendable {
         isZeroized = true
     }
 
-    /// Access the underlying bytes within an isolated closure
+    /// Access the underlying bytes within an isolated closure without extra copies
     public func withUnsafeBytes<R>(_ body: (UnsafeRawBufferPointer) throws -> R) rethrows -> R {
         lock.lock()
         defer { lock.unlock() }
@@ -66,14 +68,14 @@ public final class SecureBytes: @unchecked Sendable {
         return buffer.count
     }
 
-    /// Returns a snapshot of Data. Note: caller is responsible for lifecycle of returned Data.
+    /// Returns a copy of Data. Warning: The returned Data allocation is managed by Foundation and is not zeroized.
     public func copyData() -> Data {
         lock.lock()
         defer { lock.unlock() }
         return Data(buffer)
     }
 
-    /// Returns true if the buffer has been zeroized
+    /// Returns true if the internal buffer has been zeroized
     public var isCleaned: Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -81,7 +83,8 @@ public final class SecureBytes: @unchecked Sendable {
     }
 }
 
-/// A wrapper for sensitive strings that clears underlying UTF-8 representation when dismissed.
+/// A wrapper for sensitive strings that clears its internal representation when dismissed.
+/// Note: Calling `revealString()` creates an immutable Swift String in autoreleased memory that cannot be zeroized.
 public final class SecureString: @unchecked Sendable {
     private let secureBytes: SecureBytes
 
@@ -93,6 +96,8 @@ public final class SecureString: @unchecked Sendable {
         try secureBytes.withUnsafeBytes(body)
     }
 
+    /// Warning: Exposing as Swift String creates an immutable heap copy that cannot be zeroized.
+    /// Prefer `withUnsafeUTF8` whenever possible.
     public func revealString() -> String {
         secureBytes.withUnsafeBytes { rawBuffer in
             guard let baseAddress = rawBuffer.baseAddress else { return "" }

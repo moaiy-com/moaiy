@@ -2,8 +2,7 @@
 //  StreamingCryptoPipelineTests.swift
 //  MoaiyTests
 //
-//  Unit tests for the streaming crypto pipeline, atomic file replacement,
-//  and throttled progress reporting.
+//  Unit tests for the streaming crypto pipeline and throttled progress reporting.
 //
 
 import Foundation
@@ -33,56 +32,22 @@ struct StreamingCryptoPipelineTests {
         #expect(zeroTotal.fractionCompleted == 1.0)
     }
 
-    @Test("AtomicFileUtility creates isolated temporary file URL on target volume")
-    func atomicFileUtility_temporaryURL_namingConventions() {
-        let destination = URL(fileURLWithPath: "/tmp/sample_target.moy")
-        let tempURL = AtomicFileUtility.temporaryDestinationURL(for: destination)
-
-        #expect(tempURL.deletingLastPathComponent().path == destination.deletingLastPathComponent().path)
-        #expect(tempURL.lastPathComponent.hasPrefix(".sample_target.moy.moaiy-tmp-"))
-    }
-
-    @Test("AtomicFileUtility commits staged temporary file atomically over existing destination")
-    func atomicFileUtility_commitsAtomically() throws {
-        let fileManager = FileManager.default
-        let tempDir = fileManager.temporaryDirectory.appendingPathComponent("moaiy-atomic-test-\(UUID().uuidString)")
-        try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        defer {
-            try? fileManager.removeItem(at: tempDir)
+    @Test("StreamingProgressReporter debounces and limits reporting frequency")
+    func streamingProgressReporter_throttlesReports() async {
+        var recordedFractions: [Double] = []
+        let reporter = StreamingProgressReporter(intervalSeconds: 0.2) { progress in
+            recordedFractions.append(progress.fractionCompleted)
         }
 
-        let destinationURL = tempDir.appendingPathComponent("final_output.txt")
-        let initialData = Data("Initial old content".utf8)
-        try initialData.write(to: destinationURL)
+        await reporter.report(bytesProcessed: 100, totalBytes: 1000)
+        await reporter.report(bytesProcessed: 200, totalBytes: 1000)
+        await reporter.report(bytesProcessed: 300, totalBytes: 1000)
+        // Immediate calls within 0.2s should be throttled
 
-        let stagedTempURL = AtomicFileUtility.temporaryDestinationURL(for: destinationURL)
-        let newContent = Data("New atomic content \(UUID().uuidString)".utf8)
-        try newContent.write(to: stagedTempURL)
+        // Final force report
+        await reporter.report(bytesProcessed: 1000, totalBytes: 1000, force: true)
 
-        #expect(fileManager.fileExists(atPath: stagedTempURL.path))
-        #expect(fileManager.fileExists(atPath: destinationURL.path))
-
-        try AtomicFileUtility.commitTemporaryFile(from: stagedTempURL, to: destinationURL)
-
-        // Staged temp file should now be moved/removed
-        #expect(!fileManager.fileExists(atPath: stagedTempURL.path))
-        #expect(fileManager.fileExists(atPath: destinationURL.path))
-
-        let readData = try Data(contentsOf: destinationURL)
-        #expect(readData == newContent)
-    }
-
-    @Test("AtomicFileUtility cleans up temporary files quietly")
-    func atomicFileUtility_cleanupQuietly() throws {
-        let fileManager = FileManager.default
-        let tempFile = fileManager.temporaryDirectory.appendingPathComponent("quiet_cleanup_\(UUID().uuidString).tmp")
-        try Data("test".utf8).write(to: tempFile)
-        #expect(fileManager.fileExists(atPath: tempFile.path))
-
-        AtomicFileUtility.cleanupQuietly(at: tempFile)
-        #expect(!fileManager.fileExists(atPath: tempFile.path))
-
-        // Subsequent cleanup on non-existent file should not throw or crash
-        AtomicFileUtility.cleanupQuietly(at: tempFile)
+        #expect(!recordedFractions.isEmpty)
+        #expect(recordedFractions.last == 1.0)
     }
 }

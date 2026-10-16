@@ -7,12 +7,13 @@
 
 import Foundation
 
-let versionString = "1.0.0-beta"
+let versionString = "1.0.0"
 
 struct CLIStatus: Codable {
     let version: String
     let gpgAvailable: Bool
     let gpgPath: String?
+    let gpgHome: String?
     let supportsKyber: Bool
 }
 
@@ -44,13 +45,32 @@ func printUsage() {
         -r, --recipient  Recipient key ID / fingerprint (for encryption)
         -o, --output     Custom output destination path
         --armor          Output ASCII armored ciphertext
+        --secret         Only list secret/private keys (for list-keys)
+        --gpg-home       Override GPG home directory path
 
     EXAMPLES:
         moaiy-cli status --json
-        moaiy-cli list-keys
+        moaiy-cli list-keys --secret
         moaiy-cli encrypt document.pdf -r 4D8B93C4 -o document.pdf.moy
         moaiy-cli decrypt document.pdf.moy -o document.pdf
     """)
+}
+
+func resolveGPGHome(customPath: String?) -> URL {
+    if let customPath = customPath {
+        return URL(fileURLWithPath: customPath)
+    }
+    let fileManager = FileManager.default
+    // 1. Check Moaiy App's managed home first
+    if let libraryURL = fileManager.urls(for: .libraryDirectory, in: .userDomainMask).first {
+        let appHome = libraryURL.appendingPathComponent("gnupg", isDirectory: true)
+        if fileManager.fileExists(atPath: appHome.path) {
+            return appHome
+        }
+    }
+    // 2. Check standard ~/.gnupg
+    let standardHome = fileManager.homeDirectoryForCurrentUser.appendingPathComponent(".gnupg", isDirectory: true)
+    return standardHome
 }
 
 func findGPGExecutable() -> String? {
@@ -67,23 +87,78 @@ func findGPGExecutable() -> String? {
     return nil
 }
 
-func checkStatus(jsonOutput: Bool) {
+/// Robust pipe execution that avoids deadlocks by reading stdout/stderr asynchronously
+func runProcessSafe(executable: String, arguments: [String], environment: [String: String]) -> (exitCode: Int32, stdout: String, stderr: String) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = arguments
+
+    var env = ProcessInfo.processInfo.environment
+    for (k, v) in environment {
+        env[k] = v
+    }
+    process.environment = env
+
+    let stdoutPipe = Pipe()
+    let stderrPipe = Pipe()
+    process.standardOutput = stdoutPipe
+    process.standardError = stderrPipe
+
+    let queue = DispatchQueue(label: "com.moaiy.cli.pipe", attributes: .concurrent)
+    var stdoutData = Data()
+    var stderrData = Data()
+    let group = DispatchGroup()
+
+    group.enter()
+    queue.async {
+        stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        group.leave()
+    }
+
+    group.enter()
+    queue.async {
+        stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        group.leave()
+    }
+
+    do {
+        try process.run()
+        process.waitUntilExit()
+    } catch {
+        return (-1, "", error.localizedDescription)
+    }
+
+    group.wait()
+
+    let stdoutStr = String(data: stdoutData, encoding: .utf8) ?? ""
+    let stderrStr = String(data: stderrData, encoding: .utf8) ?? ""
+    return (process.terminationStatus, stdoutStr, stderrStr)
+}
+
+func checkStatus(gpgHomeURL: URL, jsonOutput: Bool) {
     let gpgPath = findGPGExecutable()
     let isAvailable = gpgPath != nil
 
     var supportsKyber = false
     if let gpg = gpgPath {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: gpg)
-        process.arguments = ["--with-colons", "--list-config"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        try? process.run()
-        process.waitUntilExit()
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        if let output = String(data: data, encoding: .utf8) {
-            supportsKyber = output.lowercased().contains("kyber")
+        let result = runProcessSafe(
+            executable: gpg,
+            arguments: ["--with-colons", "--list-config"],
+            environment: ["GNUPGHOME": gpgHomeURL.path]
+        )
+        if result.exitCode == 0 {
+            // Precise parser checking algorithm ID 8 or pubkey name containing kyber
+            for rawLine in result.stdout.split(whereSeparator: \.isNewline) {
+                let fields = rawLine.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+                guard fields.count >= 3, fields[0] == "cfg" else { continue }
+                let key = fields[1].lowercased()
+                let val = fields[2].lowercased()
+                if (key == "pubkey" && val.split(separator: ";").contains("8")) ||
+                   (key == "pubkeyname" && val.contains("kyber")) {
+                    supportsKyber = true
+                    break
+                }
+            }
         }
     }
 
@@ -91,6 +166,7 @@ func checkStatus(jsonOutput: Bool) {
         version: versionString,
         gpgAvailable: isAvailable,
         gpgPath: gpgPath,
+        gpgHome: gpgHomeURL.path,
         supportsKyber: supportsKyber
     )
 
@@ -103,30 +179,30 @@ func checkStatus(jsonOutput: Bool) {
     } else {
         print("Moaiy CLI Version: \(status.version)")
         print("GPG Engine Ready:  \(status.gpgAvailable ? "YES (\(status.gpgPath ?? ""))" : "NO")")
+        print("GPG Home Path:     \(status.gpgHome ?? "none")")
         print("PQC Kyber Support: \(status.supportsKyber ? "Available" : "Standard")")
     }
 }
 
-func listKeys(secretOnly: Bool, jsonOutput: Bool) {
+func listKeys(gpgHomeURL: URL, secretOnly: Bool, jsonOutput: Bool) {
     guard let gpgPath = findGPGExecutable() else {
         fputs("Error: GPG executable not found in system paths.\n", stderr)
         exit(1)
     }
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: gpgPath)
-    process.arguments = secretOnly
+    let args = secretOnly
         ? ["--list-secret-keys", "--with-colons", "--fixed-list-mode"]
         : ["--list-keys", "--with-colons", "--fixed-list-mode"]
 
-    let pipe = Pipe()
-    process.standardOutput = pipe
-    try? process.run()
-    process.waitUntilExit()
+    let result = runProcessSafe(
+        executable: gpgPath,
+        arguments: args,
+        environment: ["GNUPGHOME": gpgHomeURL.path]
+    )
 
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    guard let output = String(data: data, encoding: .utf8) else {
-        exit(0)
+    guard result.exitCode == 0 else {
+        fputs("Error listing keys: \(result.stderr)\n", stderr)
+        exit(1)
     }
 
     var keys: [CLIKeyInfo] = []
@@ -134,7 +210,7 @@ func listKeys(secretOnly: Bool, jsonOutput: Bool) {
     var currentFpr = ""
     var currentUserIDs: [String] = []
 
-    for line in output.components(separatedBy: "\n") {
+    for line in result.stdout.components(separatedBy: "\n") {
         let fields = line.components(separatedBy: ":")
         guard !fields.isEmpty else { continue }
 
@@ -168,11 +244,98 @@ func listKeys(secretOnly: Bool, jsonOutput: Bool) {
             print(str)
         }
     } else {
-        print("Available Keys (\(keys.count)):")
+        print("Available Keys (\(keys.count)) [\(gpgHomeURL.path)]:")
         for key in keys {
             let uids = key.userIDs.joined(separator: ", ")
             print("  - [\(key.id)] \(key.fingerprint) (\(uids))")
         }
+    }
+}
+
+func encryptFile(gpgHomeURL: URL, inputPath: String, recipient: String?, outputPath: String?, armor: Bool) {
+    guard let gpgPath = findGPGExecutable() else {
+        fputs("Error: GPG executable not found in system paths.\n", stderr)
+        exit(1)
+    }
+    guard let recipient = recipient, !recipient.isEmpty else {
+        fputs("Error: --recipient <keyID> is required for encryption.\n", stderr)
+        exit(1)
+    }
+    guard FileManager.default.fileExists(atPath: inputPath) else {
+        fputs("Error: Input file does not exist: \(inputPath)\n", stderr)
+        exit(1)
+    }
+
+    let defaultOutput = armor ? "\(inputPath).asc" : "\(inputPath).moy"
+    let finalOutput = outputPath ?? defaultOutput
+
+    var args = [
+        "--encrypt",
+        "--batch",
+        "--yes",
+        "--recipient", recipient,
+        "--output", finalOutput
+    ]
+    if armor {
+        args.append("--armor")
+    }
+    args.append(inputPath)
+
+    print("Encrypting \(inputPath) for \(recipient)...")
+    let result = runProcessSafe(
+        executable: gpgPath,
+        arguments: args,
+        environment: ["GNUPGHOME": gpgHomeURL.path]
+    )
+
+    if result.exitCode == 0 {
+        print("Successfully encrypted to: \(finalOutput)")
+    } else {
+        fputs("Encryption failed: \(result.stderr)\n", stderr)
+        exit(1)
+    }
+}
+
+func decryptFile(gpgHomeURL: URL, inputPath: String, outputPath: String?) {
+    guard let gpgPath = findGPGExecutable() else {
+        fputs("Error: GPG executable not found in system paths.\n", stderr)
+        exit(1)
+    }
+    guard FileManager.default.fileExists(atPath: inputPath) else {
+        fputs("Error: Input file does not exist: \(inputPath)\n", stderr)
+        exit(1)
+    }
+
+    let defaultOutput: String
+    if inputPath.hasSuffix(".moy") {
+        defaultOutput = String(inputPath.dropLast(4))
+    } else if inputPath.hasSuffix(".asc") || inputPath.hasSuffix(".gpg") {
+        defaultOutput = String(inputPath.dropLast(4))
+    } else {
+        defaultOutput = "\(inputPath).decrypted"
+    }
+    let finalOutput = outputPath ?? defaultOutput
+
+    let args = [
+        "--decrypt",
+        "--batch",
+        "--yes",
+        "--output", finalOutput,
+        inputPath
+    ]
+
+    print("Decrypting \(inputPath)...")
+    let result = runProcessSafe(
+        executable: gpgPath,
+        arguments: args,
+        environment: ["GNUPGHOME": gpgHomeURL.path]
+    )
+
+    if result.exitCode == 0 {
+        print("Successfully decrypted to: \(finalOutput)")
+    } else {
+        fputs("Decryption failed: \(result.stderr)\n", stderr)
+        exit(1)
     }
 }
 
@@ -187,12 +350,45 @@ guard arguments.count > 1 else {
 let command = arguments[1]
 let isJSON = arguments.contains("--json")
 
+var customGPGHome: String?
+if let idx = arguments.firstIndex(of: "--gpg-home"), idx + 1 < arguments.count {
+    customGPGHome = arguments[idx + 1]
+}
+let gpgHomeURL = resolveGPGHome(customPath: customGPGHome)
+
 switch command {
 case "status":
-    checkStatus(jsonOutput: isJSON)
+    checkStatus(gpgHomeURL: gpgHomeURL, jsonOutput: isJSON)
 case "list-keys":
     let isSecret = arguments.contains("--secret")
-    listKeys(secretOnly: isSecret, jsonOutput: isJSON)
+    listKeys(gpgHomeURL: gpgHomeURL, secretOnly: isSecret, jsonOutput: isJSON)
+case "encrypt":
+    var recipient: String?
+    if let idx = arguments.firstIndex(of: "-r") ?? arguments.firstIndex(of: "--recipient"), idx + 1 < arguments.count {
+        recipient = arguments[idx + 1]
+    }
+    var output: String?
+    if let idx = arguments.firstIndex(of: "-o") ?? arguments.firstIndex(of: "--output"), idx + 1 < arguments.count {
+        output = arguments[idx + 1]
+    }
+    let isArmor = arguments.contains("--armor")
+    guard arguments.count >= 3 else {
+        fputs("Usage: moaiy-cli encrypt <file> -r <recipient> [-o <output>]\n", stderr)
+        exit(1)
+    }
+    let inputFile = arguments[2]
+    encryptFile(gpgHomeURL: gpgHomeURL, inputPath: inputFile, recipient: recipient, outputPath: output, armor: isArmor)
+case "decrypt":
+    var output: String?
+    if let idx = arguments.firstIndex(of: "-o") ?? arguments.firstIndex(of: "--output"), idx + 1 < arguments.count {
+        output = arguments[idx + 1]
+    }
+    guard arguments.count >= 3 else {
+        fputs("Usage: moaiy-cli decrypt <file> [-o <output>]\n", stderr)
+        exit(1)
+    }
+    let inputFile = arguments[2]
+    decryptFile(gpgHomeURL: gpgHomeURL, inputPath: inputFile, outputPath: output)
 case "version", "-v", "--version":
     print("moaiy-cli version \(versionString)")
 case "help", "-h", "--help":
