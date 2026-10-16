@@ -13,6 +13,8 @@ import os.log
 
 public enum KeychainError: LocalizedError, Equatable {
     case itemNotFound
+    case userCancelled
+    case authenticationFailed(String)
     case duplicateItem
     case accessControlFailed(String)
     case unexpectedData
@@ -22,6 +24,10 @@ public enum KeychainError: LocalizedError, Equatable {
         switch self {
         case .itemNotFound:
             return "Passphrase not found in system Keychain."
+        case .userCancelled:
+            return "User cancelled Keychain authentication."
+        case .authenticationFailed(let reason):
+            return "Keychain authentication failed: \(reason)"
         case .duplicateItem:
             return "A passphrase entry for this key already exists in Keychain."
         case .accessControlFailed(let reason):
@@ -57,6 +63,15 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
         self.serviceDomain = serviceDomain
     }
 
+    /// Normalizes key identifier by removing 0x prefix, spaces, and converting to uppercase
+    public static func normalizeKeyReference(_ key: String) -> String {
+        var trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if trimmed.hasPrefix("0X") {
+            trimmed = String(trimmed.dropFirst(2))
+        }
+        return trimmed
+    }
+
     // MARK: - Biometrics Availability
 
     public func isBiometricsAvailable() -> Bool {
@@ -81,21 +96,20 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
         for keyFingerprint: String,
         requireBiometrics: Bool = false
     ) throws {
-        let normalizedFingerprint = keyFingerprint.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let normalizedFingerprint = Self.normalizeKeyReference(keyFingerprint)
 
         var secretData = Data()
         try passphrase.withUnsafeUTF8 { rawBuffer in
             secretData = Data(rawBuffer)
         }
         defer {
-            // Best-effort clear
             secretData.resetBytes(in: 0..<secretData.count)
         }
 
         var accessControl: SecAccessControl?
         if requireBiometrics {
             var error: Unmanaged<CFError>?
-            // .userPresence covers Touch ID, Apple Watch, or device passcode fallback
+            // .userPresence covers Touch ID, Apple Watch, and device passcode
             accessControl = SecAccessControlCreateWithFlags(
                 kCFAllocatorDefault,
                 kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
@@ -125,7 +139,7 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
 
         let status = SecItemAdd(query as CFDictionary, nil)
         if status == errSecDuplicateItem {
-            // If already exists, update rather than failing or pre-deleting
+            // Attempt update; if update fails (often happens when changing SecAccessControl), fallback to delete + add
             let updateQuery: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: serviceDomain,
@@ -139,11 +153,19 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
                 attributesToUpdate[kSecAttrAccessControl as String] = accessControl
             }
             let updateStatus = SecItemUpdate(updateQuery as CFDictionary, attributesToUpdate as CFDictionary)
-            guard updateStatus == errSecSuccess else {
-                logger.error("SecItemUpdate failed with status: \(updateStatus)")
-                throw KeychainError.unhandledStatus(updateStatus)
+            if updateStatus == errSecSuccess {
+                logger.info("Successfully updated existing Keychain passphrase for key: \(normalizedFingerprint)")
+                return
             }
-            logger.info("Successfully updated existing Keychain passphrase for key: \(normalizedFingerprint)")
+
+            // Fallback: delete old item and re-add with new access control attributes
+            logger.notice("SecItemUpdate failed (\(updateStatus)), falling back to delete and re-add.")
+            try? deletePassphrase(for: normalizedFingerprint)
+            let addStatus = SecItemAdd(query as CFDictionary, nil)
+            guard addStatus == errSecSuccess else {
+                throw KeychainError.unhandledStatus(addStatus)
+            }
+            logger.info("Successfully re-added Keychain passphrase for key: \(normalizedFingerprint)")
             return
         }
 
@@ -161,7 +183,7 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
         for keyFingerprint: String,
         contextReason: String? = nil
     ) async throws -> SecureString? {
-        let normalizedFingerprint = keyFingerprint.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let normalizedFingerprint = Self.normalizeKeyReference(keyFingerprint)
 
         // Dispatch blocking SecItemCopyMatching to background thread so MainActor is not blocked
         return try await withCheckedThrowingContinuation { continuation in
@@ -184,8 +206,18 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
                 var item: CFTypeRef?
                 let status = SecItemCopyMatching(query as CFDictionary, &item)
 
-                guard status != errSecItemNotFound else {
+                if status == errSecItemNotFound {
                     continuation.resume(returning: nil)
+                    return
+                }
+
+                if status == errSecUserCanceled || status == -128 {
+                    continuation.resume(throwing: KeychainError.userCancelled)
+                    return
+                }
+
+                if status == errSecAuthFailed {
+                    continuation.resume(throwing: KeychainError.authenticationFailed("Biometric or passcode authentication failed."))
                     return
                 }
 
@@ -209,7 +241,7 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
     // MARK: - Delete Passphrase
 
     public func deletePassphrase(for keyFingerprint: String) throws {
-        let normalizedFingerprint = keyFingerprint.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let normalizedFingerprint = Self.normalizeKeyReference(keyFingerprint)
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -230,7 +262,7 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
     // MARK: - Status Query
 
     public func isPassphraseStored(for keyFingerprint: String) -> Bool {
-        let normalizedFingerprint = keyFingerprint.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let normalizedFingerprint = Self.normalizeKeyReference(keyFingerprint)
 
         let context = LAContext()
         context.interactionNotAllowed = true

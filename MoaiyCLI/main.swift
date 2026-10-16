@@ -48,6 +48,14 @@ func printUsage() {
         --secret         Only list secret/private keys (for list-keys)
         --gpg-home       Override GPG home directory path
 
+    NOTES & LIMITATIONS:
+        - Non-interactive execution: Commands run in --batch mode. Existing output files
+          at the destination will be overwritten (--yes).
+        - Passphrase caching: Decrypting passphrase-protected keys in batch mode requires
+          the passphrase to be active in the gpg-agent daemon cache.
+        - Standalone tool: moaiy-cli is designed for scripting and automation. For hardware
+          Touch ID prompts and interactive key management, use the Moaiy desktop app.
+
     EXAMPLES:
         moaiy-cli status --json
         moaiy-cli list-keys --secret
@@ -61,16 +69,24 @@ func resolveGPGHome(customPath: String?) -> URL {
         return URL(fileURLWithPath: customPath)
     }
     let fileManager = FileManager.default
-    // 1. Check Moaiy App's managed home first
+
+    // 1. Check Moaiy App Sandbox Container path first
+    let containerHome = fileManager.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Containers/com.moaiy.app/Data/Library/gnupg", isDirectory: true)
+    if fileManager.fileExists(atPath: containerHome.path) {
+        return containerHome
+    }
+
+    // 2. Check Moaiy App direct Library path (~/Library/gnupg)
     if let libraryURL = fileManager.urls(for: .libraryDirectory, in: .userDomainMask).first {
         let appHome = libraryURL.appendingPathComponent("gnupg", isDirectory: true)
         if fileManager.fileExists(atPath: appHome.path) {
             return appHome
         }
     }
-    // 2. Check standard ~/.gnupg
-    let standardHome = fileManager.homeDirectoryForCurrentUser.appendingPathComponent(".gnupg", isDirectory: true)
-    return standardHome
+
+    // 3. Fallback to standard ~/.gnupg
+    return fileManager.homeDirectoryForCurrentUser.appendingPathComponent(".gnupg", isDirectory: true)
 }
 
 func findGPGExecutable() -> String? {
@@ -273,6 +289,7 @@ func encryptFile(gpgHomeURL: URL, inputPath: String, recipient: String?, outputP
         "--encrypt",
         "--batch",
         "--yes",
+        "--trust-model", "always",
         "--recipient", recipient,
         "--output", finalOutput
     ]

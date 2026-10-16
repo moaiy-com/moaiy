@@ -4,7 +4,7 @@
 //
 //  Streaming I/O pipeline for file encryption and decryption.
 //  Provides constant-memory chunked streaming, pipe deadlock prevention,
-//  non-blocking asynchronous I/O, and throttled progress reporting.
+//  non-blocking asynchronous I/O with EOF synchronization, and throttled progress reporting.
 //
 
 import Foundation
@@ -88,32 +88,36 @@ public final class StreamingCryptoPipeline: Sendable {
         let stagingDir = try SecureTempStorage.makeOperationDirectory(prefix: "streaming-op")
         let stagedOutputFile = stagingDir.appendingPathComponent("output.tmp")
 
-        var tempPassphraseFile: URL?
+        var tempPassphrasePath: String?
+        var passphraseByteCount = 0
+
         defer {
-            if let tempPass = tempPassphraseFile {
-                // Best-effort overwrite before deletion
-                if let handle = try? FileHandle(forWritingTo: tempPass) {
-                    let zeroBuffer = [UInt8](repeating: 0, count: 256)
-                    try? handle.write(contentsOf: zeroBuffer)
-                    try? handle.close()
+            if let passPath = tempPassphrasePath {
+                // Securely scrub the temporary passphrase file with zeros before unlink
+                if passphraseByteCount > 0 {
+                    let fd = open(passPath, O_WRONLY)
+                    if fd >= 0 {
+                        var zeroes = [UInt8](repeating: 0, count: passphraseByteCount)
+                        _ = zeroes.withUnsafeMutableBytes { buf in
+                            write(fd, buf.baseAddress, buf.count)
+                        }
+                        fsync(fd)
+                        close(fd)
+                    }
                 }
-                try? fileManager.removeItem(at: tempPass)
+                unlink(passPath)
             }
             SecureTempStorage.removeOperationDirectory(stagingDir)
         }
 
-        // Set secure file permissions: 0600 for decrypted plaintext, 0644 for ciphertext
-        let outputPermissions: NSNumber = isDecryption ? 0o600 : 0o644
-        fileManager.createFile(
-            atPath: stagedOutputFile.path,
-            contents: nil,
-            attributes: [.posixPermissions: outputPermissions]
-        )
-
-        let outputHandle = try FileHandle(forWritingTo: stagedOutputFile)
-        defer {
-            try? outputHandle.close()
+        // Create staging output file with strict permissions (0600 for plaintext, 0644 for ciphertext)
+        let outputPermissions: mode_t = isDecryption ? 0o600 : 0o644
+        let stagedFd = open(stagedOutputFile.path, O_CREAT | O_WRONLY | O_TRUNC, outputPermissions)
+        guard stagedFd >= 0 else {
+            let errCode = errno
+            throw GPGError.executionFailed("Failed to create temporary output file: \(String(cString: strerror(errCode)))")
         }
+        let outputHandle = FileHandle(fileDescriptor: stagedFd, closeOnDealloc: true)
 
         let inputHandle = try FileHandle(forReadingFrom: sourceURL)
         defer {
@@ -122,15 +126,28 @@ public final class StreamingCryptoPipeline: Sendable {
 
         var processArgs = arguments
 
-        // Handle passphrase via dedicated loopback passphrase file to avoid mixing into stdin
+        // Handle passphrase via dedicated loopback passphrase file created strictly with 0600
         if let passphrase = passphrase, !passphrase.isCleaned {
             let passFile = stagingDir.appendingPathComponent("passphrase.token")
-            tempPassphraseFile = passFile
+            tempPassphrasePath = passFile.path
+
             try passphrase.withUnsafeUTF8 { rawBuffer in
-                let data = Data(rawBuffer)
-                try data.write(to: passFile, options: .atomic)
+                passphraseByteCount = rawBuffer.count
+                let fd = open(passFile.path, O_CREAT | O_WRONLY | O_TRUNC | O_EXCL, 0o600)
+                guard fd >= 0 else {
+                    let err = errno
+                    throw GPGError.executionFailed("Failed to securely open passphrase token file: \(String(cString: strerror(err)))")
+                }
+                if let base = rawBuffer.baseAddress, rawBuffer.count > 0 {
+                    let written = write(fd, base, rawBuffer.count)
+                    if written != rawBuffer.count {
+                        close(fd)
+                        throw GPGError.executionFailed("Failed to complete write to passphrase token file.")
+                    }
+                }
+                fsync(fd)
+                close(fd)
             }
-            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: passFile.path)
 
             processArgs.append(contentsOf: [
                 "--pinentry-mode", "loopback",
@@ -162,23 +179,52 @@ public final class StreamingCryptoPipeline: Sendable {
         process.standardError = stderrPipe
 
         let ioQueue = DispatchQueue(label: "com.moaiy.streaming.io", qos: .userInitiated)
-        let stderrLock = NSLock()
+        let stateLock = NSLock()
         var accumulatedStderr = Data()
+        var ioWriteError: Error?
+        var stdinReadError: Error?
 
-        // Set up non-blocking readabilityHandlers on dedicated queues
+        let pipeGroup = DispatchGroup()
+        pipeGroup.enter() // for stdout EOF
+        pipeGroup.enter() // for stderr EOF
+
+        // Non-blocking readabilityHandler on stderr: unregister upon EOF
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
-            stderrLock.lock()
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                pipeGroup.leave()
+                return
+            }
+            stateLock.lock()
             accumulatedStderr.append(chunk)
-            stderrLock.unlock()
+            stateLock.unlock()
         }
 
+        // Non-blocking readabilityHandler on stdout: write to disk via ioQueue and unregister on EOF
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                pipeGroup.leave()
+                return
+            }
             ioQueue.async {
-                try? outputHandle.write(contentsOf: chunk)
+                stateLock.lock()
+                let hasError = (ioWriteError != nil)
+                stateLock.unlock()
+                guard !hasError else { return }
+
+                do {
+                    try outputHandle.write(contentsOf: chunk)
+                } catch {
+                    stateLock.lock()
+                    ioWriteError = error
+                    stateLock.unlock()
+                    if process.isRunning {
+                        process.terminate()
+                    }
+                }
             }
         }
 
@@ -196,15 +242,31 @@ public final class StreamingCryptoPipeline: Sendable {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 process.terminationHandler = { proc in
                     let status = proc.terminationStatus
-                    if status == 0 {
-                        continuation.resume(returning: ())
-                    } else {
-                        stderrLock.lock()
+
+                    // Drain all remaining pipe reads and ioQueue writes before completing
+                    pipeGroup.notify(queue: ioQueue) {
+                        stateLock.lock()
+                        let writeErr = ioWriteError
+                        let stdinErr = stdinReadError
                         let errString = String(data: accumulatedStderr, encoding: .utf8)?
                             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                        stderrLock.unlock()
-                        let message = errString.isEmpty ? "Process exited with code \(status)" : errString
-                        continuation.resume(throwing: GPGError.executionFailed(message))
+                        stateLock.unlock()
+
+                        if let writeErr = writeErr {
+                            continuation.resume(throwing: writeErr)
+                            return
+                        }
+                        if let stdinErr = stdinErr {
+                            continuation.resume(throwing: stdinErr)
+                            return
+                        }
+
+                        if status == 0 {
+                            continuation.resume(returning: ())
+                        } else {
+                            let message = errString.isEmpty ? "Process exited with code \(status)" : errString
+                            continuation.resume(throwing: GPGError.executionFailed(message))
+                        }
                     }
                 }
 
@@ -220,10 +282,23 @@ public final class StreamingCryptoPipeline: Sendable {
                         let stdinHandle = stdinPipe.fileHandleForWriting
 
                         while process.isRunning {
-                            guard let chunk = try? inputHandle.read(upToCount: bufferSize),
-                                  let data = chunk, !data.isEmpty else {
+                            let chunk: Data?
+                            do {
+                                chunk = try inputHandle.read(upToCount: bufferSize)
+                            } catch {
+                                stateLock.lock()
+                                stdinReadError = error
+                                stateLock.unlock()
+                                if process.isRunning {
+                                    process.terminate()
+                                }
                                 break
                             }
+
+                            guard let data = chunk, !data.isEmpty else {
+                                break
+                            }
+
                             do {
                                 try stdinHandle.write(contentsOf: data)
                                 bytesSent += Int64(data.count)
@@ -231,6 +306,7 @@ public final class StreamingCryptoPipeline: Sendable {
                                     await reporter.report(bytesProcessed: bytesSent, totalBytes: totalFileSize)
                                 }
                             } catch {
+                                // If stdin closed early (e.g. child terminated with error)
                                 break
                             }
                         }

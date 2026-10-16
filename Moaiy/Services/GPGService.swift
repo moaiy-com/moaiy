@@ -1217,7 +1217,7 @@ final class GPGService: SubkeyManaging {
 
         let result = try await executeGPG(
             arguments: arguments,
-            input: resolvedPassphrase + "\n"
+            input: passphrase + "\n"
         )
         try ensureSuccess(result, as: GPGError.exportFailed)
 
