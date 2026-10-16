@@ -12,17 +12,25 @@ import Testing
 private final class ProgressRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var fractions: [Double] = []
+    private var callCount: Int = 0
 
-    func append(_ fraction: Double) {
+    func record(_ fraction: Double) {
         lock.lock()
         defer { lock.unlock() }
         fractions.append(fraction)
+        callCount += 1
     }
 
     var recordedFractions: [Double] {
         lock.lock()
         defer { lock.unlock() }
         return fractions
+    }
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return callCount
     }
 }
 
@@ -53,7 +61,7 @@ struct StreamingCryptoPipelineTests {
     func streamingProgressReporter_throttlesReports() async {
         let recorder = ProgressRecorder()
         let reporter = StreamingProgressReporter(intervalSeconds: 0.2) { progress in
-            recorder.append(progress.fractionCompleted)
+            recorder.record(progress.fractionCompleted)
         }
 
         // Fast successive reports
@@ -69,7 +77,7 @@ struct StreamingCryptoPipelineTests {
         #expect(fractions.last == 1.0)
     }
 
-    @Test("StreamingCryptoPipeline executes end-to-end data pass-through using cat mock")
+    @Test("StreamingCryptoPipeline executes end-to-end data pass-through using cat mock with backpressure")
     func streamingCryptoPipeline_executesEndToEndPassThrough() async throws {
         let pipeline = StreamingCryptoPipeline()
         let fileManager = FileManager.default
@@ -82,10 +90,11 @@ struct StreamingCryptoPipelineTests {
         let inputFile = tempDir.appendingPathComponent("input.txt")
         let outputFile = tempDir.appendingPathComponent("output.txt")
 
-        // Create a 512KB payload to verify multiple chunks
+        // Create a 2MB payload to verify multiple chunks and streaming backpressure
+        let chunkPattern = Data(repeating: 0x41, count: 64 * 1024) // 64KB
         var testData = Data()
-        for i in 0..<1024 {
-            testData.append(Data("Payload block \(i)\n".utf8))
+        for _ in 0..<32 {
+            testData.append(chunkPattern)
         }
         try testData.write(to: inputFile)
 
@@ -94,7 +103,7 @@ struct StreamingCryptoPipelineTests {
             return
         }
 
-        var progressCalls = 0
+        let recorder = ProgressRecorder()
         let resultURL = try await pipeline.executeStreamingFileOperation(
             executableURL: catURL,
             arguments: [],
@@ -102,17 +111,25 @@ struct StreamingCryptoPipelineTests {
             gpgHome: nil,
             sourceURL: inputFile,
             destinationURL: outputFile,
-            isDecryption: false,
+            isDecryption: true,
             passphrase: nil
-        ) { _ in
-            progressCalls += 1
+        ) { progress in
+            recorder.record(progress.fractionCompleted)
         }
 
         #expect(resultURL.path == outputFile.path)
         #expect(fileManager.fileExists(atPath: outputFile.path))
 
         let readBackData = try Data(contentsOf: outputFile)
+        #expect(readBackData.count == testData.count)
         #expect(readBackData == testData)
+        #expect(recorder.count > 0)
+
+        // Verify output file permission is 0600 when isDecryption: true
+        if let attributes = try? fileManager.attributesOfItem(atPath: outputFile.path),
+           let posixPermissions = attributes[.posixPermissions] as? NSNumber {
+            #expect(posixPermissions.intValue == 0o600)
+        }
     }
 
     @Test("StreamingCryptoPipeline handles child process early exit with error")
@@ -151,5 +168,54 @@ struct StreamingCryptoPipelineTests {
 
         #expect(threwExpectedError)
         #expect(!fileManager.fileExists(atPath: outputFile.path))
+    }
+
+    @Test("StreamingCryptoPipeline respects Task cancellation")
+    func streamingCryptoPipeline_respectsTaskCancellation() async throws {
+        let pipeline = StreamingCryptoPipeline()
+        let fileManager = FileManager.default
+        let tempDir = fileManager.temporaryDirectory.appendingPathComponent("streaming-cancel-test-\(UUID().uuidString)")
+        try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer {
+            try? fileManager.removeItem(at: tempDir)
+        }
+
+        let inputFile = tempDir.appendingPathComponent("input.txt")
+        let outputFile = tempDir.appendingPathComponent("output.txt")
+
+        // Create 1MB dummy data
+        try Data(repeating: 0x42, count: 1024 * 1024).write(to: inputFile)
+
+        let catURL = URL(fileURLWithPath: "/bin/cat")
+        guard fileManager.isExecutableFile(atPath: catURL.path) else {
+            return
+        }
+
+        let task = Task {
+            try await pipeline.executeStreamingFileOperation(
+                executableURL: catURL,
+                arguments: [],
+                environment: [:],
+                gpgHome: nil,
+                sourceURL: inputFile,
+                destinationURL: outputFile
+            )
+        }
+
+        // Immediately cancel
+        task.cancel()
+
+        var caughtCancellation = false
+        do {
+            _ = try await task.value
+        } catch is CancellationError {
+            caughtCancellation = true
+        } catch GPGError.operationCancelled {
+            caughtCancellation = true
+        } catch {
+            caughtCancellation = true
+        }
+
+        #expect(caughtCancellation)
     }
 }

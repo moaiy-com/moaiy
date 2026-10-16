@@ -4,7 +4,7 @@
 //
 //  Streaming I/O pipeline for file encryption and decryption.
 //  Provides constant-memory chunked streaming, pipe deadlock prevention,
-//  non-blocking asynchronous I/O with EOF synchronization, and throttled progress reporting.
+//  non-blocking asynchronous I/O with dual-queue backpressure, and throttled progress reporting.
 //
 
 import Foundation
@@ -60,6 +60,8 @@ public final class StreamingCryptoPipeline: Sendable {
 
     /// 256KB default chunk size for streaming I/O
     public static let defaultChunkSize = 256 * 1024
+    /// 8MB maximum in-flight stdout buffer before throttling stdin
+    public static let maxInFlightOutputBytes: Int64 = 8 * 1024 * 1024
 
     public init() {}
 
@@ -76,10 +78,9 @@ public final class StreamingCryptoPipeline: Sendable {
         passphrase: SecureString? = nil,
         progressHandler: (@Sendable (CryptoProgress) -> Void)? = nil
     ) async throws -> URL {
-        let fileManager = FileManager.default
+        try Task.checkCancellation()
 
-        // Ignore SIGPIPE to avoid app termination if child exits early during streaming
-        signal(SIGPIPE, SIG_IGN)
+        let fileManager = FileManager.default
 
         let sourceAttributes = try fileManager.attributesOfItem(atPath: sourceURL.path)
         let totalFileSize = (sourceAttributes[.size] as? NSNumber)?.int64Value ?? 0
@@ -178,11 +179,16 @@ public final class StreamingCryptoPipeline: Sendable {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
-        let ioQueue = DispatchQueue(label: "com.moaiy.streaming.io", qos: .userInitiated)
+        // Dedicated independent serial queues for stdin pumping and stdout disk writing
+        let stdinQueue = DispatchQueue(label: "com.moaiy.streaming.stdin", qos: .userInitiated)
+        let stdoutQueue = DispatchQueue(label: "com.moaiy.streaming.stdout", qos: .userInitiated)
+
         let stateLock = NSLock()
         var accumulatedStderr = Data()
         var ioWriteError: Error?
         var stdinReadError: Error?
+        var inFlightOutputBytes: Int64 = 0
+        var wasCancelled = false
 
         let pipeGroup = DispatchGroup()
         pipeGroup.enter() // for stdout EOF
@@ -201,7 +207,7 @@ public final class StreamingCryptoPipeline: Sendable {
             stateLock.unlock()
         }
 
-        // Non-blocking readabilityHandler on stdout: write to disk via ioQueue and unregister on EOF
+        // Non-blocking readabilityHandler on stdout: write to disk via stdoutQueue and unregister on EOF
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
             if chunk.isEmpty {
@@ -209,12 +215,15 @@ public final class StreamingCryptoPipeline: Sendable {
                 pipeGroup.leave()
                 return
             }
-            ioQueue.async {
-                stateLock.lock()
-                let hasError = (ioWriteError != nil)
-                stateLock.unlock()
-                guard !hasError else { return }
 
+            stateLock.lock()
+            inFlightOutputBytes += Int64(chunk.count)
+            let hasError = (ioWriteError != nil)
+            stateLock.unlock()
+
+            guard !hasError else { return }
+
+            stdoutQueue.async {
                 do {
                     try outputHandle.write(contentsOf: chunk)
                 } catch {
@@ -225,6 +234,9 @@ public final class StreamingCryptoPipeline: Sendable {
                         process.terminate()
                     }
                 }
+                stateLock.lock()
+                inFlightOutputBytes -= Int64(chunk.count)
+                stateLock.unlock()
             }
         }
 
@@ -238,20 +250,27 @@ public final class StreamingCryptoPipeline: Sendable {
         }
 
         return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+
             // Asynchronous continuation on process exit
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 process.terminationHandler = { proc in
                     let status = proc.terminationStatus
 
-                    // Drain all remaining pipe reads and ioQueue writes before completing
-                    pipeGroup.notify(queue: ioQueue) {
+                    // Drain all remaining pipe reads and stdoutQueue writes before completing
+                    pipeGroup.notify(queue: stdoutQueue) {
                         stateLock.lock()
+                        let isCancelled = wasCancelled
                         let writeErr = ioWriteError
                         let stdinErr = stdinReadError
                         let errString = String(data: accumulatedStderr, encoding: .utf8)?
                             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                         stateLock.unlock()
 
+                        if isCancelled || status == 15 || status == 9 {
+                            continuation.resume(throwing: GPGError.operationCancelled)
+                            return
+                        }
                         if let writeErr = writeErr {
                             continuation.resume(throwing: writeErr)
                             return
@@ -275,13 +294,30 @@ public final class StreamingCryptoPipeline: Sendable {
                     try? stdoutPipe.fileHandleForWriting.close()
                     try? stderrPipe.fileHandleForWriting.close()
 
-                    // Stream file chunks into stdin on background queue
-                    ioQueue.async {
+                    // Stream file chunks into stdin on independent stdinQueue with backpressure
+                    stdinQueue.async {
                         var bytesSent: Int64 = 0
                         let bufferSize = Self.defaultChunkSize
                         let stdinHandle = stdinPipe.fileHandleForWriting
 
                         while process.isRunning {
+                            // Backpressure: pause stdin if stdout disk writes are lagging behind
+                            while process.isRunning {
+                                stateLock.lock()
+                                let backlog = inFlightOutputBytes
+                                let hasError = (ioWriteError != nil || stdinReadError != nil || wasCancelled)
+                                stateLock.unlock()
+
+                                if hasError { break }
+                                if backlog < Self.maxInFlightOutputBytes { break }
+                                usleep(10_000) // 10ms wait
+                            }
+
+                            stateLock.lock()
+                            let shouldAbort = (ioWriteError != nil || stdinReadError != nil || wasCancelled)
+                            stateLock.unlock()
+                            if shouldAbort { break }
+
                             let chunk: Data?
                             do {
                                 chunk = try inputHandle.read(upToCount: bufferSize)
@@ -306,7 +342,7 @@ public final class StreamingCryptoPipeline: Sendable {
                                     await reporter.report(bytesProcessed: bytesSent, totalBytes: totalFileSize)
                                 }
                             } catch {
-                                // If stdin closed early (e.g. child terminated with error)
+                                // If stdin pipe broke (e.g. child terminated early with failure)
                                 break
                             }
                         }
@@ -331,6 +367,10 @@ public final class StreamingCryptoPipeline: Sendable {
 
             return destinationURL
         } onCancel: {
+            stateLock.lock()
+            wasCancelled = true
+            stateLock.unlock()
+
             if process.isRunning {
                 process.terminate()
                 let pid = process.processIdentifier

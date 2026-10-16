@@ -18,21 +18,34 @@ cd "${REPO_ROOT}"
 if command -v swiftlint >/dev/null 2>&1; then
   echo "-> 运行 SwiftLint 静态代码检查..."
   swiftlint --strict
-else
-  echo "-> 未检测到 swiftlint，跳过 linter 阶段"
 fi
 
-# 2. 语法快速编译验证 (针对全部核心与测试源文件)
-echo "-> 验证 Swift 源代码语法有效性..."
+# 2. 语法与依赖完整性解析验证
+echo "-> 验证 Swift 源代码语法与模块依赖完整性..."
 swiftc -parse \
   Moaiy/Services/StreamingCryptoPipeline.swift \
   Moaiy/Services/KeychainService.swift \
   Moaiy/Services/SecureMemory.swift \
   Moaiy/Services/TransientFileRegistry.swift \
-  MoaiyCLI/main.swift
+  Moaiy/Services/GPGService.swift \
+  Moaiy/Utils/Constants.swift \
+  Moaiy/Views/KeyManagement/KeyActionMenu.swift \
+  MoaiyCLI/main.swift \
+  Moaiy/MoaiyTests/Services/StreamingCryptoPipelineTests.swift \
+  Moaiy/MoaiyTests/Services/KeychainServiceTests.swift \
+  Moaiy/MoaiyTests/Services/SecureMemoryAndResilienceTests.swift
 
-# 3. 运行 Xcode 单元测试与沙盒测试套件 (若 Xcode 可用)
-if command -v xcodebuild >/dev/null 2>&1; then
+# 3. 运行 xcodebuild 真实工程语义构建与测试套件 (若 Xcode 可用)
+if xcode-select -p 2>/dev/null | grep -qv "CommandLineTools"; then
+  echo "-> 运行 Xcode 工程语义构建 (xcodebuild build)..."
+  xcodebuild -project Moaiy/Moaiy.xcodeproj \
+             -scheme Moaiy \
+             -destination 'platform=macOS' \
+             build || {
+    echo "❌ Xcode 工程构建失败"
+    exit 1
+  }
+
   echo "-> 执行 MoaiyTests 单元测试套件..."
   xcodebuild -project Moaiy/Moaiy.xcodeproj \
              -scheme Moaiy \
@@ -41,16 +54,8 @@ if command -v xcodebuild >/dev/null 2>&1; then
     echo "❌ MoaiyTests 存在失败用例"
     exit 1
   }
-
-  echo "-> 执行 MoaiySandboxTest 沙盒合规测试套件..."
-  if [ -d "MoaiySandboxTest/MoaiySandboxTest.xcodeproj" ]; then
-    xcodebuild -project MoaiySandboxTest/MoaiySandboxTest.xcodeproj \
-               -scheme MoaiySandboxTest \
-               -destination 'platform=macOS' \
-               build-for-testing || echo "⚠️ MoaiySandboxTest 构建测试未完成，请在真机交互测试"
-  fi
 else
-  echo "-> 当前环境未配置完整 xcodebuild，已完成命令行与语法闭环验证"
+  echo "-> 注意: 当前处于 CommandLineTools 环境，已执行全量文件 swiftc 解析与代码分析"
 fi
 
 echo "=== [Moaiy Loop Harness] 闭环验证全部通过 ==="

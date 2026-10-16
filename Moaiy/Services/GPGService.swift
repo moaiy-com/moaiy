@@ -1800,6 +1800,26 @@ final class GPGService: SubkeyManaging {
 
     // MARK: - Streaming & Keychain Integration
 
+    /// Resolves any short ID, long ID, or subkey reference to its primary 40-character fingerprint
+    func resolvePrimaryFingerprint(for keyRef: String) async -> String {
+        let normalized = KeychainService.normalizeKeyReference(keyRef)
+        guard normalized.count < 40 else { return normalized }
+        if let keys = try? await listKeys(secretOnly: true) {
+            for key in keys {
+                if key.fingerprint.uppercased().hasSuffix(normalized) || key.keyID.uppercased() == normalized {
+                    return key.fingerprint.uppercased()
+                }
+                for subkey in key.subkeys {
+                    if subkey.fingerprint.uppercased().hasSuffix(normalized) || subkey.keyID.uppercased() == normalized {
+                        return key.fingerprint.uppercased()
+                    }
+                }
+            }
+        }
+        return normalized
+    }
+
+
     private let streamingPipeline = StreamingCryptoPipeline()
 
     /// Encrypt a file using chunked streaming I/O with progress callbacks
@@ -1872,8 +1892,17 @@ final class GPGService: SubkeyManaging {
 
         var activePassphrase = passphrase
         if activePassphrase == nil, let preferredSecretKey {
-            if let saved = try? await KeychainService.shared.retrievePassphrase(for: preferredSecretKey) {
-                activePassphrase = saved
+            let targetFpr = await resolvePrimaryFingerprint(for: preferredSecretKey)
+            do {
+                if let saved = try await KeychainService.shared.retrievePassphrase(for: targetFpr) {
+                    activePassphrase = saved
+                }
+            } catch KeychainError.userCancelled {
+                throw GPGError.operationCancelled
+            } catch KeychainError.authenticationFailed(let reason) {
+                throw GPGError.decryptionFailed("Keychain authentication failed: \(reason)")
+            } catch {
+                // Non-fatal, proceed
             }
         }
 
@@ -1920,8 +1949,17 @@ final class GPGService: SubkeyManaging {
 
         var resolvedPassphrase = passphrase
         if resolvedPassphrase.isEmpty, let preferredSecretKey {
-            if let saved = try? await KeychainService.shared.retrievePassphrase(for: preferredSecretKey) {
-                resolvedPassphrase = saved.revealString()
+            let targetFpr = await resolvePrimaryFingerprint(for: preferredSecretKey)
+            do {
+                if let saved = try await KeychainService.shared.retrievePassphrase(for: targetFpr) {
+                    resolvedPassphrase = saved.revealString()
+                }
+            } catch KeychainError.userCancelled {
+                throw GPGError.operationCancelled
+            } catch KeychainError.authenticationFailed(let reason) {
+                throw GPGError.decryptionFailed("Keychain authentication failed: \(reason)")
+            } catch {
+                // Non-fatal, proceed
             }
         }
 
@@ -2876,6 +2914,17 @@ final class GPGService: SubkeyManaging {
     /// the user-granted write scope, so we overwrite in place when needed.
     private func writeStagedOutput(from stagedURL: URL, to destinationURL: URL) throws -> URL {
         let fileManager = FileManager.default
+
+        // Pre-flight check: ensure target volume has sufficient free space
+        let stagedSize = (try? fileManager.attributesOfItem(atPath: stagedURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+        let parentDir = destinationURL.deletingLastPathComponent()
+        if let values = try? parentDir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+           let available = values.volumeAvailableCapacityForImportantUsage {
+            if available < stagedSize {
+                throw GPGError.executionFailed("Insufficient disk space on destination volume (\(stagedSize) bytes required)")
+            }
+        }
+
         if fileManager.fileExists(atPath: destinationURL.path) {
             try fileManager.removeItem(at: destinationURL)
         }
