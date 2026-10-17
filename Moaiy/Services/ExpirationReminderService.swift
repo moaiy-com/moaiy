@@ -9,14 +9,14 @@ import Foundation
 import UserNotifications
 import os.log
 
-protocol NotificationCenterClient {
+protocol NotificationCenterClient: Sendable {
     func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool
     func authorizationStatus() async -> UNAuthorizationStatus
     func add(_ request: UNNotificationRequest) async throws
     func removeAllPendingNotificationRequests()
 }
 
-struct UserNotificationCenterClient: NotificationCenterClient {
+struct UserNotificationCenterClient: NotificationCenterClient, @unchecked Sendable {
     private let center: UNUserNotificationCenter
 
     init(center: UNUserNotificationCenter = .current()) {
@@ -64,7 +64,7 @@ class ExpirationReminderService {
                 Task { @MainActor in
                     let authorized = await ensureNotificationPermissionIfNeeded()
                     guard authorized else {
-                        isEnabled = false
+                        self.isEnabled = false
                         return
                     }
                     await scheduleReminders()

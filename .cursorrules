@@ -1,0 +1,30 @@
+# Moaiy Engineering Invariants & AI Agent Rules (.cursorrules)
+
+## 1. Architecture & Design Principles
+- **Pattern**: Strict MVVM + Swift Concurrency (`async`/`await`, `AsyncSequence`).
+- **Open-Core Contract**: Preserve clear separation between Core open-source capabilities and external/Pro interfaces. Views must never bypass ViewModels to interact with Services directly.
+- **Dependency Flow**: Views -> ViewModels -> Domain Services / Crypto Wrappers (`GPGService`, `AgeService`, `PQCService`).
+
+## 2. macOS App Sandbox Safety Invariants (Critical)
+- **Security-Scoped Bookmarks**: Whenever accessing user-dragged files or selected directories, you MUST access security-scoped resources in a strictly paired block:
+  ```swift
+  guard url.startAccessingSecurityScopedResource() else {
+      throw SandboxError.accessDenied(url)
+  }
+  defer {
+      url.stopAccessingSecurityScopedResource()
+  }
+  ```
+- **Save Panel Scope Protection**: In sandboxed save-panel flows, the user grants write scope only to the selected destination URL. NEVER attempt to create sibling temporary files beside the destination in untrusted directories. Always perform temporary operations inside the app-managed sandbox container (`SecureTempStorage`), and overwrite the destination in-place using the established `writeStagedOutput` workflow.
+- **Temporary Directories**: All scratch and intermediate files MUST reside in standard sandbox temporary directories (`SecureTempStorage.makeOperationDirectory`), automatically registered with `TransientFileRegistry`.
+
+## 3. Cryptographic & Process Streaming Invariants
+- **No Synchronous Pipe Deadlocks**: NEVER call blocking read APIs such as `pipe.fileHandleForReading.readDataToEndOfFile()` on the main thread or without chunked stream draining. Standard output and standard error pipes MUST be consumed concurrently or asynchronously (e.g. via `readabilityHandler` or dedicated background queues) to prevent deadlock when processing files >64KB.
+- **Passphrase Stream Isolation**: NEVER mix passphrases into data streams on standard input. File content streams must remain isolated. Passphrases must be passed via dedicated loopback passphrase mechanisms with strict `0o600` permissions.
+- **Memory Zeroization**: Plaintext passwords, passphrases, and decrypted key materials must be zeroized in memory (best-effort) using POSIX `memset_s` on internal buffers. Avoid holding sensitive strings in long-lived immutable Swift `String` allocations.
+- **Streaming by Default**: Large file operations should support chunked streaming I/O (`StreamingCryptoPipeline`) to keep memory footprint bounded.
+
+## 4. Code Quality & Conventions
+- **Swift Version**: Swift 6.0+ concurrency safety mode compliant (`Sendable` annotations, actor isolation).
+- **Localization**: Never hardcode user-facing strings in UI Views. Always register localized keys and verify against `runtime-localization-guard.yml`.
+- **Honest Documentation**: Distinguish between implemented/unit-tested code and items requiring physical hardware verification (such as Touch ID prompts or large-file disk benchmarks).

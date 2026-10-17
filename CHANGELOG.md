@@ -7,10 +7,39 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-16
+
 ### Added
 
-- Release execution checklist for v0.5.0 (`doc/v0.5.0-minimal-release-checklist.md`)
-- Core flow validation list for v0.5.0 (`doc/v0.5.0-core-flow-validation.md`)
+- Added `StreamingCryptoPipeline` supporting 256KB chunked streaming I/O, non-blocking `readabilityHandler` IPC, and isolated passphrase passing to prevent deadlock and memory bloat on large-file operations.
+- Added `CryptoProgress` and `StreamingProgressReporter` with 10Hz UI throttling for responsive progress callbacks.
+- Added `SecureMemory` (`SecureBytes`, `SecureString`) providing best-effort internal buffer clearing via Darwin `memset_s` upon deallocation.
+- Added `TransientFileRegistry` wired into `SecureTempStorage` and `NSApplication.willTerminateNotification` to purge active scratch directories upon application exit.
+- Added `KeychainService` integrating macOS Keychain Services with `LocalAuthentication` (`.userPresence`), supporting Touch ID and device passcode fallback with thread-safe background lookup.
+- Added standalone `moaiy-cli` companion command-line tool with subcommands for `status` (including structured Kyber algorithm detection), `list-keys`, `encrypt`, and `decrypt`.
+- Integrated `encryptFileStreaming` and `decryptFileStreaming` directly into `GPGService`, with automatic Keychain passphrase fallback in `decryptFile`.
+
+### Changed
+
+- Bumped app marketing version to `1.0.0` and `CURRENT_PROJECT_VERSION` to `10`.
+- Preserved sandboxed in-place overwrite semantics in `GPGService.writeStagedOutput` to guarantee App Sandbox save-panel access permissions.
+- Initialized `TransientFileRegistry` lifecycle hooks in `MoaiyApp` startup sequence.
+
+### Added (zh-Hans)
+
+- 新增 `StreamingCryptoPipeline` 流式 I/O 管道，采用 256KB 分块读写、非阻塞 `readabilityHandler` 与独立口令隔离机制，防止大文件管道死锁与内存激增。
+- 新增 `CryptoProgress` 与 `StreamingProgressReporter` 进度通知器，支持 10Hz 防抖节流，避免 UI 渲染拥塞。
+- 新增 `SecureMemory` 内存安全工具（`SecureBytes`、`SecureString`），通过 Darwin `memset_s` 尽力而为清零其内部缓冲区。
+- 新增 `TransientFileRegistry` 临时目录生命周期跟踪器，接入 `SecureTempStorage` 与 `NSApplication.willTerminateNotification`，在应用退出时清理挂起目录。
+- 新增 `KeychainService` 系统钥匙串集成，结合 `LocalAuthentication`（`.userPresence`）支持 Touch ID 与密码回退，并在后台线程安全检索。
+- 新增独立 `moaiy-cli` 命令行伴侣工具，完整实现 `status`（含精准 Kyber 算法探测）、`list-keys`、`encrypt` 与 `decrypt` 命令。
+- 在 `GPGService` 中直接接入 `encryptFileStreaming` 与 `decryptFileStreaming`，并在 `decryptFile` 中支持钥匙串已存口令自动回退。
+
+### Changed (zh-Hans)
+
+- 将应用营销版本号升级至 `1.0.0`，工程构建版本号递增至 `10`。
+- 保留 `GPGService.writeStagedOutput` 原地覆盖逻辑，确保 macOS App Sandbox 保存面板授权路径有效。
+- 在 `MoaiyApp` 启动入口中初始化 `TransientFileRegistry` 退出清理挂钩。
 
 ## [0.9.0] - 2026-07-06
 

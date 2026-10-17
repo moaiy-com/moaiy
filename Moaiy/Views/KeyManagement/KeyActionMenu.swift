@@ -240,7 +240,7 @@ enum KeyFileCryptoCoordinator {
                     sourceURL: request.sourceURL,
                     destinationURL: request.destinationURL
                 ) {
-                    try await GPGService.shared.encryptFile(
+                    try await GPGService.shared.encryptFileStreaming(
                         sourceURL: request.sourceURL,
                         destinationURL: request.destinationURL,
                         recipients: [recipientKey],
@@ -283,10 +283,11 @@ enum KeyFileCryptoCoordinator {
                     sourceURL: request.sourceURL,
                     destinationURL: request.destinationURL
                 ) {
-                    try await GPGService.shared.decryptFile(
+                    let secPass = passphrase.isEmpty ? nil : SecureString(passphrase)
+                    return try await GPGService.shared.decryptFileStreaming(
                         sourceURL: request.sourceURL,
                         destinationURL: request.destinationURL,
-                        passphrase: passphrase,
+                        passphrase: secPass,
                         preferredSecretKey: preferredSecretKey
                     )
                 }

@@ -13,6 +13,7 @@ enum GPGError: Error, LocalizedError {
     case executionFailed(String)
     case invalidOutput(String)
     case keyNotFound(String)
+    case ambiguousKeyReference(String)
     case keyGenerationFailed(String)
     case encryptionFailed(String)
     case decryptionFailed(String)
@@ -38,6 +39,8 @@ enum GPGError: Error, LocalizedError {
         case .invalidOutput(let message):
             return "\(AppLocalization.string("error_invalid_output")): \(message)"
         case .keyNotFound(let identifier):
+            return "\(AppLocalization.string("error_key_not_found")): \(identifier)"
+        case .ambiguousKeyReference(let identifier):
             return "\(AppLocalization.string("error_key_not_found")): \(identifier)"
         case .keyGenerationFailed(let message):
             return "\(AppLocalization.string("error_key_generation_failed")): \(message)"
@@ -80,7 +83,7 @@ enum GPGError: Error, LocalizedError {
             return AppLocalization.string("error_execution_failed_recovery")
         case .invalidOutput:
             return AppLocalization.string("error_invalid_output_recovery")
-        case .keyNotFound:
+        case .keyNotFound, .ambiguousKeyReference:
             return AppLocalization.string("error_key_not_found_recovery")
         case .keyGenerationFailed:
             return AppLocalization.string("error_key_generation_failed_recovery")
@@ -220,7 +223,7 @@ enum UserFacingErrorMapper {
             return AppLocalization.string("error_import_failed")
         case .exportFailed:
             return AppLocalization.string("error_export_failed")
-        case .keyNotFound:
+        case .keyNotFound, .ambiguousKeyReference:
             if context == .decrypt {
                 return AppLocalization.string("error_decryption_requires_private_key")
             }

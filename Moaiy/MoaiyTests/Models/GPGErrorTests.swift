@@ -157,6 +157,7 @@ struct GPGErrorTests {
             .executionFailed("test"),
             .invalidOutput("test"),
             .keyNotFound("test"),
+            .ambiguousKeyReference("test"),
             .keyGenerationFailed("test"),
             .encryptionFailed("test"),
             .decryptionFailed("test"),

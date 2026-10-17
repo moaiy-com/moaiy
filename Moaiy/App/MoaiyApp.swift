@@ -20,7 +20,9 @@ struct MoaiyApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        signal(SIGPIPE, SIG_IGN)
         SecureTempStorage.cleanupStaleDirectories()
+        TransientFileRegistry.shared.setupLifecycleHooks()
         AppFontRegistrar.registerBundledFonts()
         logger.notice("========== Moaiy App Starting ==========")
         logger.notice("GPGService.isReady: \(GPGService.shared.isReady)")

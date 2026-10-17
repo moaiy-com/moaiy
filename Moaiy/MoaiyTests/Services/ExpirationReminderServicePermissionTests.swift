@@ -105,8 +105,7 @@ struct ExpirationReminderServicePermissionFlowTests {
     }
 }
 
-@MainActor
-private final class MockNotificationCenterClient: NotificationCenterClient {
+private final class MockNotificationCenterClient: NotificationCenterClient, @unchecked Sendable {
     var authorizationStatusValue: UNAuthorizationStatus
     var requestAuthorizationResult = true
     var requestAuthorizationCallCount = 0

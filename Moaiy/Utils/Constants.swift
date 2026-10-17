@@ -286,21 +286,30 @@ enum AppLocalization {
 }
 
 enum SecureTempStorage {
-    private static let fileManager = FileManager.default
+    private static var fileManager: FileManager { FileManager.default }
     private static let rootDirectoryName = "com.moaiy.secure-temp"
     static let staleTTL: TimeInterval = 24 * 60 * 60
 
     static func rootURL() throws -> URL {
-        guard let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            throw GPGError.fileAccessDenied("Caches directory")
+        if let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            let candidateURL = cachesURL.appendingPathComponent(rootDirectoryName, isDirectory: true)
+            if fileManager.fileExists(atPath: candidateURL.path) {
+                if fileManager.isWritableFile(atPath: candidateURL.path) {
+                    return candidateURL
+                }
+            } else if (try? fileManager.createDirectory(at: candidateURL, withIntermediateDirectories: true)) != nil {
+                try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: candidateURL.path)
+                return candidateURL
+            }
         }
 
-        let rootURL = cachesURL.appendingPathComponent(rootDirectoryName, isDirectory: true)
-        if !fileManager.fileExists(atPath: rootURL.path) {
-            try fileManager.createDirectory(at: rootURL, withIntermediateDirectories: true)
-            try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: rootURL.path)
+        // Fallback to temporaryDirectory when running in CLI/CI test sandboxes where ~/Library/Caches is restricted
+        let fallbackURL = fileManager.temporaryDirectory.appendingPathComponent(rootDirectoryName, isDirectory: true)
+        if !fileManager.fileExists(atPath: fallbackURL.path) {
+            try fileManager.createDirectory(at: fallbackURL, withIntermediateDirectories: true)
+            try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: fallbackURL.path)
         }
-        return rootURL
+        return fallbackURL
     }
 
     static func makeOperationDirectory(prefix: String) throws -> URL {
@@ -308,7 +317,164 @@ enum SecureTempStorage {
         let dir = base.appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+        TransientFileRegistry.shared.register(url: dir)
         return dir
+    }
+
+    static func removeOperationDirectory(_ url: URL) {
+        TransientFileRegistry.shared.unregister(url: url)
+        zeroScrubDirectoryContents(at: url)
+        try? fileManager.removeItem(at: url)
+    }
+
+    /// Best-effort zero-overwrites regular files inside a temporary operation directory prior to unlink.
+    private static func zeroScrubDirectoryContents(at directoryURL: URL) {
+        guard let enumerator = fileManager.enumerator(
+            at: directoryURL,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: []
+        ) else {
+            return
+        }
+
+        let zeroChunk = [UInt8](repeating: 0, count: 64 * 1024)
+        for case let fileURL as URL in enumerator {
+            guard let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true else {
+                continue
+            }
+            let size = max(0, values.fileSize ?? 0)
+            guard size > 0 else { continue }
+            let fd = open(fileURL.path, O_WRONLY)
+            guard fd >= 0 else { continue }
+            var remaining = size
+            zeroChunk.withUnsafeBytes { rawBuf in
+                guard let base = rawBuf.baseAddress else { return }
+                while remaining > 0 {
+                    let toWrite = min(remaining, zeroChunk.count)
+                    let written = write(fd, base, toWrite)
+                    if written <= 0 { break }
+                    remaining -= written
+                }
+            }
+            _ = fsync(fd)
+            _ = close(fd)
+        }
+    }
+
+    /// Commits a staged temporary file to the user-selected destination after checking net available volume space.
+    /// When overwriting an existing file, updates the inode in place with a container-backed rollback backup
+    /// so original data is never lost on permission/sandbox/I/O failure and NSSavePanel authorization is preserved.
+    static func commitStagedFile(
+        from stagedURL: URL,
+        to destinationURL: URL,
+        availableCapacityOverride: Int64? = nil
+    ) throws {
+        let stagedSize = (try? fileManager.attributesOfItem(atPath: stagedURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+        let existingExists = fileManager.fileExists(atPath: destinationURL.path)
+        let existingSize: Int64 = existingExists
+            ? ((try? fileManager.attributesOfItem(atPath: destinationURL.path)[.size] as? NSNumber)?.int64Value ?? 0)
+            : 0
+        let netRequiredBytes = max(0, stagedSize - existingSize)
+
+        let parentDir = destinationURL.deletingLastPathComponent()
+        let available: Int64?
+        if let availableCapacityOverride {
+            available = availableCapacityOverride
+        } else {
+            var statBuf = statfs()
+            if statfs(parentDir.path, &statBuf) == 0 {
+                available = Int64(statBuf.f_bavail) * Int64(statBuf.f_bsize)
+            } else if let values = try? parentDir.resourceValues(forKeys: [
+                .volumeAvailableCapacityKey,
+                .volumeAvailableCapacityForImportantUsageKey
+            ]) {
+                if let stdCap = values.volumeAvailableCapacity, stdCap > 0 {
+                    available = Int64(stdCap)
+                } else if let impCap = values.volumeAvailableCapacityForImportantUsage, impCap > 0 {
+                    available = impCap
+                } else {
+                    available = nil
+                }
+            } else {
+                available = nil
+            }
+        }
+
+        if let available, available < netRequiredBytes {
+            throw GPGError.executionFailed("Insufficient disk space on destination volume (\(netRequiredBytes) net bytes required, \(available) bytes available)")
+        }
+
+        guard existingExists else {
+            try fileManager.copyItem(at: stagedURL, to: destinationURL)
+            return
+        }
+
+        let backupDir = try makeOperationDirectory(prefix: "commit-rollback")
+        defer { removeOperationDirectory(backupDir) }
+        let rollbackURL = backupDir.appendingPathComponent("original.bak")
+        try fileManager.copyItem(at: destinationURL, to: rollbackURL)
+
+        // Open O_WRONLY without O_TRUNC first so permission or sandbox denial fails before modifying original bytes
+        let destFd = open(destinationURL.path, O_WRONLY)
+        guard destFd >= 0 else {
+            let err = errno
+            throw GPGError.executionFailed("Failed to open destination file for writing: \(String(cString: strerror(err)))")
+        }
+        defer { close(destFd) }
+
+        let srcFd = open(stagedURL.path, O_RDONLY)
+        guard srcFd >= 0 else {
+            let err = errno
+            throw GPGError.executionFailed("Failed to open staged file for reading: \(String(cString: strerror(err)))")
+        }
+        defer { close(srcFd) }
+
+        do {
+            guard ftruncate(destFd, 0) == 0 else {
+                throw GPGError.executionFailed("Failed to truncate destination file: \(String(cString: strerror(errno)))")
+            }
+            try copyDescriptorContents(from: srcFd, to: destFd)
+            guard fsync(destFd) == 0 else {
+                throw GPGError.executionFailed("Failed to sync destination file: \(String(cString: strerror(errno)))")
+            }
+        } catch {
+            let rbFd = open(rollbackURL.path, O_RDONLY)
+            if rbFd >= 0 {
+                defer { close(rbFd) }
+                _ = lseek(destFd, 0, SEEK_SET)
+                _ = ftruncate(destFd, 0)
+                try? copyDescriptorContents(from: rbFd, to: destFd)
+                _ = fsync(destFd)
+            }
+            throw error
+        }
+    }
+
+    private static func copyDescriptorContents(from srcFd: Int32, to destFd: Int32) throws {
+        let bufferSize = 256 * 1024
+        var buffer = [UInt8](repeating: 0, count: bufferSize)
+        while true {
+            let bytesRead = buffer.withUnsafeMutableBytes { rawBuf -> Int in
+                guard let base = rawBuf.baseAddress else { return -1 }
+                return read(srcFd, base, bufferSize)
+            }
+            if bytesRead == 0 { break }
+            if bytesRead < 0 {
+                throw GPGError.executionFailed("Read error while committing file: \(String(cString: strerror(errno)))")
+            }
+            var offset = 0
+            while offset < bytesRead {
+                let bytesWritten = buffer.withUnsafeBytes { rawBuf -> Int in
+                    guard let base = rawBuf.baseAddress else { return -1 }
+                    return write(destFd, base.advanced(by: offset), bytesRead - offset)
+                }
+                if bytesWritten <= 0 {
+                    throw GPGError.executionFailed("Write error while committing file: \(String(cString: strerror(errno)))")
+                }
+                offset += bytesWritten
+            }
+        }
     }
 
     static func cleanupStaleDirectories(olderThan ttl: TimeInterval = staleTTL) {
