@@ -323,7 +323,43 @@ enum SecureTempStorage {
 
     static func removeOperationDirectory(_ url: URL) {
         TransientFileRegistry.shared.unregister(url: url)
+        zeroScrubDirectoryContents(at: url)
         try? fileManager.removeItem(at: url)
+    }
+
+    /// Best-effort zero-overwrites regular files inside a temporary operation directory prior to unlink.
+    private static func zeroScrubDirectoryContents(at directoryURL: URL) {
+        guard let enumerator = fileManager.enumerator(
+            at: directoryURL,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: []
+        ) else {
+            return
+        }
+
+        let zeroChunk = [UInt8](repeating: 0, count: 64 * 1024)
+        for case let fileURL as URL in enumerator {
+            guard let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true else {
+                continue
+            }
+            let size = max(0, values.fileSize ?? 0)
+            guard size > 0 else { continue }
+            let fd = open(fileURL.path, O_WRONLY)
+            guard fd >= 0 else { continue }
+            var remaining = size
+            zeroChunk.withUnsafeBytes { rawBuf in
+                guard let base = rawBuf.baseAddress else { return }
+                while remaining > 0 {
+                    let toWrite = min(remaining, zeroChunk.count)
+                    let written = write(fd, base, toWrite)
+                    if written <= 0 { break }
+                    remaining -= written
+                }
+            }
+            _ = fsync(fd)
+            _ = close(fd)
+        }
     }
 
     /// Commits a staged temporary file to the user-selected destination after checking net available volume space.

@@ -610,7 +610,7 @@ final class GPGService: SubkeyManaging {
             }
         }
 
-        if let _ = try? ensureGPGHomeDirectoryExists(at: preferredHome) {
+        if (try? ensureGPGHomeDirectoryExists(at: preferredHome)) != nil {
             return preferredHome
         }
 
@@ -1833,7 +1833,7 @@ final class GPGService: SubkeyManaging {
                     normalizedReference: normalized
                 )
                 if matchedPrimaryFingerprints.count > 1 {
-                    throw GPGError.executionFailed("Ambiguous key reference matches multiple keys: \(keyRef)")
+                    throw GPGError.ambiguousKeyReference(keyRef)
                 }
                 if let uniqueMatch = matchedPrimaryFingerprints.first {
                     return uniqueMatch
@@ -1842,7 +1842,7 @@ final class GPGService: SubkeyManaging {
                 logger.warning("Secret key list query exited with \(result.exitCode) during fingerprint resolution: \(result.stderr ?? "no stderr")")
             }
         } catch let error as GPGError {
-            if case .executionFailed(let msg) = error, msg.contains("Ambiguous key reference") {
+            if case .ambiguousKeyReference = error {
                 throw error
             }
             logger.warning("Failed to query secret keys for fingerprint resolution (\(keyRef)): \(error.localizedDescription)")
@@ -3486,6 +3486,7 @@ final class GPGService: SubkeyManaging {
                     .keyserverUploadFailed(let message):
                 source = message
             case .keyNotFound,
+                    .ambiguousKeyReference,
                     .gpgNotFound,
                     .invalidOutput,
                     .invalidPassphrase,
@@ -4732,7 +4733,7 @@ enum TrustLevel: String, CaseIterable, Identifiable {
         case .marginal: return AppLocalization.string("trust_level_marginal")
         case .full: return AppLocalization.string("trust_level_full")
         case .ultimate: return AppLocalization.string("trust_level_ultimate")
-    }
+        }
     }
     
     /// Localized description of trust level
