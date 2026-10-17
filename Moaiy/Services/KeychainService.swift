@@ -123,33 +123,51 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
             }
         }
 
-        var query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: serviceDomain,
-            kSecAttrAccount as String: normalizedFingerprint,
-            kSecValueData as String: secretData,
-            kSecUseDataProtectionKeychain as String: true
-        ]
-
-        if let accessControl = accessControl {
-            query[kSecAttrAccessControl as String] = accessControl
-        } else {
-            query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        }
-
-        let status = SecItemAdd(query as CFDictionary, nil)
-        if status == errSecDuplicateItem {
-            // Attempt update; if update fails (often happens when changing SecAccessControl), fallback to delete + add
-            let updateQuery: [String: Any] = [
+        func makeAddQuery(useDataProtection: Bool) -> [String: Any] {
+            var query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: serviceDomain,
                 kSecAttrAccount as String: normalizedFingerprint,
-                kSecUseDataProtectionKeychain as String: true
+                kSecValueData as String: secretData
             ]
+            if useDataProtection {
+                query[kSecUseDataProtectionKeychain as String] = true
+                if let accessControl = accessControl {
+                    query[kSecAttrAccessControl as String] = accessControl
+                } else {
+                    query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+                }
+            } else {
+                query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            }
+            return query
+        }
+
+        var useDataProtection = true
+        var query = makeAddQuery(useDataProtection: true)
+        var status = SecItemAdd(query as CFDictionary, nil)
+
+        // Fallback to standard macOS Keychain in ad-hoc signed Debug/Test builds (-34018 errSecMissingEntitlement)
+        if status == errSecMissingEntitlement && !requireBiometrics {
+            useDataProtection = false
+            query = makeAddQuery(useDataProtection: false)
+            status = SecItemAdd(query as CFDictionary, nil)
+        }
+
+        if status == errSecDuplicateItem {
+            // Attempt update; if update fails (often happens when changing SecAccessControl), fallback to delete + add
+            var updateQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: serviceDomain,
+                kSecAttrAccount as String: normalizedFingerprint
+            ]
+            if useDataProtection {
+                updateQuery[kSecUseDataProtectionKeychain as String] = true
+            }
             var attributesToUpdate: [String: Any] = [
                 kSecValueData as String: secretData
             ]
-            if let accessControl = accessControl {
+            if useDataProtection, let accessControl = accessControl {
                 attributesToUpdate[kSecAttrAccessControl as String] = accessControl
             }
             let updateStatus = SecItemUpdate(updateQuery as CFDictionary, attributesToUpdate as CFDictionary)
@@ -188,23 +206,33 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
         // Dispatch blocking SecItemCopyMatching to background thread so MainActor is not blocked
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async { [self] in
-                var query: [String: Any] = [
-                    kSecClass as String: kSecClassGenericPassword,
-                    kSecAttrService as String: self.serviceDomain,
-                    kSecAttrAccount as String: normalizedFingerprint,
-                    kSecReturnData as String: true,
-                    kSecMatchLimit as String: kSecMatchLimitOne,
-                    kSecUseDataProtectionKeychain as String: true
-                ]
-
-                if let contextReason = contextReason {
-                    let context = LAContext()
-                    context.localizedReason = contextReason
-                    query[kSecUseAuthenticationContext as String] = context
+                func makeCopyQuery(useDataProtection: Bool) -> [String: Any] {
+                    var query: [String: Any] = [
+                        kSecClass as String: kSecClassGenericPassword,
+                        kSecAttrService as String: self.serviceDomain,
+                        kSecAttrAccount as String: normalizedFingerprint,
+                        kSecReturnData as String: true,
+                        kSecMatchLimit as String: kSecMatchLimitOne
+                    ]
+                    if useDataProtection {
+                        query[kSecUseDataProtectionKeychain as String] = true
+                    }
+                    if let contextReason = contextReason {
+                        let context = LAContext()
+                        context.localizedReason = contextReason
+                        query[kSecUseAuthenticationContext as String] = context
+                    }
+                    return query
                 }
 
                 var item: CFTypeRef?
-                let status = SecItemCopyMatching(query as CFDictionary, &item)
+                var status = SecItemCopyMatching(makeCopyQuery(useDataProtection: true) as CFDictionary, &item)
+                if status == errSecMissingEntitlement || status == errSecItemNotFound {
+                    let fallbackStatus = SecItemCopyMatching(makeCopyQuery(useDataProtection: false) as CFDictionary, &item)
+                    if status == errSecMissingEntitlement || fallbackStatus == errSecSuccess {
+                        status = fallbackStatus
+                    }
+                }
 
                 if status == errSecItemNotFound {
                     continuation.resume(returning: nil)
@@ -243,14 +271,24 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
     public func deletePassphrase(for keyFingerprint: String) throws {
         let normalizedFingerprint = Self.normalizeKeyReference(keyFingerprint)
 
-        let query: [String: Any] = [
+        let dpQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceDomain,
             kSecAttrAccount as String: normalizedFingerprint,
             kSecUseDataProtectionKeychain as String: true
         ]
 
-        let status = SecItemDelete(query as CFDictionary)
+        var status = SecItemDelete(dpQuery as CFDictionary)
+        let legacyQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceDomain,
+            kSecAttrAccount as String: normalizedFingerprint
+        ]
+        let legacyStatus = SecItemDelete(legacyQuery as CFDictionary)
+        if status == errSecMissingEntitlement || legacyStatus == errSecSuccess {
+            status = legacyStatus
+        }
+
         guard status == errSecSuccess || status == errSecItemNotFound else {
             logger.error("SecItemDelete failed with status: \(status)")
             throw KeychainError.unhandledStatus(status)
@@ -267,7 +305,7 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
         let context = LAContext()
         context.interactionNotAllowed = true
 
-        let query: [String: Any] = [
+        let dpQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceDomain,
             kSecAttrAccount as String: normalizedFingerprint,
@@ -275,7 +313,20 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
             kSecUseDataProtectionKeychain as String: true
         ]
 
-        let status = SecItemCopyMatching(query as CFDictionary, nil)
-        return status == errSecSuccess || status == errSecInteractionNotAllowed
+        let status = SecItemCopyMatching(dpQuery as CFDictionary, nil)
+        if status == errSecSuccess || status == errSecInteractionNotAllowed {
+            return true
+        }
+        if status == errSecMissingEntitlement || status == errSecItemNotFound {
+            let legacyQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: serviceDomain,
+                kSecAttrAccount as String: normalizedFingerprint,
+                kSecUseAuthenticationContext as String: context
+            ]
+            let legacyStatus = SecItemCopyMatching(legacyQuery as CFDictionary, nil)
+            return legacyStatus == errSecSuccess || legacyStatus == errSecInteractionNotAllowed
+        }
+        return false
     }
 }

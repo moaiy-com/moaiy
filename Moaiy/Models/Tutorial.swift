@@ -8,7 +8,7 @@
 import Foundation
 import SwiftUI
 
-struct TutorialSection: Identifiable, Hashable {
+struct TutorialSection: Identifiable, Hashable, @unchecked Sendable {
     let id: String
     let title: LocalizedStringKey
     let icon: String
@@ -23,7 +23,7 @@ struct TutorialSection: Identifiable, Hashable {
     }
 }
 
-struct TutorialItem: Identifiable, Hashable {
+struct TutorialItem: Identifiable, Hashable, @unchecked Sendable {
     let id: String
     let title: LocalizedStringKey
     let content: LocalizedStringKey

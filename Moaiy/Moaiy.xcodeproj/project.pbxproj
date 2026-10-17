@@ -164,7 +164,8 @@
 			children = (
 				4A2000012F80000100000005 /* main.swift */,
 			);
-			path = MoaiyCLI;
+			name = MoaiyCLI;
+			path = ../MoaiyCLI;
 			sourceTree = "<group>";
 		};
 		D00000000001 = {
