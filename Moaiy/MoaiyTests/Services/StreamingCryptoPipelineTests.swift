@@ -92,6 +92,27 @@ private final class PeakRSSSampler: @unchecked Sendable {
     }
 }
 
+private func terminateGPGAgent(forHome gpgHomeDir: URL) {
+    let candidatePaths: [String] = [
+        Bundle.main.url(forResource: "gpg", withExtension: "bundle")?
+            .appendingPathComponent("bin/gpgconf").path,
+        "/opt/homebrew/bin/gpgconf",
+        "/usr/local/bin/gpgconf"
+    ].compactMap { $0 }
+
+    guard let gpgconfPath = candidatePaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+        return
+    }
+
+    let proc = Process()
+    proc.executableURL = URL(fileURLWithPath: gpgconfPath)
+    proc.arguments = ["--homedir", gpgHomeDir.path, "--kill", "gpg-agent"]
+    proc.standardOutput = Pipe()
+    proc.standardError = Pipe()
+    try? proc.run()
+    proc.waitUntilExit()
+}
+
 @Suite("Streaming Crypto Pipeline Tests", .serialized)
 struct StreamingCryptoPipelineTests {
 
@@ -186,9 +207,8 @@ struct StreamingCryptoPipelineTests {
         // Peak RSS delta must remain well below half the 64MB file size (< 32MB)
         #expect(peakDeltaMB < 32.0)
 
-        if let posixPermissions = outAttrs[.posixPermissions] as? NSNumber {
-            #expect(posixPermissions.intValue == 0o600)
-        }
+        let posixPermissions = try #require(outAttrs[.posixPermissions] as? NSNumber)
+        #expect(posixPermissions.intValue == 0o600)
     }
 
     @Test("StreamingCryptoPipeline verifies passphrase token file 0600 permissions and post-run cleanup")
@@ -391,10 +411,6 @@ struct StreamingCryptoPipelineTests {
     @Test("Real GPG integration: encryptFileStreaming, decryptFileStreaming, decryptFile parity, and single-pass resolvePrimaryFingerprint")
     @MainActor
     func realGPG_streamingAndNonStreamingParityChecks() async throws {
-        let fileManager = FileManager.default
-        let tempDir = fileManager.temporaryDirectory.appendingPathComponent("moaiy-gpg-int-\(UUID().uuidString)", isDirectory: true)
-        try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
-
         let service = GPGService.shared
         let timeoutNanoseconds: UInt64 = 30_000_000_000
         let stepNanoseconds: UInt64 = 200_000_000
@@ -403,151 +419,152 @@ struct StreamingCryptoPipelineTests {
             try await Task.sleep(nanoseconds: stepNanoseconds)
             elapsed += stepNanoseconds
         }
-        #expect(service.isReady == true)
+        try #require(service.isReady)
 
-        var generatedFingerprints: [String] = []
+        // One-time cleanup of any leftover @moaiy.test keys in app-managed keyring from prior runs
+        if let existingKeys = try? await service.listKeys(secretOnly: false) {
+            for key in existingKeys where key.email.hasSuffix("@moaiy.test") {
+                try? await service.deleteKey(keyID: key.fingerprint, secret: true)
+                try? await service.deleteKey(keyID: key.fingerprint, secret: false)
+            }
+        }
+
+        // Use a short directory name so Unix domain socket paths (<104 bytes) always fit inside sandbox container
+        let fileManager = FileManager.default
+        let shortSuffix = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(6))
+        let tempDir = fileManager.temporaryDirectory.appendingPathComponent("mg-\(shortSuffix)", isDirectory: true)
+        let gpgHomeDir = tempDir.appendingPathComponent("gnupg", isDirectory: true)
+        try fileManager.createDirectory(at: gpgHomeDir, withIntermediateDirectories: true)
+        try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: gpgHomeDir.path)
+
+        try service.configureExternalGPGHome(gpgHomeDir)
         defer {
+            terminateGPGAgent(forHome: gpgHomeDir)
+            try? service.useAppManagedGPGHome()
             try? fileManager.removeItem(at: tempDir)
         }
 
+        let passA = "alpha-passphrase-123"
+        let passB = "bravo-passphrase-456"
+        let fprA = try await service.generateKey(
+            name: "Alice Streaming",
+            email: "alice@moaiy.test",
+            keyType: .ecc,
+            passphrase: passA
+        )
+        let fprB = try await service.generateKey(
+            name: "Bravo Streaming",
+            email: "bravo@moaiy.test",
+            keyType: .ecc,
+            passphrase: passB
+        )
+
+        var emptyThrewKeyNotFound = false
         do {
-            let passA = "alpha-passphrase-123"
-            let passB = "bravo-passphrase-456"
-            let fprA = try await service.generateKey(
-                name: "Alice Streaming",
-                email: "alice-\(UUID().uuidString.prefix(8))@moaiy.test",
-                keyType: .ecc,
-                passphrase: passA
+            _ = try await service.resolvePrimaryFingerprint(for: "   ")
+        } catch GPGError.keyNotFound {
+            emptyThrewKeyNotFound = true
+        }
+        #expect(emptyThrewKeyNotFound)
+
+        let resolvedFull = try await service.resolvePrimaryFingerprint(for: fprA)
+        let resolvedLongID = try await service.resolvePrimaryFingerprint(for: String(fprA.suffix(16)))
+        let resolvedShortID = try await service.resolvePrimaryFingerprint(for: String(fprA.suffix(8)))
+        #expect(resolvedFull == fprA)
+        #expect(resolvedLongID == fprA)
+        #expect(resolvedShortID == fprA)
+
+        let subkeysA = try await service.listSubkeys(primaryKeyID: fprA)
+        if let firstSubkey = subkeysA.first {
+            let resolvedSubkey = try await service.resolvePrimaryFingerprint(for: firstSubkey.fingerprint)
+            #expect(resolvedSubkey == fprA)
+        }
+
+        let plaintextURL = tempDir.appendingPathComponent("secret-document.txt")
+        let encryptedURL = tempDir.appendingPathComponent("secret-document.txt.gpg")
+        let decryptedStreamURL = tempDir.appendingPathComponent("decrypted-stream.txt")
+        let decryptedLegacyURL = tempDir.appendingPathComponent("decrypted-legacy.txt")
+
+        let originalPayload = Data("Moaiy v1.0 Real GPG Streaming Integration Payload\n".utf8)
+        try originalPayload.write(to: plaintextURL)
+
+        _ = try await service.encryptFileStreaming(
+            sourceURL: plaintextURL,
+            destinationURL: encryptedURL,
+            recipients: [fprA],
+            armor: false,
+            allowUntrustedRecipients: true
+        )
+        #expect(fileManager.fileExists(atPath: encryptedURL.path))
+
+        // Wrong passphrase -> both decryptFile and decryptFileStreaming must throw GPGError.invalidPassphrase
+        var streamWrongPassThrewInvalid = false
+        do {
+            _ = try await service.decryptFileStreaming(
+                sourceURL: encryptedURL,
+                destinationURL: decryptedStreamURL,
+                passphrase: SecureString("wrong-passphrase-xyz"),
+                preferredSecretKey: fprA
             )
-            generatedFingerprints.append(fprA)
+        } catch GPGError.invalidPassphrase {
+            streamWrongPassThrewInvalid = true
+        }
+        #expect(streamWrongPassThrewInvalid)
+        #expect(!fileManager.fileExists(atPath: decryptedStreamURL.path))
 
-            let fprB = try await service.generateKey(
-                name: "Bravo Streaming",
-                email: "bravo-\(UUID().uuidString.prefix(8))@moaiy.test",
-                keyType: .ecc,
-                passphrase: passB
+        var legacyWrongPassThrewInvalid = false
+        do {
+            _ = try await service.decryptFile(
+                sourceURL: encryptedURL,
+                destinationURL: decryptedLegacyURL,
+                passphrase: "wrong-passphrase-xyz",
+                preferredSecretKey: fprA
             )
-            generatedFingerprints.append(fprB)
+        } catch GPGError.invalidPassphrase {
+            legacyWrongPassThrewInvalid = true
+        }
+        #expect(legacyWrongPassThrewInvalid)
 
-            var emptyThrewKeyNotFound = false
-            do {
-                _ = try await service.resolvePrimaryFingerprint(for: "   ")
-            } catch GPGError.keyNotFound {
-                emptyThrewKeyNotFound = true
-            }
-            #expect(emptyThrewKeyNotFound)
-
-            let resolvedFull = try await service.resolvePrimaryFingerprint(for: fprA)
-            let resolvedLongID = try await service.resolvePrimaryFingerprint(for: String(fprA.suffix(16)))
-            let resolvedShortID = try await service.resolvePrimaryFingerprint(for: String(fprA.suffix(8)))
-            #expect(resolvedFull == fprA)
-            #expect(resolvedLongID == fprA)
-            #expect(resolvedShortID == fprA)
-
-            let subkeysA = try await service.listSubkeys(primaryKeyID: fprA)
-            if let firstSubkey = subkeysA.first {
-                let resolvedSubkey = try await service.resolvePrimaryFingerprint(for: firstSubkey.fingerprint)
-                #expect(resolvedSubkey == fprA)
-            }
-
-            let plaintextURL = tempDir.appendingPathComponent("secret-document.txt")
-            let encryptedURL = tempDir.appendingPathComponent("secret-document.txt.gpg")
-            let decryptedStreamURL = tempDir.appendingPathComponent("decrypted-stream.txt")
-            let decryptedLegacyURL = tempDir.appendingPathComponent("decrypted-legacy.txt")
-
-            let originalPayload = Data("Moaiy v1.0 Real GPG Streaming Integration Payload\n".utf8)
-            try originalPayload.write(to: plaintextURL)
-
-            _ = try await service.encryptFileStreaming(
-                sourceURL: plaintextURL,
-                destinationURL: encryptedURL,
-                recipients: [fprA],
-                armor: false,
-                allowUntrustedRecipients: true
-            )
-            #expect(fileManager.fileExists(atPath: encryptedURL.path))
-
-            // Wrong passphrase -> both decryptFile and decryptFileStreaming must throw GPGError.invalidPassphrase
-            var streamWrongPassThrewInvalid = false
-            do {
-                _ = try await service.decryptFileStreaming(
-                    sourceURL: encryptedURL,
-                    destinationURL: decryptedStreamURL,
-                    passphrase: SecureString("wrong-passphrase-xyz"),
-                    preferredSecretKey: fprA
-                )
-            } catch GPGError.invalidPassphrase {
-                streamWrongPassThrewInvalid = true
-            }
-            #expect(streamWrongPassThrewInvalid)
-            #expect(!fileManager.fileExists(atPath: decryptedStreamURL.path))
-
-            var legacyWrongPassThrewInvalid = false
-            do {
-                _ = try await service.decryptFile(
-                    sourceURL: encryptedURL,
-                    destinationURL: decryptedLegacyURL,
-                    passphrase: "wrong-passphrase-xyz",
-                    preferredSecretKey: fprA
-                )
-            } catch GPGError.invalidPassphrase {
-                legacyWrongPassThrewInvalid = true
-            }
-            #expect(legacyWrongPassThrewInvalid)
-
-            // Wrong preferredSecretKey -> throws GPGError.keyNotFound
-            var streamWrongKeyThrewNotFound = false
-            do {
-                _ = try await service.decryptFileStreaming(
-                    sourceURL: encryptedURL,
-                    destinationURL: decryptedStreamURL,
-                    passphrase: SecureString(passA),
-                    preferredSecretKey: fprB
-                )
-            } catch GPGError.keyNotFound {
-                streamWrongKeyThrewNotFound = true
-            }
-            #expect(streamWrongKeyThrewNotFound)
-            #expect(!fileManager.fileExists(atPath: decryptedStreamURL.path))
-
-            var legacyWrongKeyThrewNotFound = false
-            do {
-                _ = try await service.decryptFile(
-                    sourceURL: encryptedURL,
-                    destinationURL: decryptedLegacyURL,
-                    passphrase: passA,
-                    preferredSecretKey: fprB
-                )
-            } catch GPGError.keyNotFound {
-                legacyWrongKeyThrewNotFound = true
-            }
-            #expect(legacyWrongKeyThrewNotFound)
-
-            // Whitespace/invalid preferredSecretKey ("   ") is ignored before decryption (legacy parity) and succeeds with valid passphrase
+        // Wrong preferredSecretKey -> throws GPGError.keyNotFound
+        var streamWrongKeyThrewNotFound = false
+        do {
             _ = try await service.decryptFileStreaming(
                 sourceURL: encryptedURL,
                 destinationURL: decryptedStreamURL,
                 passphrase: SecureString(passA),
-                preferredSecretKey: "   "
+                preferredSecretKey: fprB
             )
-            let decryptedData = try Data(contentsOf: decryptedStreamURL)
-            #expect(decryptedData == originalPayload)
-
-            let decAttrs = try fileManager.attributesOfItem(atPath: decryptedStreamURL.path)
-            if let perms = decAttrs[.posixPermissions] as? NSNumber {
-                #expect(perms.intValue == 0o600)
-            }
-        } catch {
-            for fpr in generatedFingerprints {
-                try? await service.deleteKey(keyID: fpr, secret: true)
-                try? await service.deleteKey(keyID: fpr, secret: false)
-            }
-            throw error
+        } catch GPGError.keyNotFound {
+            streamWrongKeyThrewNotFound = true
         }
+        #expect(streamWrongKeyThrewNotFound)
+        #expect(!fileManager.fileExists(atPath: decryptedStreamURL.path))
 
-        for fpr in generatedFingerprints {
-            try? await service.deleteKey(keyID: fpr, secret: true)
-            try? await service.deleteKey(keyID: fpr, secret: false)
+        var legacyWrongKeyThrewNotFound = false
+        do {
+            _ = try await service.decryptFile(
+                sourceURL: encryptedURL,
+                destinationURL: decryptedLegacyURL,
+                passphrase: passA,
+                preferredSecretKey: fprB
+            )
+        } catch GPGError.keyNotFound {
+            legacyWrongKeyThrewNotFound = true
         }
+        #expect(legacyWrongKeyThrewNotFound)
+
+        // Whitespace/invalid preferredSecretKey ("   ") is ignored before decryption (legacy parity) and succeeds with valid passphrase
+        _ = try await service.decryptFileStreaming(
+            sourceURL: encryptedURL,
+            destinationURL: decryptedStreamURL,
+            passphrase: SecureString(passA),
+            preferredSecretKey: "   "
+        )
+        let decryptedData = try Data(contentsOf: decryptedStreamURL)
+        #expect(decryptedData == originalPayload)
+
+        let decAttrs = try fileManager.attributesOfItem(atPath: decryptedStreamURL.path)
+        let perms = try #require(decAttrs[.posixPermissions] as? NSNumber)
+        #expect(perms.intValue == 0o600)
     }
 }
