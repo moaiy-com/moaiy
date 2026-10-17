@@ -76,6 +76,7 @@ public final class StreamingCryptoPipeline: Sendable {
         destinationURL: URL,
         isDecryption: Bool = false,
         passphrase: SecureString? = nil,
+        validateCompletion: (@Sendable (_ exitCode: Int, _ stderr: String) throws -> Void)? = nil,
         progressHandler: (@Sendable (CryptoProgress) -> Void)? = nil
     ) async throws -> URL {
         try Task.checkCancellation()
@@ -183,12 +184,7 @@ public final class StreamingCryptoPipeline: Sendable {
         let stdinQueue = DispatchQueue(label: "com.moaiy.streaming.stdin", qos: .userInitiated)
         let stdoutQueue = DispatchQueue(label: "com.moaiy.streaming.stdout", qos: .userInitiated)
 
-        let stateLock = NSLock()
-        var accumulatedStderr = Data()
-        var ioWriteError: Error?
-        var stdinReadError: Error?
-        var inFlightOutputBytes: Int64 = 0
-        var wasCancelled = false
+        let state = PipelineExecutionState()
 
         let pipeGroup = DispatchGroup()
         pipeGroup.enter() // for stdout EOF
@@ -196,47 +192,46 @@ public final class StreamingCryptoPipeline: Sendable {
 
         // Non-blocking readabilityHandler on stderr: unregister upon EOF
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-            let chunk = handle.availableData
-            if chunk.isEmpty {
-                handle.readabilityHandler = nil
-                pipeGroup.leave()
-                return
+            autoreleasepool {
+                let chunk = handle.availableData
+                if chunk.isEmpty {
+                    handle.readabilityHandler = nil
+                    pipeGroup.leave()
+                    return
+                }
+                state.appendStderr(chunk)
             }
-            stateLock.lock()
-            accumulatedStderr.append(chunk)
-            stateLock.unlock()
         }
 
         // Non-blocking readabilityHandler on stdout: write to disk via stdoutQueue and unregister on EOF
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-            let chunk = handle.availableData
-            if chunk.isEmpty {
-                handle.readabilityHandler = nil
-                pipeGroup.leave()
-                return
-            }
+            autoreleasepool {
+                let chunk = handle.availableData
+                if chunk.isEmpty {
+                    handle.readabilityHandler = nil
+                    pipeGroup.leave()
+                    return
+                }
 
-            stateLock.lock()
-            inFlightOutputBytes += Int64(chunk.count)
-            let hasError = (ioWriteError != nil)
-            stateLock.unlock()
+                let hasError = state.addInFlightBytes(Int64(chunk.count))
+                guard !hasError else {
+                    state.subtractInFlightBytes(Int64(chunk.count))
+                    return
+                }
 
-            guard !hasError else { return }
-
-            stdoutQueue.async {
-                do {
-                    try outputHandle.write(contentsOf: chunk)
-                } catch {
-                    stateLock.lock()
-                    ioWriteError = error
-                    stateLock.unlock()
-                    if process.isRunning {
-                        process.terminate()
+                stdoutQueue.async {
+                    autoreleasepool {
+                        do {
+                            try outputHandle.write(contentsOf: chunk)
+                        } catch {
+                            state.recordWriteError(error)
+                            if process.isRunning {
+                                process.terminate()
+                            }
+                        }
+                        state.subtractInFlightBytes(Int64(chunk.count))
                     }
                 }
-                stateLock.lock()
-                inFlightOutputBytes -= Int64(chunk.count)
-                stateLock.unlock()
             }
         }
 
@@ -256,34 +251,41 @@ public final class StreamingCryptoPipeline: Sendable {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 process.terminationHandler = { proc in
                     let status = proc.terminationStatus
+                    let reason = proc.terminationReason
 
                     // Drain all remaining pipe reads and stdoutQueue writes before completing
                     pipeGroup.notify(queue: stdoutQueue) {
-                        stateLock.lock()
-                        let isCancelled = wasCancelled
-                        let writeErr = ioWriteError
-                        let stdinErr = stdinReadError
-                        let errString = String(data: accumulatedStderr, encoding: .utf8)?
-                            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                        stateLock.unlock()
+                        let snapshot = state.snapshot()
 
-                        if isCancelled || status == 15 || status == 9 {
-                            continuation.resume(throwing: GPGError.operationCancelled)
-                            return
-                        }
-                        if let writeErr = writeErr {
+                        // Prioritize real I/O errors before checking signal termination,
+                        // since write/read failures call process.terminate() which produces SIGTERM.
+                        if let writeErr = snapshot.writeError {
                             continuation.resume(throwing: writeErr)
                             return
                         }
-                        if let stdinErr = stdinErr {
+                        if let stdinErr = snapshot.stdinError {
                             continuation.resume(throwing: stdinErr)
+                            return
+                        }
+                        if snapshot.isCancelled || (reason == .uncaughtSignal && (status == SIGTERM || status == SIGKILL)) {
+                            continuation.resume(throwing: GPGError.operationCancelled)
+                            return
+                        }
+
+                        if let validateCompletion {
+                            do {
+                                try validateCompletion(Int(status), snapshot.stderrString)
+                                continuation.resume(returning: ())
+                            } catch {
+                                continuation.resume(throwing: error)
+                            }
                             return
                         }
 
                         if status == 0 {
                             continuation.resume(returning: ())
                         } else {
-                            let message = errString.isEmpty ? "Process exited with code \(status)" : errString
+                            let message = snapshot.stderrString.isEmpty ? "Process exited with code \(status)" : snapshot.stderrString
                             continuation.resume(throwing: GPGError.executionFailed(message))
                         }
                     }
@@ -298,55 +300,69 @@ public final class StreamingCryptoPipeline: Sendable {
                     stdinQueue.async {
                         var bytesSent: Int64 = 0
                         let bufferSize = Self.defaultChunkSize
-                        let stdinHandle = stdinPipe.fileHandleForWriting
+                        let stdinFd = stdinPipe.fileHandleForWriting.fileDescriptor
+                        let inputFd = inputHandle.fileDescriptor
+                        var reusableBuffer = [UInt8](repeating: 0, count: bufferSize)
 
                         while process.isRunning {
-                            // Backpressure: pause stdin if stdout disk writes are lagging behind
-                            while process.isRunning {
-                                stateLock.lock()
-                                let backlog = inFlightOutputBytes
-                                let hasError = (ioWriteError != nil || stdinReadError != nil || wasCancelled)
-                                stateLock.unlock()
-
-                                if hasError { break }
-                                if backlog < Self.maxInFlightOutputBytes { break }
-                                usleep(10_000) // 10ms wait
-                            }
-
-                            stateLock.lock()
-                            let shouldAbort = (ioWriteError != nil || stdinReadError != nil || wasCancelled)
-                            stateLock.unlock()
-                            if shouldAbort { break }
-
-                            let chunk: Data?
-                            do {
-                                chunk = try inputHandle.read(upToCount: bufferSize)
-                            } catch {
-                                stateLock.lock()
-                                stdinReadError = error
-                                stateLock.unlock()
-                                if process.isRunning {
-                                    process.terminate()
+                            var shouldStop = false
+                            autoreleasepool {
+                                // Backpressure: pause stdin if stdout disk writes are lagging behind
+                                while process.isRunning {
+                                    let (backlog, hasError) = state.backpressureCheck()
+                                    if hasError { break }
+                                    if backlog < Self.maxInFlightOutputBytes { break }
+                                    usleep(10_000) // 10ms wait
                                 }
-                                break
-                            }
 
-                            guard let data = chunk, !data.isEmpty else {
-                                break
-                            }
+                                if state.shouldAbortStdin() {
+                                    shouldStop = true
+                                    return
+                                }
 
-                            do {
-                                try stdinHandle.write(contentsOf: data)
-                                bytesSent += Int64(data.count)
+                                let bytesRead = reusableBuffer.withUnsafeMutableBytes { rawBuf -> Int in
+                                    guard let base = rawBuf.baseAddress else { return -1 }
+                                    return read(inputFd, base, bufferSize)
+                                }
+
+                                if bytesRead < 0 {
+                                    let err = errno
+                                    state.recordStdinError(GPGError.executionFailed("Failed reading input file: \(String(cString: strerror(err)))"))
+                                    if process.isRunning {
+                                        process.terminate()
+                                    }
+                                    shouldStop = true
+                                    return
+                                }
+
+                                if bytesRead == 0 {
+                                    shouldStop = true
+                                    return
+                                }
+
+                                var offset = 0
+                                while offset < bytesRead {
+                                    let written = reusableBuffer.withUnsafeBytes { rawBuf -> Int in
+                                        guard let base = rawBuf.baseAddress else { return -1 }
+                                        return write(stdinFd, base.advanced(by: offset), bytesRead - offset)
+                                    }
+                                    if written <= 0 {
+                                        // If stdin pipe broke (e.g. child terminated early with failure)
+                                        shouldStop = true
+                                        return
+                                    }
+                                    offset += written
+                                }
+
+                                bytesSent += Int64(bytesRead)
+                                let currentSent = bytesSent
                                 Task {
-                                    await reporter.report(bytesProcessed: bytesSent, totalBytes: totalFileSize)
+                                    await reporter.report(bytesProcessed: currentSent, totalBytes: totalFileSize)
                                 }
-                            } catch {
-                                // If stdin pipe broke (e.g. child terminated early with failure)
-                                break
                             }
+                            if shouldStop { break }
                         }
-                        try? stdinHandle.close()
+                        try? stdinPipe.fileHandleForWriting.close()
                     }
                 } catch {
                     continuation.resume(throwing: error)
@@ -356,20 +372,18 @@ public final class StreamingCryptoPipeline: Sendable {
             // Sync output file to disk
             try outputHandle.synchronize()
 
-            // Safely write to destination
-            if fileManager.fileExists(atPath: destinationURL.path) {
-                try fileManager.removeItem(at: destinationURL)
+            // Pre-flight check available disk space and commit staged output to final destination
+            try SecureTempStorage.commitStagedFile(from: stagedOutputFile, to: destinationURL)
+            if isDecryption {
+                try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destinationURL.path)
             }
-            try fileManager.copyItem(at: stagedOutputFile, to: destinationURL)
 
             // Final progress report
             await reporter.report(bytesProcessed: totalFileSize, totalBytes: totalFileSize, force: true)
 
             return destinationURL
         } onCancel: {
-            stateLock.lock()
-            wasCancelled = true
-            stateLock.unlock()
+            state.markCancelled()
 
             if process.isRunning {
                 process.terminate()
@@ -381,5 +395,91 @@ public final class StreamingCryptoPipeline: Sendable {
                 }
             }
         }
+    }
+}
+
+// MARK: - Thread-Safe Pipeline Execution State
+
+private final class PipelineExecutionState: @unchecked Sendable {
+    struct Snapshot {
+        let isCancelled: Bool
+        let writeError: Error?
+        let stdinError: Error?
+        let stderrString: String
+    }
+
+    private let lock = NSLock()
+    private var accumulatedStderr = Data()
+    private var ioWriteError: Error?
+    private var stdinReadError: Error?
+    private var inFlightOutputBytes: Int64 = 0
+    private var wasCancelled = false
+
+    func appendStderr(_ chunk: Data) {
+        lock.lock()
+        accumulatedStderr.append(chunk)
+        lock.unlock()
+    }
+
+    /// Adds in-flight bytes and returns whether a write error has already occurred.
+    func addInFlightBytes(_ count: Int64) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        inFlightOutputBytes += count
+        return ioWriteError != nil
+    }
+
+    func subtractInFlightBytes(_ count: Int64) {
+        lock.lock()
+        inFlightOutputBytes = max(0, inFlightOutputBytes - count)
+        lock.unlock()
+    }
+
+    func recordWriteError(_ error: Error) {
+        lock.lock()
+        if ioWriteError == nil {
+            ioWriteError = error
+        }
+        lock.unlock()
+    }
+
+    func recordStdinError(_ error: Error) {
+        lock.lock()
+        if stdinReadError == nil {
+            stdinReadError = error
+        }
+        lock.unlock()
+    }
+
+    func markCancelled() {
+        lock.lock()
+        wasCancelled = true
+        lock.unlock()
+    }
+
+    func backpressureCheck() -> (backlog: Int64, hasError: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        let hasErr = (ioWriteError != nil || stdinReadError != nil || wasCancelled)
+        return (inFlightOutputBytes, hasErr)
+    }
+
+    func shouldAbortStdin() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return ioWriteError != nil || stdinReadError != nil || wasCancelled
+    }
+
+    func snapshot() -> Snapshot {
+        lock.lock()
+        defer { lock.unlock() }
+        let errString = String(data: accumulatedStderr, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return Snapshot(
+            isCancelled: wasCancelled,
+            writeError: ioWriteError,
+            stdinError: stdinReadError,
+            stderrString: errString
+        )
     }
 }

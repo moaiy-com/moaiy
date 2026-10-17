@@ -99,7 +99,7 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
         let normalizedFingerprint = Self.normalizeKeyReference(keyFingerprint)
 
         var secretData = Data()
-        try passphrase.withUnsafeUTF8 { rawBuffer in
+        passphrase.withUnsafeUTF8 { rawBuffer in
             secretData = Data(rawBuffer)
         }
         defer {

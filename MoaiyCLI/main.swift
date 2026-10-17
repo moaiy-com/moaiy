@@ -6,6 +6,9 @@
 //
 
 import Foundation
+import Darwin
+
+signal(SIGPIPE, SIG_IGN)
 
 let versionString = "1.0.0"
 

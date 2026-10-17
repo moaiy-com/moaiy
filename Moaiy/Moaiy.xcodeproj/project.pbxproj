@@ -35,6 +35,11 @@
 		3A1000012F76000100000009 /* DeleteKeyOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2000012F76000100000009 /* DeleteKeyOption.swift */; };
 		3A1000012F7600010000000A /* OperationPromptHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2000012F7600010000000A /* OperationPromptHost.swift */; };
 		3A1000012F7600010000000B /* BatchGovernanceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2000012F7600010000000B /* BatchGovernanceSheet.swift */; };
+		4A1000012F80000100000001 /* StreamingCryptoPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2000012F80000100000001 /* StreamingCryptoPipeline.swift */; };
+		4A1000012F80000100000002 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2000012F80000100000002 /* KeychainService.swift */; };
+		4A1000012F80000100000003 /* SecureMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2000012F80000100000003 /* SecureMemory.swift */; };
+		4A1000012F80000100000004 /* TransientFileRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2000012F80000100000004 /* TransientFileRegistry.swift */; };
+		4A1000012F80000100000005 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2000012F80000100000005 /* main.swift */; };
 		B00000000001 /* MoaiyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000001 /* MoaiyApp.swift */; };
 		B00000000002 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000002 /* MainView.swift */; };
 		B00000000003 /* KeyManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000003 /* KeyManagementView.swift */; };
@@ -89,6 +94,12 @@
 		3A2000012F76000100000009 /* DeleteKeyOption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteKeyOption.swift; sourceTree = "<group>"; };
 		3A2000012F7600010000000A /* OperationPromptHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationPromptHost.swift; sourceTree = "<group>"; };
 		3A2000012F7600010000000B /* BatchGovernanceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchGovernanceSheet.swift; sourceTree = "<group>"; };
+		4A2000012F80000100000001 /* StreamingCryptoPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingCryptoPipeline.swift; sourceTree = "<group>"; };
+		4A2000012F80000100000002 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
+		4A2000012F80000100000003 /* SecureMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureMemory.swift; sourceTree = "<group>"; };
+		4A2000012F80000100000004 /* TransientFileRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransientFileRegistry.swift; sourceTree = "<group>"; };
+		4A2000012F80000100000005 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		4A2000012F80000100000006 /* moaiy-cli */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "moaiy-cli"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00000000001 /* MoaiyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoaiyApp.swift; sourceTree = "<group>"; };
 		A00000000002 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		A00000000003 /* KeyManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyManagementView.swift; sourceTree = "<group>"; };
@@ -121,6 +132,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4A5000012F80000100000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -139,6 +157,14 @@
 				A0000000000A /* AppState.swift */,
 			);
 			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		4A3000012F80000100000001 /* MoaiyCLI */ = {
+			isa = PBXGroup;
+			children = (
+				4A2000012F80000100000005 /* main.swift */,
+			);
+			path = MoaiyCLI;
 			sourceTree = "<group>";
 		};
 		D00000000001 = {
@@ -165,6 +191,7 @@
 				D00000000009 /* Theme */,
 				D00000000017 /* Config */,
 				D0000000000A /* Resources */,
+				4A3000012F80000100000001 /* MoaiyCLI */,
 			);
 			path = .;
 			sourceTree = "<group>";
@@ -174,6 +201,7 @@
 			children = (
 				A0000000000D /* Moaiy.app */,
 				0B96E14D2F71021E009629C1 /* MoaiyTests.xctest */,
+				4A2000012F80000100000006 /* moaiy-cli */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -219,6 +247,10 @@
 				0BEF4DE42F6D80E00053CE56 /* GPGService.swift */,
 				3A2000012F76000100000002 /* GPGFileTypeDetector.swift */,
 				1A2000022F70000100000002 /* ExpirationReminderService.swift */,
+				4A2000012F80000100000001 /* StreamingCryptoPipeline.swift */,
+				4A2000012F80000100000002 /* KeychainService.swift */,
+				4A2000012F80000100000003 /* SecureMemory.swift */,
+				4A2000012F80000100000004 /* TransientFileRegistry.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -412,6 +444,22 @@
 			productReference = A0000000000D /* Moaiy.app */;
 			productType = "com.apple.product-type.application";
 		};
+		4A4000012F80000100000001 /* MoaiyCLI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4A6000012F80000100000001 /* Build configuration list for PBXNativeTarget "MoaiyCLI" */;
+			buildPhases = (
+				4A5000012F80000100000001 /* Sources */,
+				4A5000012F80000100000002 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MoaiyCLI;
+			productName = "moaiy-cli";
+			productReference = 4A2000012F80000100000006 /* moaiy-cli */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -425,6 +473,9 @@
 					0B96E14C2F71021E009629C1 = {
 						CreatedOnToolsVersion = 26.3;
 						TestTargetID = E00000000001;
+					};
+					4A4000012F80000100000001 = {
+						CreatedOnToolsVersion = 15.0;
 					};
 					E00000000001 = {
 						CreatedOnToolsVersion = 15.0;
@@ -456,6 +507,7 @@
 			targets = (
 				E00000000001 /* Moaiy */,
 				0B96E14C2F71021E009629C1 /* MoaiyTests */,
+				4A4000012F80000100000001 /* MoaiyCLI */,
 			);
 		};
 /* End PBXProject section */
@@ -490,6 +542,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4A5000012F80000100000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A1000012F80000100000005 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E00000000003 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -517,6 +577,10 @@
 				0BEF4DE52F6D80E00053CE56 /* GPGError.swift in Sources */,
 				0BEF4DE62F6D80E00053CE56 /* GPGService.swift in Sources */,
 				3A1000012F76000100000002 /* GPGFileTypeDetector.swift in Sources */,
+				4A1000012F80000100000001 /* StreamingCryptoPipeline.swift in Sources */,
+				4A1000012F80000100000002 /* KeychainService.swift in Sources */,
+				4A1000012F80000100000003 /* SecureMemory.swift in Sources */,
+				4A1000012F80000100000004 /* TransientFileRegistry.swift in Sources */,
 				B00000000008 /* Color+Theme.swift in Sources */,
 				3A1000012F76000100000009 /* DeleteKeyOption.swift in Sources */,
 				3A1000012F76000100000001 /* OperationResult.swift in Sources */,
@@ -788,6 +852,34 @@
 			};
 			name = Release;
 		};
+		4A7000012F80000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 10;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_NAME = "moaiy-cli";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		4A7000012F80000100000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 10;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_NAME = "moaiy-cli";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -796,6 +888,15 @@
 			buildConfigurations = (
 				0B96E1532F71021E009629C1 /* Debug */,
 				0B96E1542F71021E009629C1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4A6000012F80000100000001 /* Build configuration list for PBXNativeTarget "MoaiyCLI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4A7000012F80000100000001 /* Debug */,
+				4A7000012F80000100000002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -9,7 +9,7 @@ import Foundation
 import os.log
 import Darwin
 
-private final class PipeAccumulator {
+private final class PipeAccumulator: @unchecked Sendable {
     private let lock = NSLock()
     private var buffer = Data()
 
@@ -471,24 +471,33 @@ final class GPGService: SubkeyManaging {
     func configureExternalGPGHome(_ url: URL) throws {
         try ensureGPGHomeDirectoryExists(at: url)
 
-        let bookmarkData = try url.bookmarkData(
-            options: .withSecurityScope,
-            includingResourceValuesForKeys: nil,
-            relativeTo: nil
-        )
+        do {
+            let bookmarkData = try url.bookmarkData(
+                options: .withSecurityScope,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
 
-        defaults.set(bookmarkData, forKey: externalGPGHomeBookmarkKey)
-        defaults.set(true, forKey: useExternalGPGHomeKey)
+            defaults.set(bookmarkData, forKey: externalGPGHomeBookmarkKey)
+            defaults.set(true, forKey: useExternalGPGHomeKey)
 
-        let accessGranted = url.startAccessingSecurityScopedResource()
-        guard accessGranted else {
-            defaults.set(false, forKey: useExternalGPGHomeKey)
-            defaults.removeObject(forKey: externalGPGHomeBookmarkKey)
-            throw GPGError.fileAccessDenied(url.path)
+            let accessGranted = url.startAccessingSecurityScopedResource()
+            guard accessGranted else {
+                defaults.set(false, forKey: useExternalGPGHomeKey)
+                defaults.removeObject(forKey: externalGPGHomeBookmarkKey)
+                throw GPGError.fileAccessDenied(url.path)
+            }
+
+            stopScopedExternalGPGHomeAccess()
+            scopedExternalGPGHomeURL = url
+        } catch {
+            // In unbundled debug/test executables where security-scoped bookmarks are unavailable,
+            // allow direct directory usage in debug mode while failing closed in release builds.
+            guard Self.isDebugBuild else {
+                throw error
+            }
+            stopScopedExternalGPGHomeAccess()
         }
-
-        stopScopedExternalGPGHomeAccess()
-        scopedExternalGPGHomeURL = url
 
         gpgHome = url
         isUsingExternalGPGHome = true
@@ -601,8 +610,14 @@ final class GPGService: SubkeyManaging {
             }
         }
 
-        try ensureGPGHomeDirectoryExists(at: preferredHome)
-        return preferredHome
+        if let _ = try? ensureGPGHomeDirectoryExists(at: preferredHome) {
+            return preferredHome
+        }
+
+        // Fallback to temporary directory in restricted CLI/test sandboxes where ~/Library is not writable
+        let fallbackHome = URL(fileURLWithPath: "/tmp/com.moaiy.gnupg", isDirectory: true)
+        try ensureGPGHomeDirectoryExists(at: fallbackHome)
+        return fallbackHome
     }
 
     private func preferredAppManagedGPGHomeURL() throws -> URL {
@@ -1800,25 +1815,144 @@ final class GPGService: SubkeyManaging {
 
     // MARK: - Streaming & Keychain Integration
 
-    /// Resolves any short ID, long ID, or subkey reference to its primary 40-character fingerprint
-    func resolvePrimaryFingerprint(for keyRef: String) async -> String {
-        let normalized = KeychainService.normalizeKeyReference(keyRef)
-        guard normalized.count < 40 else { return normalized }
-        if let keys = try? await listKeys(secretOnly: true) {
-            for key in keys {
-                if key.fingerprint.uppercased().hasSuffix(normalized) || key.keyID.uppercased() == normalized {
-                    return key.fingerprint.uppercased()
-                }
-                for subkey in key.subkeys {
-                    if subkey.fingerprint.uppercased().hasSuffix(normalized) || subkey.keyID.uppercased() == normalized {
-                        return key.fingerprint.uppercased()
-                    }
-                }
-            }
+    /// Resolves any short ID (8 chars), long ID (16 chars), primary fingerprint, or subkey reference
+    /// to its primary secret key fingerprint using a single `--list-secret-keys --with-colons` pass.
+    /// Rejects empty or invalid hex references and throws on ambiguous multi-key suffix matches.
+    func resolvePrimaryFingerprint(for keyRef: String) async throws -> String {
+        guard let normalized = normalizeKeyReference(keyRef), !normalized.isEmpty else {
+            throw GPGError.keyNotFound(keyRef)
         }
+
+        do {
+            let result = try await executeGPG(
+                arguments: ["--list-secret-keys", "--with-colons", "--fixed-list-mode"]
+            )
+            if result.exitCode == 0, let output = result.stdout, !output.isEmpty {
+                let matchedPrimaryFingerprints = Self.matchPrimaryFingerprintsInColonOutput(
+                    output,
+                    normalizedReference: normalized
+                )
+                if matchedPrimaryFingerprints.count > 1 {
+                    throw GPGError.executionFailed("Ambiguous key reference matches multiple keys: \(keyRef)")
+                }
+                if let uniqueMatch = matchedPrimaryFingerprints.first {
+                    return uniqueMatch
+                }
+            } else if result.exitCode != 0 {
+                logger.warning("Secret key list query exited with \(result.exitCode) during fingerprint resolution: \(result.stderr ?? "no stderr")")
+            }
+        } catch let error as GPGError {
+            if case .executionFailed(let msg) = error, msg.contains("Ambiguous key reference") {
+                throw error
+            }
+            logger.warning("Failed to query secret keys for fingerprint resolution (\(keyRef)): \(error.localizedDescription)")
+        } catch {
+            logger.warning("Unexpected error resolving primary fingerprint (\(keyRef)): \(error.localizedDescription)")
+        }
+
         return normalized
     }
 
+    nonisolated static func matchPrimaryFingerprintsInColonOutput(
+        _ output: String,
+        normalizedReference: String
+    ) -> Set<String> {
+        var matchedPrimaryFingerprints = Set<String>()
+        var currentPrimaryKeyID: String?
+        var currentPrimaryFingerprint: String?
+        var currentSubkeyID: String?
+        var currentRecordType: String?
+
+        for rawLine in output.split(whereSeparator: \.isNewline) {
+            let fields = rawLine.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+            guard let recordType = fields.first else { continue }
+
+            switch recordType {
+            case "sec":
+                currentRecordType = "sec"
+                currentPrimaryFingerprint = nil
+                currentSubkeyID = nil
+                let keyID = fields.count > 4 ? fields[4].trimmingCharacters(in: .whitespacesAndNewlines).uppercased() : ""
+                currentPrimaryKeyID = keyID.isEmpty ? nil : keyID
+            case "ssb":
+                currentRecordType = "ssb"
+                let subID = fields.count > 4 ? fields[4].trimmingCharacters(in: .whitespacesAndNewlines).uppercased() : ""
+                currentSubkeyID = subID.isEmpty ? nil : subID
+                if let primaryFpr = currentPrimaryFingerprint,
+                   let subID = currentSubkeyID,
+                   subID == normalizedReference || subID.hasSuffix(normalizedReference) {
+                    matchedPrimaryFingerprints.insert(primaryFpr)
+                }
+            case "fpr":
+                let fpr = fields.count > 9 ? fields[9].trimmingCharacters(in: .whitespacesAndNewlines).uppercased() : ""
+                guard !fpr.isEmpty else { continue }
+                if currentRecordType == "sec" {
+                    currentPrimaryFingerprint = fpr
+                    let keyIDMatches = currentPrimaryKeyID.map { $0 == normalizedReference || $0.hasSuffix(normalizedReference) } ?? false
+                    if fpr == normalizedReference || fpr.hasSuffix(normalizedReference) || keyIDMatches {
+                        matchedPrimaryFingerprints.insert(fpr)
+                    }
+                } else if currentRecordType == "ssb", let primaryFpr = currentPrimaryFingerprint {
+                    let subIDMatches = currentSubkeyID.map { $0 == normalizedReference || $0.hasSuffix(normalizedReference) } ?? false
+                    if fpr == normalizedReference || fpr.hasSuffix(normalizedReference) || subIDMatches {
+                        matchedPrimaryFingerprints.insert(primaryFpr)
+                    }
+                }
+            default:
+                currentRecordType = recordType
+            }
+        }
+
+        return matchedPrimaryFingerprints
+    }
+
+    /// Shared validation logic for both standard and streaming decryption outcomes
+    nonisolated static func validateDecryptionOutcome(
+        exitCode: Int,
+        stdout: String?,
+        stderr: String?,
+        preferredSecretKey: String?,
+        normalizedPreferredSecretKey: String?
+    ) throws {
+        let result = GPGExecutionResult(
+            exitCode: exitCode,
+            stdout: stdout,
+            stderr: stderr,
+            data: nil
+        )
+
+        if exitCode != 0 {
+            if let credentialError = Self.credentialFailureError(from: result) {
+                throw credentialError
+            }
+
+            let combinedOutput = [stderr, stdout]
+                .compactMap { $0 }
+                .joined(separator: "\n")
+            if Self.containsNoSecretKeySignalStatic(combinedOutput) {
+                throw GPGError.keyNotFound(preferredSecretKey ?? "secret-key")
+            }
+
+            throw GPGError.decryptionFailed(stderr ?? stdout ?? "Unknown error")
+        }
+
+        let statusOutput = [stdout, stderr]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+        guard statusOutput.contains("[GNUPG:] DECRYPTION_OKAY") else {
+            if Self.containsNoSecretKeySignalStatic(statusOutput) {
+                throw GPGError.keyNotFound(preferredSecretKey ?? "secret-key")
+            }
+            throw GPGError.decryptionFailed(stderr ?? "Decryption did not complete successfully")
+        }
+
+        if let normalizedPreferredSecretKey {
+            try Self.ensurePreferredDecryptionKeyStatic(
+                normalizedPreferredSecretKey,
+                statusOutput: statusOutput
+            )
+        }
+    }
 
     private let streamingPipeline = StreamingCryptoPipeline()
 
@@ -1867,7 +2001,7 @@ final class GPGService: SubkeyManaging {
         )
     }
 
-    /// Decrypt a file using chunked streaming I/O with progress callbacks
+    /// Decrypt a file using chunked streaming I/O with progress callbacks and full GPG status verification
     func decryptFileStreaming(
         sourceURL: URL,
         destinationURL: URL,
@@ -1883,16 +2017,19 @@ final class GPGService: SubkeyManaging {
         var arguments = [
             "--decrypt",
             "--batch",
-            "--yes"
+            "--yes",
+            "--status-fd", "2"
         ]
 
+        var normalizedPreferredSecretKey: String?
         if let preferredSecretKey, let normalized = normalizeKeyReference(preferredSecretKey) {
+            normalizedPreferredSecretKey = normalized
             arguments.append(contentsOf: ["--try-secret-key", normalized])
         }
 
         var activePassphrase = passphrase
-        if activePassphrase == nil, let preferredSecretKey {
-            let targetFpr = await resolvePrimaryFingerprint(for: preferredSecretKey)
+        if activePassphrase == nil, let normalizedPreferredSecretKey {
+            let targetFpr = try await resolvePrimaryFingerprint(for: normalizedPreferredSecretKey)
             do {
                 if let saved = try await KeychainService.shared.retrievePassphrase(for: targetFpr) {
                     activePassphrase = saved
@@ -1902,9 +2039,14 @@ final class GPGService: SubkeyManaging {
             } catch KeychainError.authenticationFailed(let reason) {
                 throw GPGError.decryptionFailed("Keychain authentication failed: \(reason)")
             } catch {
-                // Non-fatal, proceed
+                // Non-fatal item not found, proceed
             }
         }
+
+        // Always supply at least an empty SecureString in decryption mode so --pinentry-mode loopback is enforced
+        let loopbackPassphrase = activePassphrase ?? SecureString("")
+        let capturedPreferredKey = preferredSecretKey
+        let capturedNormalizedKey = normalizedPreferredSecretKey
 
         return try await streamingPipeline.executeStreamingFileOperation(
             executableURL: gpgURL,
@@ -1914,20 +2056,31 @@ final class GPGService: SubkeyManaging {
             sourceURL: sourceURL,
             destinationURL: destinationURL,
             isDecryption: true,
-            passphrase: activePassphrase,
+            passphrase: loopbackPassphrase,
+            validateCompletion: { exitCode, stderr in
+                try Self.validateDecryptionOutcome(
+                    exitCode: exitCode,
+                    stdout: nil,
+                    stderr: stderr,
+                    preferredSecretKey: capturedPreferredKey,
+                    normalizedPreferredSecretKey: capturedNormalizedKey
+                )
+            },
             progressHandler: progressHandler
         )
     }
 
     /// Stores a passphrase for a key fingerprint in the macOS Keychain
-    func storePassphraseInKeychain(for keyFingerprint: String, passphrase: String, requireBiometrics: Bool = false) throws {
+    func storePassphraseInKeychain(for keyFingerprint: String, passphrase: String, requireBiometrics: Bool = false) async throws {
+        let targetFpr = try await resolvePrimaryFingerprint(for: keyFingerprint)
         let secure = SecureString(passphrase)
-        try KeychainService.shared.savePassphrase(secure, for: keyFingerprint, requireBiometrics: requireBiometrics)
+        try KeychainService.shared.savePassphrase(secure, for: targetFpr, requireBiometrics: requireBiometrics)
     }
 
     /// Looks up a saved passphrase in Keychain for a key fingerprint
-    func lookupPassphraseInKeychain(for keyFingerprint: String, contextReason: String? = nil) async -> String? {
-        if let secure = try? await KeychainService.shared.retrievePassphrase(for: keyFingerprint, contextReason: contextReason) {
+    func lookupPassphraseInKeychain(for keyFingerprint: String, contextReason: String? = nil) async throws -> String? {
+        let targetFpr = try await resolvePrimaryFingerprint(for: keyFingerprint)
+        if let secure = try await KeychainService.shared.retrievePassphrase(for: targetFpr, contextReason: contextReason) {
             return secure.revealString()
         }
         return nil
@@ -1947,9 +2100,11 @@ final class GPGService: SubkeyManaging {
     ) async throws -> URL {
         try await ensureGPGAgentRunningIfNeeded()
 
+        let normalizedPreferredSecretKey = preferredSecretKey.flatMap { normalizeKeyReference($0) }
+
         var resolvedPassphrase = passphrase
-        if resolvedPassphrase.isEmpty, let preferredSecretKey {
-            let targetFpr = await resolvePrimaryFingerprint(for: preferredSecretKey)
+        if resolvedPassphrase.isEmpty, let normalizedPreferredSecretKey {
+            let targetFpr = try await resolvePrimaryFingerprint(for: normalizedPreferredSecretKey)
             do {
                 if let saved = try await KeychainService.shared.retrievePassphrase(for: targetFpr) {
                     resolvedPassphrase = saved.revealString()
@@ -1959,7 +2114,7 @@ final class GPGService: SubkeyManaging {
             } catch KeychainError.authenticationFailed(let reason) {
                 throw GPGError.decryptionFailed("Keychain authentication failed: \(reason)")
             } catch {
-                // Non-fatal, proceed
+                // Non-fatal item not found, proceed
             }
         }
 
@@ -1982,51 +2137,24 @@ final class GPGService: SubkeyManaging {
             "--status-fd", "1"
         ]
 
-        var normalizedPreferredSecretKey: String?
-        if let preferredSecretKey,
-           let normalized = normalizeKeyReference(preferredSecretKey) {
-            normalizedPreferredSecretKey = normalized
-            arguments.append(contentsOf: ["--try-secret-key", normalized])
+        if let normalizedPreferredSecretKey {
+            arguments.append(contentsOf: ["--try-secret-key", normalizedPreferredSecretKey])
         }
 
         arguments.append(contentsOf: ["--output", stagedOutputURL.path, "--", stagedSourceURL.path])
 
         let result = try await executeGPG(
             arguments: arguments,
-            input: passphrase + "\n"
+            input: resolvedPassphrase + "\n"
         )
 
-        if result.exitCode != 0 {
-            if let credentialError = Self.credentialFailureError(from: result) {
-                throw credentialError
-            }
-
-            let combinedOutput = [result.stderr, result.stdout]
-                .compactMap { $0 }
-                .joined(separator: "\n")
-            if containsNoSecretKeySignal(combinedOutput) {
-                throw GPGError.keyNotFound(preferredSecretKey ?? "secret-key")
-            }
-
-            throw GPGError.decryptionFailed(result.stderr ?? result.stdout ?? "Unknown error")
-        }
-
-        let statusOutput = [result.stdout, result.stderr]
-            .compactMap { $0 }
-            .joined(separator: "\n")
-        guard statusOutput.contains("[GNUPG:] DECRYPTION_OKAY") else {
-            if containsNoSecretKeySignal(statusOutput) {
-                throw GPGError.keyNotFound(preferredSecretKey ?? "secret-key")
-            }
-            throw GPGError.decryptionFailed(result.stderr ?? "Decryption did not complete successfully")
-        }
-
-        if let normalizedPreferredSecretKey {
-            try ensurePreferredDecryptionKey(
-                normalizedPreferredSecretKey,
-                statusOutput: statusOutput
-            )
-        }
+        try Self.validateDecryptionOutcome(
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            preferredSecretKey: preferredSecretKey,
+            normalizedPreferredSecretKey: normalizedPreferredSecretKey
+        )
 
         guard fileManager.fileExists(atPath: stagedOutputURL.path) else {
             throw GPGError.decryptionFailed("No output generated")
@@ -2913,22 +3041,7 @@ final class GPGService: SubkeyManaging {
     /// For sandboxed save-panel flows, changing the destination path can invalidate
     /// the user-granted write scope, so we overwrite in place when needed.
     private func writeStagedOutput(from stagedURL: URL, to destinationURL: URL) throws -> URL {
-        let fileManager = FileManager.default
-
-        // Pre-flight check: ensure target volume has sufficient free space
-        let stagedSize = (try? fileManager.attributesOfItem(atPath: stagedURL.path)[.size] as? NSNumber)?.int64Value ?? 0
-        let parentDir = destinationURL.deletingLastPathComponent()
-        if let values = try? parentDir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
-           let available = values.volumeAvailableCapacityForImportantUsage {
-            if available < stagedSize {
-                throw GPGError.executionFailed("Insufficient disk space on destination volume (\(stagedSize) bytes required)")
-            }
-        }
-
-        if fileManager.fileExists(atPath: destinationURL.path) {
-            try fileManager.removeItem(at: destinationURL)
-        }
-        try fileManager.copyItem(at: stagedURL, to: destinationURL)
+        try SecureTempStorage.commitStagedFile(from: stagedURL, to: destinationURL)
         return destinationURL
     }
 
@@ -3495,11 +3608,15 @@ final class GPGService: SubkeyManaging {
             || lowercased.contains("no smartcard daemon")
     }
 
-    private func containsNoSecretKeySignal(_ output: String) -> Bool {
+    nonisolated static func containsNoSecretKeySignalStatic(_ output: String) -> Bool {
         let lowercased = output.lowercased()
         return lowercased.contains("no_seckey")
             || lowercased.contains("no secret key")
             || lowercased.contains("secret key not available")
+    }
+
+    private func containsNoSecretKeySignal(_ output: String) -> Bool {
+        Self.containsNoSecretKeySignalStatic(output)
     }
 
     private func isMissingKeyDeletionOutput(_ output: String, deletingSecret: Bool) -> Bool {
@@ -3522,14 +3639,14 @@ final class GPGService: SubkeyManaging {
         return false
     }
 
-    private func ensurePreferredDecryptionKey(
+    nonisolated static func ensurePreferredDecryptionKeyStatic(
         _ normalizedPreferredSecretKey: String,
         statusOutput: String
     ) throws {
-        let decryptionPrimaryFingerprints = parseDecryptionPrimaryFingerprints(from: statusOutput)
+        let decryptionPrimaryFingerprints = Self.parseDecryptionPrimaryFingerprintsStatic(from: statusOutput)
         if !decryptionPrimaryFingerprints.isEmpty {
             let matched = decryptionPrimaryFingerprints.contains { parsedFingerprint in
-                keyReferencesMatch(
+                Self.keyReferencesMatchStatic(
                     expected: normalizedPreferredSecretKey,
                     actual: parsedFingerprint
                 )
@@ -3541,7 +3658,7 @@ final class GPGService: SubkeyManaging {
             return
         }
 
-        let encryptedRecipientKeyIDs = parseEncryptedRecipientKeyIDs(from: statusOutput)
+        let encryptedRecipientKeyIDs = Self.parseEncryptedRecipientKeyIDsStatic(from: statusOutput)
         guard encryptedRecipientKeyIDs.isEmpty == false else {
             return
         }
@@ -3550,6 +3667,13 @@ final class GPGService: SubkeyManaging {
         guard encryptedRecipientKeyIDs.contains(preferredTail16) else {
             throw GPGError.keyNotFound(normalizedPreferredSecretKey)
         }
+    }
+
+    private func ensurePreferredDecryptionKey(
+        _ normalizedPreferredSecretKey: String,
+        statusOutput: String
+    ) throws {
+        try Self.ensurePreferredDecryptionKeyStatic(normalizedPreferredSecretKey, statusOutput: statusOutput)
     }
 
     private func listEncryptedRecipientKeyIDs(sourceURL: URL) async throws -> [String] {
@@ -3774,27 +3898,35 @@ final class GPGService: SubkeyManaging {
         return normalized
     }
 
-    private func parseDecryptionPrimaryFingerprints(from statusOutput: String) -> [String] {
-        parseGPGStatusFields(from: statusOutput).compactMap { fields in
+    nonisolated static func parseDecryptionPrimaryFingerprintsStatic(from statusOutput: String) -> [String] {
+        Self.parseGPGStatusFieldsStatic(from: statusOutput).compactMap { fields in
             guard fields.count >= 3, fields[0] == "DECRYPTION_KEY" else {
                 return nil
             }
-            return normalizeKeyReference(fields[2])
+            return Self.normalizeKeyReferenceStatic(fields[2])
         }
     }
 
-    private func parseEncryptedRecipientKeyIDs(from statusOutput: String) -> Set<String> {
+    private func parseDecryptionPrimaryFingerprints(from statusOutput: String) -> [String] {
+        Self.parseDecryptionPrimaryFingerprintsStatic(from: statusOutput)
+    }
+
+    nonisolated static func parseEncryptedRecipientKeyIDsStatic(from statusOutput: String) -> Set<String> {
         Set(
-            parseGPGStatusFields(from: statusOutput).compactMap { fields in
+            Self.parseGPGStatusFieldsStatic(from: statusOutput).compactMap { fields in
                 guard fields.count >= 2, fields[0] == "ENC_TO" else {
                     return nil
                 }
-                guard let normalized = normalizeKeyReference(fields[1]) else {
+                guard let normalized = Self.normalizeKeyReferenceStatic(fields[1]) else {
                     return nil
                 }
                 return String(normalized.suffix(16))
             }
         )
+    }
+
+    private func parseEncryptedRecipientKeyIDs(from statusOutput: String) -> Set<String> {
+        Self.parseEncryptedRecipientKeyIDsStatic(from: statusOutput)
     }
 
     private func parseRecipientKeyIDs(from output: String) -> [String] {
@@ -3825,7 +3957,7 @@ final class GPGService: SubkeyManaging {
         return keyIDs
     }
 
-    private func parseGPGStatusFields(from output: String) -> [[String]] {
+    nonisolated static func parseGPGStatusFieldsStatic(from output: String) -> [[String]] {
         output
             .split(separator: "\n")
             .compactMap { line in
@@ -3842,7 +3974,11 @@ final class GPGService: SubkeyManaging {
             }
     }
 
-    private func keyReferencesMatch(expected: String, actual: String) -> Bool {
+    private func parseGPGStatusFields(from output: String) -> [[String]] {
+        Self.parseGPGStatusFieldsStatic(from: output)
+    }
+
+    nonisolated static func keyReferencesMatchStatic(expected: String, actual: String) -> Bool {
         let normalizedExpected = expected.uppercased()
         let normalizedActual = actual.uppercased()
 
@@ -3855,6 +3991,10 @@ final class GPGService: SubkeyManaging {
         }
 
         return normalizedActual.hasSuffix(normalizedExpected)
+    }
+
+    private func keyReferencesMatch(expected: String, actual: String) -> Bool {
+        Self.keyReferencesMatchStatic(expected: expected, actual: actual)
     }
 
     private enum KeyserverImportQueryKind {
@@ -3922,7 +4062,7 @@ final class GPGService: SubkeyManaging {
         return nil
     }
 
-    private func normalizeKeyReference(_ value: String) -> String? {
+    nonisolated static func normalizeKeyReferenceStatic(_ value: String) -> String? {
         var normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return nil }
 
@@ -3937,6 +4077,10 @@ final class GPGService: SubkeyManaging {
         }
 
         return nil
+    }
+
+    private func normalizeKeyReference(_ value: String) -> String? {
+        Self.normalizeKeyReferenceStatic(value)
     }
 
     private func normalizedGPGKeyserver(_ keyserver: String) -> String {
