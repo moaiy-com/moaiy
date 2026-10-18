@@ -8,48 +8,46 @@ Moaiy 是一个开源的 macOS 原生应用，专注于加密与恢复工作流�
 
 **[English Version](./README.md)**
 
-当前稳定版本：`v0.9.0`
-当前发布重点：Kyber-768 混合抗量子加密支持
+当前稳定版本：`v1.0.0`
+当前发布重点：大文件流式加解密管道、系统钥匙串与 Touch ID 口令集成、`moaiy-cli` 命令行伴侣工具，以及 Kyber-768 混合抗量子加密
 
 ## 应用截图
 
 ![Moaiy 主界面（密钥管理视图）](./doc/images/moaiy-main-ui.png)
 
-## v0.9.0 主要升级
+## v1.0.0 主要升级
 
-Moaiy v0.9.0 新增 Kyber-768 混合 OpenPGP 支持，在保留熟悉 GPG 工作流的同时，为需要抗量子准备的用户提供新的加密路径。
+Moaiy v1.0.0 正式发布首个 GA 稳定版，引入恒定低内存开销的流式加解密管道、macOS 系统钥匙串与 Touch ID 生物识别集成、独立的 `moaiy-cli` 命令行伴侣工具，以及针对 macOS App Sandbox 深度加固的安全原地覆盖机制。
 
-- 新增基于内置 GnuPG 运行时的 Kyber-768 混合密钥生成。
-- 将内置 `gpg.bundle` 更新到 GnuPG 2.5.21，并启用 Kyber 公钥算法支持。
-- 新增抗量子能力自动检测、密钥分类和 PQC 密钥 UI 标识。
-- 新增 Kyber 密钥的文本与文件加密/解密验证覆盖。
-- 新增抗量子密钥的备份、恢复、迁移和互操作验证。
-- 新增 Pro/团队策略保护，只有当前 GPG 运行时支持 Kyber 时才允许应用 Kyber 默认策略。
-- 新增发布兼容性提示：Kyber-768 混合密钥需要 GnuPG 2.5.21+ 或兼容 OpenPGP 实现；与旧工具共享时建议使用 RSA-4096。
-- 修复应用图标打包问题，确保生成的 DMG 包含正确的 `moaiy_icon.icns` 资源。
+- **大文件流式加解密管道（`StreamingCryptoPipeline`）**：采用 256KB 分块流式 I/O、独立 `stdinQueue`/`stdoutQueue` 双队列 8MB 背压限流、分块 `autoreleasepool` 及时释放（64MB 流式实测峰值 RSS 增量 `< 32MB`），并通过 `0600` 权限独立口令令牌文件实现口令与数据流隔离。
+- **沙盒安全的原地覆盖机制（`commitStagedFile`）**：通过 POSIX `statfs` 预检扣除被覆盖文件后的净需磁盘空间，采用 `open(O_WRONLY)` 权限预检、容器回滚备份（`original.bak` 清零销毁）以及 `ftruncate` + 流式写入 + `fsync` 原地覆盖，在保留 `NSSavePanel` 沙盒授权与目标文件 inode 的同时确保任何权限或 I/O 异常下原文件零丢失。
+- **系统钥匙串与 Touch ID 集成（`KeychainService`）**：基于 macOS Data Protection Keychain 与 `LocalAuthentication`（`.userPresence`）安全存取私钥口令，支持 Touch ID、Apple Watch 与系统密码回退，并提供单次子进程调用的主钥/子钥指纹解析（`resolvePrimaryFingerprint`）。
+- **内存清零与临时文件生命周期管理（`SecureMemory` & `TransientFileRegistry`）**：通过 Darwin `memset_s` 在释放时清零敏感字节缓冲区，并在应用正常退出（`willTerminateNotification`）或启动自检时自动清零覆写并清理暂存目录。
+- **命令行伴侣工具（`moaiy-cli`）**：新增独立 `MoaiyCLI` 可执行程序，完整支持 `status`（含 Kyber-768 抗量子算法检测）、`list-keys`、`encrypt` 与 `decrypt` 子命令。
+- **内置抗量子混合加密支持（`v0.9.0`+）**：内置 GnuPG 2.5.21 运行时（`gpg.bundle`），原生支持生成和使用 Kyber-768 混合 OpenPGP 密钥及传统 ECC / RSA-4096 密钥。
 
 ## 功能特性
 
-- 生成、导入、导出和删除密钥
-- 文本加密与解密
-- 文件加密与解密
-- 生成和使用 Kyber-768 混合 OpenPGP 密钥
-- 信任管理、密钥签名与密钥编辑流程
-- 备份与恢复流程
-- 支持在沙盒环境中使用内置 GPG 运行时
+- 生成、导入、导出和删除密钥（支持 ECC、RSA-4096、RSA-2048 与 Kyber-768 混合抗量子密钥）
+- 文本加解密与恒定低内存的大文件流式加解密
+- macOS 系统钥匙串与 Touch ID 私钥口令安全托管
+- 独立 `moaiy-cli` 命令行伴侣工具，便于终端与自动化脚本调用
+- 信任管理、子密钥生命周期管理、Ownertrust 导出/导入、吊销证书与密钥签名流程
+- 备份与恢复工作流（含完整性校验）
+- 内置 GnuPG 2.5.21 运行时（`gpg.bundle`），无需外部依赖即可在 macOS 沙盒中开箱即用
 
 ## 环境要求
 
 - macOS 14.0+（应用运行环境）
-- 支持 macOS 14 SDK 的 Xcode（建议使用最新稳定版）
+- 支持 macOS 14+ SDK 的 Xcode
 
 ## 快速开始
 
 ### 方式 1：下载发布版本
 
 - 从 [GitHub Releases](https://github.com/moaiy-com/moaiy/releases) 下载最新 `.dmg`
-- Apple Silicon 芯片 Mac：`Moaiy-0.9.0-macos-apple-silicon.dmg`
-- Intel 芯片 Mac：`Moaiy-0.9.0-macos-intel-chip.dmg`
+- Apple Silicon 芯片 Mac：`Moaiy-1.0.0-macos-apple-silicon.dmg`
+- Intel 芯片 Mac：`Moaiy-1.0.0-macos-intel-chip.dmg`
 
 ### 方式 2：源码构建
 
@@ -59,13 +57,27 @@ cd moaiy
 open Moaiy/Moaiy.xcodeproj
 ```
 
-或使用命令行构建：
+或使用命令行构建 `Moaiy` 与 `MoaiyCLI`：
 
 ```bash
 xcodebuild -project Moaiy/Moaiy.xcodeproj \
            -scheme Moaiy \
-           -destination 'platform=macOS' \
+           -destination 'platform=macOS,arch=arm64' \
            build
+
+xcodebuild -project Moaiy/Moaiy.xcodeproj \
+           -target MoaiyCLI \
+           -configuration Release \
+           build
+```
+
+## 命令行伴侣工具（`moaiy-cli`）
+
+```bash
+moaiy-cli status
+moaiy-cli list-keys --secret
+moaiy-cli encrypt --recipient <FINGERPRINT_OR_EMAIL> --input secret.txt --output secret.txt.gpg --armor
+moaiy-cli decrypt --input secret.txt.gpg --output secret.txt
 ```
 
 ## DMG 打包
@@ -76,21 +88,30 @@ xcodebuild -project Moaiy/Moaiy.xcodeproj \
 ./scripts/package_dmg.sh
 ```
 
-常用参数：
+或运行双架构（`arm64` + `x86_64`）完整发布编排脚本（自动生成双架构 DMG、`SHA256SUMS.txt`、`release-manifest.json` 与双语 `release-notes.md`）：
 
 ```bash
-./scripts/package_dmg.sh --configuration Release
-./scripts/package_dmg.sh --skip-build --open
+./scripts/release/run_release.sh --version 1.0.0 --mode draft --signing auto --gate balanced
 ```
 
-建议在本机终端直接执行该脚本，这样可避免在 AI 会话中反复触发沙盒提权提示。
+常用单架构打包参数：
+
+```bash
+./scripts/package_dmg.sh --configuration Release --arch arm64 --version 1.0.0 --artifact-name Moaiy-1.0.0-macos-apple-silicon.dmg
+./scripts/package_dmg.sh --configuration Release --arch x86_64 --version 1.0.0 --artifact-name Moaiy-1.0.0-macos-intel-chip.dmg
+./scripts/package_dmg.sh --skip-build --open
+```
 
 ## 运行测试
 
 ```bash
+# 运行完整 Xcode 单元与集成测试套件（451 项测试）
 xcodebuild test -project Moaiy/Moaiy.xcodeproj \
-                -scheme Moaiy \
-                -destination 'platform=macOS'
+                -scheme MoaiyTests \
+                -destination 'platform=macOS,arch=arm64'
+
+# 或运行 5 阶段完整闭环验证脚本（SwiftLint + CLI + 64MB 流式压测 + MoaiyTests）
+bash scripts/loop-runner.sh
 ```
 
 ## 内置 GPG 工作流
@@ -112,10 +133,12 @@ xcodebuild test -project Moaiy/Moaiy.xcodeproj \
 
 ```text
 moaiy/
-├── Moaiy/                  # 主 macOS 应用
+├── Moaiy/                  # 主 macOS SwiftUI 应用与 MoaiyTests 测试套件
+├── MoaiyCLI/               # 独立 moaiy-cli 命令行伴侣工具
 ├── MoaiySandboxTest/       # 沙盒验证项目
-├── scripts/                # 构建与打包工具
-├── doc/                    # 技术文档
+├── specs/                  # v1.0 核心工程规约文档
+├── scripts/                # 构建、闭环验证与 DMG 发布脚本
+├── doc/                    # 技术与发布文档
 ├── CONTRIBUTING.md
 ├── DISCLAIMER.md
 ├── README_CN.md
@@ -126,6 +149,9 @@ moaiy/
 
 - [贡献指南](./CONTRIBUTING.md)
 - [文档索引](./doc/README.md)
+- [v1.0.0 发布验证总结](./doc/v1.0.0-release-validation-summary.md)
+- [v1.0.0 综合测试计划](./doc/v1.0.0-comprehensive-test-plan.md)
+- [v1.0.0 发布说明（Release Notes）](./doc/v1.0.0-release-notes.md)
 - [发布流程说明](./doc/release-workflow-skill.md)
 - [技术架构](./doc/technical-architecture.md)
 - [技术验证状态](./doc/technical-validation-status.md)
