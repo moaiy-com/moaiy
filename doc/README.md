@@ -9,10 +9,6 @@ Language policy:
 
 ## Core Architecture & Product Engineering
 
-### [Project Info](./project-info.md)
-- Current release status and repository references
-- Localization strategy and supported UI languages
-
 ### [Technical Architecture](./technical-architecture.md)
 - Layered system design
 - Core services and data models
@@ -35,6 +31,19 @@ Language policy:
 - Stable contracts, semantic versioning, and entitlement integration
 
 ## Release Operations
+
+### [v1.0.0 Release Validation Summary](./v1.0.0-release-validation-summary.md)
+- Architecture and implementation status for v1.0.0 milestone (`StreamingCryptoPipeline`, `KeychainService`, `SecureMemory`, `TransientFileRegistry`, `MoaiyCLI`)
+- Verification matrix, 64MB Peak RSS benchmarks, and known overwrite limitations
+
+### [v1.0.0 Comprehensive Test Plan](./v1.0.0-comprehensive-test-plan.md)
+- End-to-end quality assurance matrix and test coverage across unit, integration, and CLI suites
+
+### [v1.0.0 Release Notes](./v1.0.0-release-notes.md)
+- Bilingual (English + Simplified Chinese) release notes and GitHub Release page copy for Moaiy v1.0.0
+
+### [v0.9.0 PQC Technical Validation Report](./v0.9.0-pqc-technical-validation-report.md)
+- Kyber-768 hybrid OpenPGP implementation and GnuPG 2.5.21 runtime validation
 
 ### [v0.8.1 Release Hardening Tracker](./v0.8.1-release-hardening-tracker.md)
 - Execution tracker for v0.8.1 hardening tasks
@@ -101,9 +110,9 @@ Language policy:
 - [Contribution Guide](../CONTRIBUTING.md)
 - [Security Policy](../SECURITY.md)
 - [Changelog](../CHANGELOG.md)
-- [Latest Release (v0.8.0)](https://github.com/moaiy-com/moaiy/releases/tag/v0.8.0)
+- [Latest Release (v1.0.0)](https://github.com/moaiy-com/moaiy/releases/tag/v1.0.0)
 - [Disclaimer](../DISCLAIMER.md)
 
 ---
 
-Last updated: 2026-04-19
+Last updated: 2026-10-17

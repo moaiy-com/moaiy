@@ -165,6 +165,9 @@ FULL_TARGETS=(
   "MoaiyTests/SecurityHardeningFlowTests"
   "MoaiyTests/TextEncryptionFlowTests"
   "MoaiyTests/FileEncryptionFlowTests"
+  "MoaiyTests/StreamingCryptoPipelineTests"
+  "MoaiyTests/KeychainServiceTests"
+  "MoaiyTests/SecureMemoryAndResilienceTests"
 )
 
 SMOKE_TARGETS=(
@@ -174,6 +177,9 @@ SMOKE_TARGETS=(
   "MoaiyTests/BackupExportSummaryTests"
   "MoaiyTests/TextEncryptionFlowTests"
   "MoaiyTests/FileEncryptionFlowTests"
+  "MoaiyTests/StreamingCryptoPipelineTests"
+  "MoaiyTests/KeychainServiceTests"
+  "MoaiyTests/SecureMemoryAndResilienceTests"
 )
 
 if [[ "$MODE" == "full" ]]; then

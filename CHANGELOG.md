@@ -7,39 +7,51 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-10-16
+## [1.0.0] - 2026-10-17
 
 ### Added
 
-- Added `StreamingCryptoPipeline` supporting 256KB chunked streaming I/O, non-blocking `readabilityHandler` IPC, and isolated passphrase passing to prevent deadlock and memory bloat on large-file operations.
+- Added `StreamingCryptoPipeline` supporting 256KB chunked streaming I/O, independent `stdinQueue`/`stdoutQueue` backpressure throttling (8MB max in-flight buffer), per-chunk `autoreleasepool` drainage (<32MB Peak RSS delta on 64MB streams), non-blocking `readabilityHandler` IPC, and isolated `0600` passphrase token files.
 - Added `CryptoProgress` and `StreamingProgressReporter` with 10Hz UI throttling for responsive progress callbacks.
 - Added `SecureMemory` (`SecureBytes`, `SecureString`) providing best-effort internal buffer clearing via Darwin `memset_s` upon deallocation.
-- Added `TransientFileRegistry` wired into `SecureTempStorage` and `NSApplication.willTerminateNotification` to purge active scratch directories upon application exit.
-- Added `KeychainService` integrating macOS Keychain Services with `LocalAuthentication` (`.userPresence`), supporting Touch ID and device passcode fallback with thread-safe background lookup.
-- Added standalone `moaiy-cli` companion command-line tool with subcommands for `status` (including structured Kyber algorithm detection), `list-keys`, `encrypt`, and `decrypt`.
-- Integrated `encryptFileStreaming` and `decryptFileStreaming` directly into `GPGService`, with automatic Keychain passphrase fallback in `decryptFile`.
+- Added `TransientFileRegistry` wired into `SecureTempStorage` and `NSApplication.willTerminateNotification` to zero-scrub and purge active scratch directories upon application exit, plus 24-hour stale directory cleanup on launch.
+- Added `KeychainService` integrating macOS Data Protection Keychain with `LocalAuthentication` (`.userPresence`), supporting Touch ID, Apple Watch, and device passcode fallback with thread-safe background lookup and compile-time `#if DEBUG` legacy Keychain fallback isolation.
+- Added single-pass `GPGService.resolvePrimaryFingerprint` (`--list-secret-keys --with-colons --fixed-list-mode`) and typed `GPGError.ambiguousKeyReference` to resolve 8-char short IDs, 16-char long IDs, primary fingerprints, and subkey fingerprints in a single subprocess call.
+- Added standalone `moaiy-cli` companion command-line tool (`MoaiyCLI` target) with `SIGPIPE` protection and subcommands for `status` (including structured Kyber-768 algorithm detection), `list-keys`, `encrypt`, and `decrypt`.
+- Integrated `encryptFileStreaming` and `decryptFileStreaming` into `GPGService` and `KeyActionMenu` with full `decryptFile` parity (`--status-fd 2`, `DECRYPTION_OKAY` verification, recipient key matching, and Keychain passphrase lookup).
 
 ### Changed
 
 - Bumped app marketing version to `1.0.0` and `CURRENT_PROJECT_VERSION` to `10`.
-- Preserved sandboxed in-place overwrite semantics in `GPGService.writeStagedOutput` to guarantee App Sandbox save-panel access permissions.
+- Hardened `SecureTempStorage.commitStagedFile` with POSIX `statfs` net disk-space calculation (`max(0, stagedSize - existingSize)`), `open(O_WRONLY)` permission preflight, container-backed rollback backup (`original.bak`) with zero-scrubbing, and in-place `ftruncate` + stream write + `fsync` to preserve `NSSavePanel` sandbox security scope and target inode without data loss.
 - Initialized `TransientFileRegistry` lifecycle hooks in `MoaiyApp` startup sequence.
+
+### Security
+
+- Enforced strict `0600` permissions and zero-overwrite scrubbing before `unlink` on temporary passphrase token files and operation scratch directories.
+- Restricted legacy macOS Keychain fallback in `KeychainService` strictly to `#if DEBUG` builds (`allowLegacyKeychainFallback`), ensuring Release builds fail closed on missing Data Protection Keychain entitlements.
 
 ### Added (zh-Hans)
 
-- 新增 `StreamingCryptoPipeline` 流式 I/O 管道，采用 256KB 分块读写、非阻塞 `readabilityHandler` 与独立口令隔离机制，防止大文件管道死锁与内存激增。
-- 新增 `CryptoProgress` 与 `StreamingProgressReporter` 进度通知器，支持 10Hz 防抖节流，避免 UI 渲染拥塞。
-- 新增 `SecureMemory` 内存安全工具（`SecureBytes`、`SecureString`），通过 Darwin `memset_s` 尽力而为清零其内部缓冲区。
-- 新增 `TransientFileRegistry` 临时目录生命周期跟踪器，接入 `SecureTempStorage` 与 `NSApplication.willTerminateNotification`，在应用退出时清理挂起目录。
-- 新增 `KeychainService` 系统钥匙串集成，结合 `LocalAuthentication`（`.userPresence`）支持 Touch ID 与密码回退，并在后台线程安全检索。
-- 新增独立 `moaiy-cli` 命令行伴侣工具，完整实现 `status`（含精准 Kyber 算法探测）、`list-keys`、`encrypt` 与 `decrypt` 命令。
-- 在 `GPGService` 中直接接入 `encryptFileStreaming` 与 `decryptFileStreaming`，并在 `decryptFile` 中支持钥匙串已存口令自动回退。
+- 新增 `StreamingCryptoPipeline` 流式加解密管道，支持 256KB 分块读写、独立 `stdinQueue`/`stdoutQueue` 双队列 8MB 背压限流、分块 `autoreleasepool` 内存及时释放（64MB 流式传输峰值 RSS 增量 `< 32MB`）、非阻塞 `readabilityHandler` 管道读取以及独立的 `0600` 权限口令令牌文件隔离。
+- 新增 `CryptoProgress` 与 `StreamingProgressReporter` 进度通知器，支持 10Hz 防抖节流，避免大文件传输时 UI 渲染拥塞。
+- 新增 `SecureMemory` 内存安全工具（`SecureBytes`、`SecureString`），在释放时通过 Darwin `memset_s` 尽力清零内部字节缓冲区。
+- 新增 `TransientFileRegistry` 临时目录生命周期跟踪器，接入 `SecureTempStorage` 与 `NSApplication.willTerminateNotification`，在应用退出时自动清零并移除挂起目录，并在启动时清理超过 24 小时的陈旧残留目录。
+- 新增 `KeychainService` 系统钥匙串服务，集成 macOS Data Protection Keychain 与 `LocalAuthentication`（`.userPresence`），支持 Touch ID、Apple Watch 与系统密码回退、后台线程非阻塞读取，以及仅限 `#if DEBUG` 编译期的旧版钥匙串受控回退。
+- 新增单次子进程调用的 `GPGService.resolvePrimaryFingerprint`（基于 `--list-secret-keys --with-colons --fixed-list-mode`）与强类型错误 `GPGError.ambiguousKeyReference`，一次性解析 8 位短 ID、16 位长 ID、主钥指纹及子钥指纹。
+- 新增独立 `moaiy-cli` 命令行伴侣工具（`MoaiyCLI` Target），内置 `SIGPIPE` 防护，完整支持 `status`（含 Kyber-768 算法探测）、`list-keys`、`encrypt` 与 `decrypt` 子命令。
+- 在 `GPGService` 与 `KeyActionMenu` 中接入 `encryptFileStreaming` 与 `decryptFileStreaming`，并与 `decryptFile` 保持完整行为对齐（`--status-fd 2`、`DECRYPTION_OKAY` 校验、指定私钥匹配校验及钥匙串口令自动读取）。
 
 ### Changed (zh-Hans)
 
 - 将应用营销版本号升级至 `1.0.0`，工程构建版本号递增至 `10`。
-- 保留 `GPGService.writeStagedOutput` 原地覆盖逻辑，确保 macOS App Sandbox 保存面板授权路径有效。
+- 加固 `SecureTempStorage.commitStagedFile` 原地覆盖安全性：通过 POSIX `statfs` 计算扣除被覆盖文件后的净需空间（`max(0, stagedSize - existingSize)`），执行 `open(O_WRONLY)` 权限预检、回滚备份（`original.bak`）清零销毁，以及 `ftruncate` + 流式写入 + `fsync` 原地覆盖，在保留 `NSSavePanel` 沙盒授权与目标文件 inode 的同时杜绝权限或 I/O 错误导致的数据丢失。
 - 在 `MoaiyApp` 启动入口中初始化 `TransientFileRegistry` 退出清理挂钩。
+
+### Security (zh-Hans)
+
+- 对临时口令令牌文件与操作暂存目录强制执行 `0600`/`0700` 权限，并在删除前执行清零覆写（`zeroScrubDirectoryContents` + `fsync`）。
+- 将 `KeychainService` 的旧版钥匙串回退严格限制在 `#if DEBUG` 编译期（`allowLegacyKeychainFallback`），确保 Release 构建在缺失 Entitlement 时严格失败关闭。
 
 ## [0.9.0] - 2026-07-06
 
