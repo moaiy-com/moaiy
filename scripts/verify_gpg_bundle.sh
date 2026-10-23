@@ -82,7 +82,7 @@ check_bundle_exists() {
 check_executables() {
     section "Checking Executables"
     
-    local executables=("gpg" "gpg-agent" "gpgconf")
+    local executables=("gpg" "gpg-agent" "gpgconf" "gpg-connect-agent")
     
     for exe in "${executables[@]}"; do
         if [ -f "$BUNDLE_PATH/bin/$exe" ]; then
@@ -92,7 +92,16 @@ check_executables() {
                 fail "Executable found but no execute permission: $exe"
             fi
         else
-            warn "Executable not found: $exe (optional)"
+            fail "Required executable not found: $exe"
+        fi
+    done
+
+    local forbidden_executables=("gpg-wks-server" "gpgtar")
+    for forbidden in "${forbidden_executables[@]}"; do
+        if [ -f "$BUNDLE_PATH/bin/$forbidden" ]; then
+            fail "Redundant executable should not be bundled: $forbidden"
+        else
+            pass "Redundant executable absent: $forbidden"
         fi
     done
 }
@@ -107,11 +116,8 @@ check_libraries() {
         "libassuan.9.dylib"
         "libksba.8.dylib"
         "libnpth.0.dylib"
-    )
-    
-    local optional_libs=(
-        "libncurses.6.dylib"
         "libreadline.8.dylib"
+        "libintl.8.dylib"
     )
     
     # Check required libraries
@@ -120,15 +126,6 @@ check_libraries() {
             pass "Required library found: $lib"
         else
             fail "Required library missing: $lib"
-        fi
-    done
-    
-    # Check optional libraries
-    for lib in "${optional_libs[@]}"; do
-        if [ -f "$BUNDLE_PATH/lib/$lib" ]; then
-            pass "Optional library found: $lib"
-        else
-            warn "Optional library missing: $lib (may not be needed)"
         fi
     done
 }
@@ -180,10 +177,28 @@ check_signatures() {
                     fail "  Signature invalid: $exe_name"
                 fi
             else
-                warn "Not signed: $exe_name"
+                fail "Not signed: $exe_name"
             fi
         fi
     done
+
+    # Check MAS child sandbox inheritance entitlements template & signing script
+    local helper_ent="$PROJECT_ROOT/Moaiy/Resources/GPGHelper.entitlements"
+    if [ -f "$helper_ent" ] && plutil -lint "$helper_ent" >/dev/null 2>&1; then
+        if grep -q "com.apple.security.app-sandbox" "$helper_ent" && grep -q "com.apple.security.inherit" "$helper_ent"; then
+            pass "MAS child sandbox entitlements valid: GPGHelper.entitlements"
+        else
+            fail "GPGHelper.entitlements missing app-sandbox or inherit keys"
+        fi
+    else
+        fail "GPGHelper.entitlements missing or invalid plist"
+    fi
+
+    if [ -x "$PROJECT_ROOT/scripts/sign_embedded_gpg_bundle.sh" ]; then
+        pass "Embedded bundle sandbox signing script ready: scripts/sign_embedded_gpg_bundle.sh"
+    else
+        fail "Missing or non-executable: scripts/sign_embedded_gpg_bundle.sh"
+    fi
     
     # Check libraries
     local libs=("$BUNDLE_PATH/lib"/*.dylib)
@@ -203,7 +218,7 @@ check_signatures() {
                     fail "  Signature invalid: $lib_name"
                 fi
             else
-                warn "Not signed: $lib_name"
+                fail "Not signed: $lib_name"
             fi
         fi
     done

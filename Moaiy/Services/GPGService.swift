@@ -357,6 +357,7 @@ final class GPGService: SubkeyManaging {
                 logger.info("Found GPG at: \(self.gpgPath)")
                 try setupGPGHome()
                 logger.info("GPG home directory: \(self.gpgHome?.path ?? "nil")")
+                registerAgentTerminationHook()
                 try await verifyGPG()
                 logger.info("GPG version: \(self.gpgVersion ?? "unknown")")
                 self.capabilities = await detectCapabilities()
@@ -431,6 +432,38 @@ final class GPGService: SubkeyManaging {
             gpgConnectAgentURL = connectAgent
         } else {
             gpgConnectAgentURL = nil
+        }
+    }
+
+    private func registerAgentTerminationHook() {
+        guard let binDirectory = gpgURL?.deletingLastPathComponent() else { return }
+        let gpgconfURL = binDirectory.appendingPathComponent("gpgconf")
+        guard FileManager.default.isExecutableFile(atPath: gpgconfURL.path) else { return }
+        let activeHomePath = gpgHome?.path
+
+        TransientFileRegistry.shared.registerExitHook {
+            let process = Process()
+            process.executableURL = gpgconfURL
+            var args: [String] = []
+            if let activeHomePath, !activeHomePath.isEmpty {
+                args.append(contentsOf: ["--homedir", activeHomePath])
+            }
+            args.append(contentsOf: ["--kill", "gpg-agent"])
+            process.arguments = args
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            do {
+                try process.run()
+                let deadline = Date().addingTimeInterval(1.5)
+                while process.isRunning && Date() < deadline {
+                    usleep(20_000)
+                }
+                if process.isRunning {
+                    process.terminate()
+                }
+            } catch {
+                // Best-effort cleanup on app termination
+            }
         }
     }
     

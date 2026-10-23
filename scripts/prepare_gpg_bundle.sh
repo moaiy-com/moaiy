@@ -106,8 +106,6 @@ copy_gpg_executables() {
         "gpg-agent"
         "gpgconf"
         "gpg-connect-agent"
-        "gpgtar"
-        "gpg-wks-server"
     )
     
     local gpg_bin="$HOMEBREW_PREFIX/bin"
@@ -280,7 +278,11 @@ sign_binaries() {
     
     local sign_count=0
     
-    # Sign libraries first
+    local sign_identity="${GPG_CODESIGN_IDENTITY:--}"
+    local helper_entitlements="$PROJECT_ROOT/Moaiy/Resources/GPGHelper.entitlements"
+    local sign_for_sandbox="${SIGN_FOR_APP_SANDBOX:-0}"
+
+    # Sign libraries first (inside-out signing, no entitlements on dylibs)
     for lib in "$TEMP_BUNDLE/lib"/*.dylib; do
         if [ -f "$lib" ]; then
             local lib_name=$(basename "$lib")
@@ -288,8 +290,8 @@ sign_binaries() {
             # Remove existing signature
             codesign --remove-signature "$lib" 2>/dev/null || true
             
-            # Sign with ad-hoc signature
-            if codesign -s - "$lib" 2>/dev/null; then
+            # Sign library
+            if codesign --force -s "$sign_identity" "$lib" 2>/dev/null; then
                 success "Signed: $lib_name"
                 ((sign_count+=1))
             else
@@ -298,7 +300,8 @@ sign_binaries() {
         fi
     done
     
-    # Sign executables
+    # Sign executables (use GPGHelper.entitlements when SIGN_FOR_APP_SANDBOX=1,
+    # or standard ad-hoc signing for source-tree CLI/test execution)
     for exe in "$TEMP_BUNDLE/bin"/*; do
         if [ -f "$exe" ]; then
             local exe_name=$(basename "$exe")
@@ -306,12 +309,23 @@ sign_binaries() {
             # Remove existing signature
             codesign --remove-signature "$exe" 2>/dev/null || true
             
-            # Sign with ad-hoc signature
-            if codesign -s - "$exe" 2>/dev/null; then
-                success "Signed: $exe_name"
-                ((sign_count+=1))
+            if [ "$sign_for_sandbox" = "1" ]; then
+                if [ ! -f "$helper_entitlements" ]; then
+                    error "Helper entitlements missing at $helper_entitlements"
+                fi
+                if codesign --force --entitlements "$helper_entitlements" -s "$sign_identity" "$exe" 2>/dev/null; then
+                    success "Signed (with sandbox inheritance): $exe_name"
+                    ((sign_count+=1))
+                else
+                    warning "Failed to sign: $exe_name"
+                fi
             else
-                warning "Failed to sign: $exe_name"
+                if codesign --force -s "$sign_identity" "$exe" 2>/dev/null; then
+                    success "Signed: $exe_name"
+                    ((sign_count+=1))
+                else
+                    warning "Failed to sign: $exe_name"
+                fi
             fi
         fi
     done

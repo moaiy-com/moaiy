@@ -194,16 +194,25 @@ run_gate() {
 
 run_gate "arm64" "full"
 
-if [[ "$GATE" == "balanced" ]]; then
-  run_gate "x86_64" "smoke"
-elif [[ "$GATE" == "strict" ]]; then
-  run_gate "x86_64" "full"
+BUNDLED_GPG_ARCHS="$(lipo -archs "$ROOT_DIR/Moaiy/Resources/gpg.bundle/bin/gpg" 2>/dev/null || echo "arm64")"
+SUPPORTS_X86_64=false
+if [[ "$BUNDLED_GPG_ARCHS" == *"x86_64"* ]]; then
+  SUPPORTS_X86_64=true
+fi
+
+if [[ "$SUPPORTS_X86_64" == true ]]; then
+  if [[ "$GATE" == "balanced" ]]; then
+    run_gate "x86_64" "smoke"
+  elif [[ "$GATE" == "strict" ]]; then
+    run_gate "x86_64" "full"
+  else
+    echo "Skipping x86_64 validation in fast mode."
+  fi
 else
-  echo "Skipping x86_64 validation in fast mode."
+  echo "Bundled gpg.bundle is arm64-only ($BUNDLED_GPG_ARCHS); targeting arm64 release artifacts."
 fi
 
 ARM64_DMG_NAME="Moaiy-${VERSION}-macos-apple-silicon.dmg"
-X64_DMG_NAME="Moaiy-${VERSION}-macos-intel-chip.dmg"
 
 "$ROOT_DIR/scripts/package_dmg.sh" \
   --scheme Moaiy \
@@ -213,34 +222,34 @@ X64_DMG_NAME="Moaiy-${VERSION}-macos-intel-chip.dmg"
   --artifact-name "$ARM64_DMG_NAME" \
   --dist-dir "$ASSET_DIR"
 
-"$ROOT_DIR/scripts/package_dmg.sh" \
-  --scheme Moaiy \
-  --configuration "$BUILD_CONFIGURATION" \
-  --arch x86_64 \
-  --version "$VERSION" \
-  --artifact-name "$X64_DMG_NAME" \
-  --dist-dir "$ASSET_DIR"
-
 ARM64_DMG_PATH="$ASSET_DIR/$ARM64_DMG_NAME"
-X64_DMG_PATH="$ASSET_DIR/$X64_DMG_NAME"
 SHA256_PATH="$RELEASE_DIR/SHA256SUMS.txt"
 MANIFEST_PATH="$RELEASE_DIR/release-manifest.json"
 NOTES_PATH="$RELEASE_DIR/release-notes.md"
 
-if [[ ! -f "$ARM64_DMG_PATH" || ! -f "$X64_DMG_PATH" ]]; then
-  echo "ERROR: expected DMG artifacts are missing"
+if [[ ! -f "$ARM64_DMG_PATH" ]]; then
+  echo "ERROR: expected arm64 DMG artifact is missing"
   exit 1
 fi
 
-(cd "$ASSET_DIR" && shasum -a 256 "$ARM64_DMG_NAME" "$X64_DMG_NAME" > "$SHA256_PATH")
-
 arm64_sha="$(shasum -a 256 "$ARM64_DMG_PATH" | awk '{print $1}')"
-x64_sha="$(shasum -a 256 "$X64_DMG_PATH" | awk '{print $1}')"
 arm64_size="$(stat -f%z "$ARM64_DMG_PATH")"
-x64_size="$(stat -f%z "$X64_DMG_PATH")"
 built_at_utc="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-cat > "$MANIFEST_PATH" <<EOF
+if [[ "$SUPPORTS_X86_64" == true ]]; then
+  X64_DMG_NAME="Moaiy-${VERSION}-macos-intel-chip.dmg"
+  "$ROOT_DIR/scripts/package_dmg.sh" \
+    --scheme Moaiy \
+    --configuration "$BUILD_CONFIGURATION" \
+    --arch x86_64 \
+    --version "$VERSION" \
+    --artifact-name "$X64_DMG_NAME" \
+    --dist-dir "$ASSET_DIR"
+  X64_DMG_PATH="$ASSET_DIR/$X64_DMG_NAME"
+  (cd "$ASSET_DIR" && shasum -a 256 "$ARM64_DMG_NAME" "$X64_DMG_NAME" > "$SHA256_PATH")
+  x64_sha="$(shasum -a 256 "$X64_DMG_PATH" | awk '{print $1}')"
+  x64_size="$(stat -f%z "$X64_DMG_PATH")"
+  cat > "$MANIFEST_PATH" <<EOF
 {
   "version": "$VERSION",
   "tag": "$TAG",
@@ -274,6 +283,35 @@ cat > "$MANIFEST_PATH" <<EOF
   "built_at_utc": "$built_at_utc"
 }
 EOF
+else
+  (cd "$ASSET_DIR" && shasum -a 256 "$ARM64_DMG_NAME" > "$SHA256_PATH")
+  cat > "$MANIFEST_PATH" <<EOF
+{
+  "version": "$VERSION",
+  "tag": "$TAG",
+  "target_commit": "$TARGET_COMMIT",
+  "artifacts": [
+    {
+      "name": "$ARM64_DMG_NAME",
+      "path": "assets/$ARM64_DMG_NAME",
+      "arch": "arm64",
+      "size_bytes": $arm64_size,
+      "sha256": "$arm64_sha"
+    }
+  ],
+  "sha256": {
+    "$ARM64_DMG_NAME": "$arm64_sha"
+  },
+  "gate_mode": "$GATE",
+  "signing_mode": "$EFFECTIVE_SIGNING_MODE",
+  "pqc_compatibility_caveat": {
+    "enabled": true,
+    "algorithm": "Kyber-768 hybrid OpenPGP"
+  },
+  "built_at_utc": "$built_at_utc"
+}
+EOF
+fi
 
 "$ROOT_DIR/scripts/release/render_release_notes.sh" \
   --version "$VERSION" \

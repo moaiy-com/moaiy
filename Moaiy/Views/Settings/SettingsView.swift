@@ -244,6 +244,7 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .moaiyModalCard()
 
+                if proRuntime.isProModuleAvailable {
                 VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
                     Text("section_pro")
                         .font(.headline)
@@ -422,6 +423,7 @@ struct SettingsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .moaiyModalCard()
+                }
 
                 VStack(alignment: .leading, spacing: MoaiyUI.Spacing.md) {
                     Text("section_about")

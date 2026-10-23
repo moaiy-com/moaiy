@@ -893,15 +893,18 @@ struct KeyActionMenu: View {
     }
 
     private var hardwareKeyAdvancedDescriptor: ProActionDescriptor? {
-        proRuntime.menuDescriptors.first(where: { $0.feature == .hardwareKeyAdvanced })
+        guard proRuntime.isProModuleAvailable else { return nil }
+        return proRuntime.menuDescriptors.first(where: { $0.feature == .hardwareKeyAdvanced })
     }
 
     private var batchGovernanceDescriptor: ProActionDescriptor? {
-        proRuntime.menuDescriptors.first(where: { $0.feature == .batchGovernance })
+        guard proRuntime.isProModuleAvailable else { return nil }
+        return proRuntime.menuDescriptors.first(where: { $0.feature == .batchGovernance })
     }
 
     private var auditExportDescriptor: ProActionDescriptor? {
-        proRuntime.menuDescriptors.first(where: { $0.feature == .auditExport })
+        guard proRuntime.isProModuleAvailable else { return nil }
+        return proRuntime.menuDescriptors.first(where: { $0.feature == .auditExport })
     }
 
     private enum PassphraseAction {

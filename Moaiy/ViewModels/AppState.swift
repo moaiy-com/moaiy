@@ -487,6 +487,10 @@ final class ProRuntime {
         availability(for: feature).isEnabled
     }
 
+    var isProModuleAvailable: Bool {
+        !(module is NoopProModule) || ProFeature.allCases.contains(where: { isEnabled($0) })
+    }
+
     var menuDescriptors: [ProActionDescriptor] {
         module.menuDescriptors
     }

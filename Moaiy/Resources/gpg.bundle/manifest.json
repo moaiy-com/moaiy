@@ -1,23 +1,21 @@
 {
   "version": "1.0",
   "gpg_version": "2.5.21",
-  "created": "2026-07-06T06:50:26Z",
+  "created": "2026-10-23T02:41:01Z",
   "platform": "arm64",
   "architecture": "arm64",
   "macos_min_version": "12.0",
   "checksums": {
-    "gpg": "1d10b209569de7251884e0cb40565320577ec01fc48f5300c142956a6260d8e7",
-    "gpg-agent": "2ca981feb2ea1d818e94247e220cc9d485046643268196072b9b44c291bc75e4",
-    "gpg-connect-agent": "4f70a2d06f237e217848c18f455bcd12e959f5ba582ccb5e1f76539c49f02286",
-    "gpg-wks-server": "24efd08cdfa16e1d23d07e6b90d81c6a74394009500521a28ee1825256632507",
-    "gpgconf": "aa0cbc51258b3fd8caab080e6a9d8f73ce467fa1c9de1ca556de3bdd988412cb",
-    "gpgtar": "b7dd23c8351af3d779cac47dc85353d8b11e70b8b8d19626ba7af7a9be17171e",
-    "libassuan.9.dylib": "ec85d6cafb3de4597530f114eec86f6539989c500c7124729a4a2a96c90e211f",
-    "libgcrypt.20.dylib": "d83d69706450bb3b457071adcc9cfaf5cef56edac051c39d1a1c53185c342373",
-    "libgpg-error.0.dylib": "cba403b99c59ab678ea12eddc3b00a35f71e1670b58dbededb94e9b701a03514",
-    "libintl.8.dylib": "e0703e8dd4b317ee4cc6bdb8b66ff594b03f7d33029da0236782f3655006c2c3",
-    "libksba.8.dylib": "c5265f99c6004702996db0da88cfc2cf30279f985384f463bce1952fcc138346",
-    "libnpth.0.dylib": "4e15e619c371499e881022308f0eea57c5ec0ea0697947e01e1eb5ff213186a5",
-    "libreadline.8.dylib": "2eed4c1ff74acb1c662448b334dca1dc6bc86bb6787b06f658892fe60984c606"
+    "gpg": "a21d108105456d261bd5d94ad34445dca82fb9060c165cca211174c4ac1e6d6a",
+    "gpg-agent": "e3e912e501c166fec75c8440f7207d46905964ebe82f41389e2fdd3c7eac6391",
+    "gpg-connect-agent": "befe3d8a1fec9d97b12daf11229c794009e20c98f0235c844a0ca8ba4d85a147",
+    "gpgconf": "7e894de29c95afa3cb38440601f48c72b113be6ef6a52a4e0f12dc44b5178f66",
+    "libassuan.9.dylib": "5141722639ae3041acbeb002398fbbd3c7e5a735c46876123fbf8bb3e0542b0d",
+    "libgcrypt.20.dylib": "8f417b308bbb0ab8c0d6d6d9b117cfdb4411b2700cb46ece710adb8175feeeb3",
+    "libgpg-error.0.dylib": "d8bcb0bbfb48910cd94e5d39846b0f373114c7bd68de26d04a379c09fbf0a862",
+    "libintl.8.dylib": "91f664c47117a0329f199090e47d17eb81630b35be8cb17fbffe7d615ff1d593",
+    "libksba.8.dylib": "2b5149b8beb39821ff75694d5d59dd16d27ba51336795fcfdc318d4a70df15eb",
+    "libnpth.0.dylib": "f7bc5c1095423cd3047b2c9333072016c10314c9a0922d27861934500b9d84ff",
+    "libreadline.8.dylib": "4a8044a726d96e7268d475feec577a10949d37dbb569ef59fe4186ed9d6b626a"
   }
 }
