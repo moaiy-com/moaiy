@@ -44,6 +44,21 @@ if [[ -z "$SIGN_IDENTITY" ]]; then
   SIGN_IDENTITY="-"
 fi
 
+# When Xcode is told not to sign (e.g. CI: CODE_SIGNING_ALLOWED=NO), the host
+# Moaiy.app is not sandboxed. Helpers carrying com.apple.security.inherit would
+# then be aborted by libSystem_secinit at launch (SIGTRAP, exit code 5), so sign
+# them ad-hoc WITHOUT entitlements in that case.
+if [[ "${CODE_SIGNING_ALLOWED:-YES}" == "NO" ]]; then
+  echo "CODE_SIGNING_ALLOWED=NO: host app is unsandboxed; ad-hoc signing embedded gpg.bundle without inherit entitlements."
+  for f in "$EMBEDDED_BUNDLE_PATH/lib"/*.dylib "$EMBEDDED_BUNDLE_PATH/bin"/*; do
+    if [[ -f "$f" ]]; then
+      codesign --remove-signature "$f" 2>/dev/null || true
+      codesign --force --timestamp=none -s - "$f"
+    fi
+  done
+  exit 0
+fi
+
 echo "Signing embedded gpg.bundle at $EMBEDDED_BUNDLE_PATH (identity: $SIGN_IDENTITY)..."
 
 # 1. Sign dynamic libraries first (inside-out signing, no entitlements on dylibs)
