@@ -17,6 +17,7 @@ public final class TransientFileRegistry: @unchecked Sendable {
     private let logger = Logger(subsystem: "com.moaiy.app", category: "TransientFileRegistry")
     private let lock = NSLock()
     private var registeredURLs = Set<URL>()
+    private var exitHooks: [@Sendable () -> Void] = []
     private var isHooked = false
 
     private init() {}
@@ -26,6 +27,13 @@ public final class TransientFileRegistry: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         registeredURLs.insert(url)
+    }
+
+    /// Registers a synchronous cleanup callback to run when the application terminates (e.g. stopping gpg-agent).
+    public func registerExitHook(_ hook: @escaping @Sendable () -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        exitHooks.append(hook)
     }
 
     /// Unregisters an item once it has been successfully committed or cleaned up normally.
@@ -40,6 +48,7 @@ public final class TransientFileRegistry: @unchecked Sendable {
     public func cleanupAll() -> Int {
         lock.lock()
         let urlsToClean = Array(registeredURLs)
+        let hooksToRun = exitHooks
         registeredURLs.removeAll()
         lock.unlock()
 
@@ -56,6 +65,10 @@ public final class TransientFileRegistry: @unchecked Sendable {
                     logger.error("Failed to remove transient item \(url.path): \(error.localizedDescription)")
                 }
             }
+        }
+
+        for hook in hooksToRun {
+            hook()
         }
 
         return cleanedCount

@@ -102,9 +102,23 @@ if [[ ! -d "$PROJECT_PATH" ]]; then
   exit 1
 fi
 
-if [[ -n "$ARCH" && "$ARCH" != "arm64" && "$ARCH" != "x86_64" ]]; then
+if [[ -z "$ARCH" ]]; then
+  ARCH="arm64"
+fi
+
+if [[ "$ARCH" != "arm64" && "$ARCH" != "x86_64" ]]; then
   echo "ERROR: --arch must be arm64 or x86_64"
   exit 1
+fi
+
+BUNDLED_GPG_BIN="$ROOT_DIR/Moaiy/Resources/gpg.bundle/bin/gpg"
+if [[ -f "$BUNDLED_GPG_BIN" ]]; then
+  BUNDLED_GPG_ARCHS="$(lipo -archs "$BUNDLED_GPG_BIN" 2>/dev/null || echo "")"
+  if [[ -n "$BUNDLED_GPG_ARCHS" && "$BUNDLED_GPG_ARCHS" != *"$ARCH"* ]]; then
+    echo "ERROR: bundled gpg.bundle ($BUNDLED_GPG_ARCHS) does not contain requested architecture '$ARCH'."
+    echo "Moaiy v1.0 currently targets Apple Silicon (arm64)."
+    exit 1
+  fi
 fi
 
 if [[ -n "$EXPECTED_VERSION" && ! "$EXPECTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -151,6 +165,10 @@ fi
 if [[ -z "${APP_PATH:-}" || ! -d "$APP_PATH" ]]; then
   echo "ERROR: .app not found in $DERIVED_DATA_PATH/Build/Products/$CONFIGURATION"
   exit 1
+fi
+
+if [[ -d "$APP_PATH/Contents/Resources/gpg.bundle" ]]; then
+  "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh" "$APP_PATH/Contents/Resources/gpg.bundle"
 fi
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist" 2>/dev/null || echo "0.0.0")"
