@@ -75,7 +75,6 @@ public struct KeychainSecItemOperations: Sendable {
 public final class KeychainService: KeychainManaging, @unchecked Sendable {
     public static let shared = KeychainService()
 
-#if DEBUG
     nonisolated(unsafe) public static var allowLegacyKeychainFallback = true
     private let fallbackLock = NSLock()
     private var didFallbackToLegacyKeychain = false
@@ -91,14 +90,9 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
         didFallbackToLegacyKeychain = true
         fallbackLock.unlock()
     }
-#endif
 
     private static var legacyFallbackAllowed: Bool {
-#if DEBUG
-        return allowLegacyKeychainFallback
-#else
-        return false
-#endif
+        allowLegacyKeychainFallback
     }
 
     private let logger = Logger(subsystem: "com.moaiy.app", category: "KeychainService")
@@ -199,15 +193,13 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
         var query = makeAddQuery(useDataProtection: true)
         var status = secItemOps.add(query as CFDictionary, nil)
 
-#if DEBUG
         if Self.legacyFallbackAllowed && status == errSecMissingEntitlement && !requireBiometrics {
-            logger.warning("Data Protection Keychain missing entitlement (-34018) in DEBUG build; falling back to legacy Keychain for key: \(normalizedFingerprint)")
+            logger.warning("Data Protection Keychain missing entitlement (-34018); falling back to legacy Keychain for key: \(normalizedFingerprint)")
             useDataProtection = false
             markLegacyFallbackActive()
             query = makeAddQuery(useDataProtection: false)
             status = secItemOps.add(query as CFDictionary, nil)
         }
-#endif
 
         if status == errSecDuplicateItem {
             // Attempt update; if update fails (often happens when changing SecAccessControl), fallback to delete + add
@@ -282,12 +274,10 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
 
                 var item: CFTypeRef?
                 var status = self.secItemOps.copyMatching(makeCopyQuery(useDataProtection: true) as CFDictionary, &item)
-#if DEBUG
                 if Self.legacyFallbackAllowed && (status == errSecMissingEntitlement || (self.hasActiveLegacyFallback && status == errSecItemNotFound)) {
-                    self.logger.warning("Data Protection Keychain unavailable (\(status)) on read in DEBUG build; querying legacy Keychain.")
+                    self.logger.warning("Data Protection Keychain unavailable (\(status)) on read; querying legacy Keychain.")
                     status = self.secItemOps.copyMatching(makeCopyQuery(useDataProtection: false) as CFDictionary, &item)
                 }
-#endif
 
                 if status == errSecItemNotFound {
                     continuation.resume(returning: nil)
@@ -372,7 +362,6 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
         if status == errSecSuccess || status == errSecInteractionNotAllowed {
             return true
         }
-#if DEBUG
         if Self.legacyFallbackAllowed && (status == errSecMissingEntitlement || (hasActiveLegacyFallback && status == errSecItemNotFound)) {
             let legacyQuery: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
@@ -382,7 +371,6 @@ public final class KeychainService: KeychainManaging, @unchecked Sendable {
             let legacyStatus = secItemOps.copyMatching(legacyQuery as CFDictionary, nil)
             return legacyStatus == errSecSuccess || legacyStatus == errSecInteractionNotAllowed
         }
-#endif
         return false
     }
 }

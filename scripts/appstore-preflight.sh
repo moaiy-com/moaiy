@@ -25,8 +25,8 @@ for plist_file in "$ENTITLEMENTS_PATH" "$HELPER_ENTITLEMENTS_PATH" "$PRIVACY_MAN
   plutil -lint "$plist_file" >/dev/null
 done
 
-if ! grep -q "keychain-access-groups" "$ENTITLEMENTS_PATH"; then
-  echo "ERROR: Entitlements.entitlements is missing keychain-access-groups (required for Data Protection Keychain)."
+if ! grep -q "com.apple.security.app-sandbox" "$ENTITLEMENTS_PATH"; then
+  echo "ERROR: Entitlements.entitlements is missing com.apple.security.app-sandbox."
   exit 1
 fi
 
