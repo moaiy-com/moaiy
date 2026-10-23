@@ -61,7 +61,7 @@ swiftc -j 8 -O -target arm64-apple-macosx14.0 \
   MoaiyCLI/main.swift \
   -o "${BUILD_TMP_DIR}/moaiy-cli"
 
-"${BUILD_TMP_DIR}/moaiy-cli" --version | grep -q "moaiy-cli version 1.0.0"
+"${BUILD_TMP_DIR}/moaiy-cli" --version | grep -q "moaiy-cli version 1.0.1"
 "${BUILD_TMP_DIR}/moaiy-cli" --help >/dev/null
 
 # 4. 编译并运行 64MB 流式管道 + GPG 集成验证套件 (含 -strict-concurrency=complete 检查)

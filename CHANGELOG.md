@@ -7,6 +7,38 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-22
+
+### Added
+
+- Added `GPGHelper.entitlements` (`com.apple.security.app-sandbox` + `com.apple.security.inherit`) and `scripts/sign_embedded_gpg_bundle.sh` build phase to sign embedded `gpg.bundle` helper executables for App Sandbox child process inheritance.
+- Added Required Reason API declarations (`NSPrivacyAccessedAPICategoryDiskSpace` `E174.1` and `NSPrivacyAccessedAPICategoryFileTimestamp` `C617.1`) to `Moaiy/PrivacyInfo.xcprivacy`.
+- Added `ITSAppUsesNonExemptEncryption` export compliance declaration to `Moaiy/Info.plist`.
+- Added `gpgconf --kill gpg-agent` application termination cleanup hook via `TransientFileRegistry` and `GPGService`.
+- Documented bundled GnuPG 2.5.21 runtime components, open-source licenses, and CLI process isolation boundary in `THIRD_PARTY_NOTICES.md`.
+
+### Changed
+
+- Bumped app marketing version to `1.0.1` and `CURRENT_PROJECT_VERSION` to `11`.
+- Gated locked Pro placeholder UI in `SettingsView` and `KeyActionMenu` when `MoaiyProKit` is not linked while preserving `NoopProModule` contract descriptors.
+- Locked target architecture to `arm64` (`Apple Silicon`) in `Moaiy.xcodeproj`, `scripts/package_dmg.sh`, and `scripts/release/run_release.sh`, and removed unused `gpg-wks-server` and `gpgtar` binaries from `gpg.bundle`.
+- Updated `KeychainService` to allow safe fallback to macOS login Keychain on `errSecMissingEntitlement (-34018)` during unsigned/ad-hoc local builds when biometrics are not required.
+
+### Added (zh-Hans)
+
+- 新增 `GPGHelper.entitlements`（`com.apple.security.app-sandbox` + `com.apple.security.inherit`）及 `scripts/sign_embedded_gpg_bundle.sh` 构建阶段，为 `.app` 内嵌 `gpg.bundle` 可执行文件注入子进程沙盒继承签名。
+- 在 `Moaiy/PrivacyInfo.xcprivacy` 中补齐 `NSPrivacyAccessedAPICategoryDiskSpace`（`E174.1`）与 `NSPrivacyAccessedAPICategoryFileTimestamp`（`C617.1`）必填原因 API 声明。
+- 在 `Moaiy/Info.plist` 中新增 `ITSAppUsesNonExemptEncryption` 加密出口合规声明。
+- 通过 `TransientFileRegistry` 与 `GPGService` 新增应用退出自动终止 `gpg-agent` 驻留守护进程的清理挂钩。
+- 在 `THIRD_PARTY_NOTICES.md` 中完整声明内嵌 GnuPG 2.5.21 运行时各组件许可证及 CLI 进程边界。
+
+### Changed (zh-Hans)
+
+- 将应用营销版本号升级至 `1.0.1`，工程构建版本号递增至 `11`。
+- 当未链接 `MoaiyProKit` 模块时自动隐藏 `SettingsView` 与 `KeyActionMenu` 中的锁定 Pro 占位入口，同时完整保留 `NoopProModule` 契约描述符。
+- 在 `Moaiy.xcodeproj`、`scripts/package_dmg.sh` 与 `scripts/release/run_release.sh` 中统一锁定 `arm64`（Apple Silicon）构建架构，并从 `gpg.bundle` 中移除未使用的 `gpg-wks-server` 与 `gpgtar`。
+- 优化 `KeychainService` 在本地无证书 Ad-hoc 构建下（返回 `-34018` 且未开启生物识别时）的登录钥匙串回退兼容性。
+
 ## [1.0.0] - 2026-10-17
 
 ### Added
