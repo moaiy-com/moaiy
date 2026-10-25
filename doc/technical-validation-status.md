@@ -11,7 +11,7 @@
 | Streaming crypto pipeline (`StreamingCryptoPipeline`) | Complete | 64MB stream verified (<32MB Peak RSS delta, 8MB backpressure cap) |
 | Overwrite-safe staging (`commitStagedFile`) | Complete | `statfs` net-space preflight, `O_WRONLY` pre-check & zero-scrubbed rollback backup |
 | Keychain & Touch ID (`KeychainService`) | Complete | Data Protection Keychain + `#if DEBUG` isolated legacy fallback verified |
-| Companion CLI (`moaiy-cli`) | Complete | Standalone `MoaiyCLI` target (`status`, `list-keys`, `encrypt`, `decrypt`) validated |
+| Companion CLI (`moaiy`) | Complete | Standalone `MoaiyCLI` target (`status`, `list-keys`, `encrypt`, `decrypt`) validated |
 | Full `MoaiyTests` suite (`xcodebuild test`) | Complete | **451/451 tests in 38 suites passed** (`TEST SUCCEEDED`) with isolated `GNUPGHOME` |
 | App Store-specific submission loop | Pending | Compliance track prepared; active distribution track is GitHub Releases |
 

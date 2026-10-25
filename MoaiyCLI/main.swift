@@ -31,7 +31,7 @@ func printUsage() {
     Moaiy CLI - Native File Encryption Companion (v\(versionString))
 
     USAGE:
-        moaiy-cli <subcommand> [options]
+        moaiy <subcommand> [options]
 
     SUBCOMMANDS:
         status       Check cryptographic backend status and PQC/Kyber capability
@@ -56,14 +56,14 @@ func printUsage() {
           at the destination will be overwritten (--yes).
         - Passphrase caching: Decrypting passphrase-protected keys in batch mode requires
           the passphrase to be active in the gpg-agent daemon cache.
-        - Standalone tool: moaiy-cli is designed for scripting and automation. For hardware
+        - Standalone tool: moaiy is designed for scripting and automation. For hardware
           Touch ID prompts and interactive key management, use the Moaiy desktop app.
 
     EXAMPLES:
-        moaiy-cli status --json
-        moaiy-cli list-keys --secret
-        moaiy-cli encrypt document.pdf -r 4D8B93C4 -o document.pdf.moy
-        moaiy-cli decrypt document.pdf.moy -o document.pdf
+        moaiy status --json
+        moaiy list-keys --secret
+        moaiy encrypt document.pdf -r 4D8B93C4 -o document.pdf.moy
+        moaiy decrypt document.pdf.moy -o document.pdf
     """)
 }
 
@@ -393,7 +393,7 @@ case "encrypt":
     }
     let isArmor = arguments.contains("--armor")
     guard arguments.count >= 3 else {
-        fputs("Usage: moaiy-cli encrypt <file> -r <recipient> [-o <output>]\n", stderr)
+        fputs("Usage: moaiy encrypt <file> -r <recipient> [-o <output>]\n", stderr)
         exit(1)
     }
     let inputFile = arguments[2]
@@ -404,16 +404,16 @@ case "decrypt":
         output = arguments[idx + 1]
     }
     guard arguments.count >= 3 else {
-        fputs("Usage: moaiy-cli decrypt <file> [-o <output>]\n", stderr)
+        fputs("Usage: moaiy decrypt <file> [-o <output>]\n", stderr)
         exit(1)
     }
     let inputFile = arguments[2]
     decryptFile(gpgHomeURL: gpgHomeURL, inputPath: inputFile, outputPath: output)
 case "version", "-v", "--version":
-    print("moaiy-cli version \(versionString)")
+    print("moaiy version \(versionString)")
 case "help", "-h", "--help":
     printUsage()
 default:
-    fputs("Unknown command: \(command). Use 'moaiy-cli --help' for usage.\n", stderr)
+    fputs("Unknown command: \(command). Use 'moaiy --help' for usage.\n", stderr)
     exit(1)
 }

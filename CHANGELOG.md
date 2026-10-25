@@ -7,6 +7,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+- Renamed the companion command-line tool from `moaiy-cli` to `moaiy` (Xcode product `MoaiyCLI` target now builds `moaiy`; help, usage and version output updated). Moaiy never installed `moaiy-cli` system-wide, so no migration is performed; users who copied or symlinked it manually can keep a compatibility alias with `ln -sf "$(command -v moaiy)" /usr/local/bin/moaiy-cli`.
+- 命令行伴侣工具由 `moaiy-cli` 更名为 `moaiy`。应用从未自动安装 `moaiy-cli`，因此不做迁移；手动安装过的用户可自行创建 `moaiy-cli` 兼容别名。
+
 ## [1.0.1] - 2026-10-22
 
 ### Added
