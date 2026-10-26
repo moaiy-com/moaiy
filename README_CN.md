@@ -9,7 +9,7 @@ Moaiy 是一个开源的 macOS 原生应用，专注于加密与恢复工作流�
 **[English Version](./README.md)**
 
 当前稳定版本：`v1.0.1`
-当前发布重点：大文件流式加解密管道、系统钥匙串与 Touch ID 口令集成、`moaiy-cli` 命令行伴侣工具，以及 Kyber-768 混合抗量子加密
+当前发布重点：大文件流式加解密管道、系统钥匙串与 Touch ID 口令集成、`moaiy` 命令行伴侣工具，以及 Kyber-768 混合抗量子加密
 
 ## 应用截图
 
@@ -17,13 +17,13 @@ Moaiy 是一个开源的 macOS 原生应用，专注于加密与恢复工作流�
 
 ## v1.0.0 主要升级
 
-Moaiy v1.0.0 正式发布首个 GA 稳定版，引入恒定低内存开销的流式加解密管道、macOS 系统钥匙串与 Touch ID 生物识别集成、独立的 `moaiy-cli` 命令行伴侣工具，以及针对 macOS App Sandbox 深度加固的安全原地覆盖机制。
+Moaiy v1.0.0 正式发布首个 GA 稳定版，引入恒定低内存开销的流式加解密管道、macOS 系统钥匙串与 Touch ID 生物识别集成、独立的 `moaiy` 命令行伴侣工具，以及针对 macOS App Sandbox 深度加固的安全原地覆盖机制。
 
 - **大文件流式加解密管道（`StreamingCryptoPipeline`）**：采用 256KB 分块流式 I/O、独立 `stdinQueue`/`stdoutQueue` 双队列 8MB 背压限流、分块 `autoreleasepool` 及时释放（64MB 流式实测峰值 RSS 增量 `< 32MB`），并通过 `0600` 权限独立口令令牌文件实现口令与数据流隔离。
 - **沙盒安全的原地覆盖机制（`commitStagedFile`）**：通过 POSIX `statfs` 预检扣除被覆盖文件后的净需磁盘空间，采用 `open(O_WRONLY)` 权限预检、容器回滚备份（`original.bak` 清零销毁）以及 `ftruncate` + 流式写入 + `fsync` 原地覆盖，在保留 `NSSavePanel` 沙盒授权与目标文件 inode 的同时确保任何权限或 I/O 异常下原文件零丢失。
 - **系统钥匙串与 Touch ID 集成（`KeychainService`）**：基于 macOS Data Protection Keychain 与 `LocalAuthentication`（`.userPresence`）安全存取私钥口令，支持 Touch ID、Apple Watch 与系统密码回退，并提供单次子进程调用的主钥/子钥指纹解析（`resolvePrimaryFingerprint`）。
 - **内存清零与临时文件生命周期管理（`SecureMemory` & `TransientFileRegistry`）**：通过 Darwin `memset_s` 在释放时清零敏感字节缓冲区，并在应用正常退出（`willTerminateNotification`）或启动自检时自动清零覆写并清理暂存目录。
-- **命令行伴侣工具（`moaiy-cli`）**：新增独立 `MoaiyCLI` 可执行程序，完整支持 `status`（含 Kyber-768 抗量子算法检测）、`list-keys`、`encrypt` 与 `decrypt` 子命令。
+- **命令行伴侣工具（`moaiy`）**：新增独立 `MoaiyCLI` 可执行程序，完整支持 `status`（含 Kyber-768 抗量子算法检测）、`list-keys`、`encrypt` 与 `decrypt` 子命令。
 - **内置抗量子混合加密支持（`v0.9.0`+）**：内置 GnuPG 2.5.21 运行时（`gpg.bundle`），原生支持生成和使用 Kyber-768 混合 OpenPGP 密钥及传统 ECC / RSA-4096 密钥。
 
 ## 功能特性
@@ -31,7 +31,7 @@ Moaiy v1.0.0 正式发布首个 GA 稳定版，引入恒定低内存开销的流
 - 生成、导入、导出和删除密钥（支持 ECC、RSA-4096、RSA-2048 与 Kyber-768 混合抗量子密钥）
 - 文本加解密与恒定低内存的大文件流式加解密
 - macOS 系统钥匙串与 Touch ID 私钥口令安全托管
-- 独立 `moaiy-cli` 命令行伴侣工具，便于终端与自动化脚本调用
+- 独立 `moaiy` 命令行伴侣工具，便于终端与自动化脚本调用
 - 信任管理、子密钥生命周期管理、Ownertrust 导出/导入、吊销证书与密钥签名流程
 - 备份与恢复工作流（含完整性校验）
 - 内置 GnuPG 2.5.21 运行时（`gpg.bundle`），无需外部依赖即可在 macOS 沙盒中开箱即用
@@ -71,13 +71,13 @@ xcodebuild -project Moaiy/Moaiy.xcodeproj \
            build
 ```
 
-## 命令行伴侣工具（`moaiy-cli`）
+## 命令行伴侣工具（`moaiy`）
 
 ```bash
-moaiy-cli status
-moaiy-cli list-keys --secret
-moaiy-cli encrypt --recipient <FINGERPRINT_OR_EMAIL> --input secret.txt --output secret.txt.gpg --armor
-moaiy-cli decrypt --input secret.txt.gpg --output secret.txt
+moaiy status
+moaiy list-keys --secret
+moaiy encrypt --recipient <FINGERPRINT_OR_EMAIL> --input secret.txt --output secret.txt.gpg --armor
+moaiy decrypt --input secret.txt.gpg --output secret.txt
 ```
 
 ## DMG 打包
@@ -134,7 +134,7 @@ bash scripts/loop-runner.sh
 ```text
 moaiy/
 ├── Moaiy/                  # 主 macOS SwiftUI 应用与 MoaiyTests 测试套件
-├── MoaiyCLI/               # 独立 moaiy-cli 命令行伴侣工具
+├── MoaiyCLI/               # 独立 moaiy 命令行伴侣工具
 ├── MoaiySandboxTest/       # 沙盒验证项目
 ├── specs/                  # v1.0 核心工程规约文档
 ├── scripts/                # 构建、闭环验证与 DMG 发布脚本

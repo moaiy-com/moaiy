@@ -59,10 +59,10 @@ trap 'rm -rf "${BUILD_TMP_DIR}"' EXIT
 
 swiftc -j 8 -O -target arm64-apple-macosx14.0 \
   MoaiyCLI/main.swift \
-  -o "${BUILD_TMP_DIR}/moaiy-cli"
+  -o "${BUILD_TMP_DIR}/moaiy"
 
-"${BUILD_TMP_DIR}/moaiy-cli" --version | grep -q "moaiy-cli version 1.0.1"
-"${BUILD_TMP_DIR}/moaiy-cli" --help >/dev/null
+"${BUILD_TMP_DIR}/moaiy" --version | grep -q "moaiy version 1.0.1"
+"${BUILD_TMP_DIR}/moaiy" --help >/dev/null
 
 # 4. 编译并运行 64MB 流式管道 + GPG 集成验证套件 (含 -strict-concurrency=complete 检查)
 echo "-> [4/5] 编译并运行 64MB 流式管道 + GPG 集成测试套件..."

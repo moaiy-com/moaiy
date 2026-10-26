@@ -9,7 +9,7 @@ Moaiy is an open-source macOS app for encryption and recovery workflows, designe
 **[Chinese Version](./README_CN.md)**
 
 Latest stable release: `v1.0.1`
-Current rollout: Streaming large-file crypto pipeline, Keychain & Touch ID passphrase integration, `moaiy-cli` companion tool, and Kyber-768 hybrid post-quantum encryption
+Current rollout: Streaming large-file crypto pipeline, Keychain & Touch ID passphrase integration, `moaiy` companion tool, and Kyber-768 hybrid post-quantum encryption
 
 ## App Screenshot
 
@@ -17,13 +17,13 @@ Current rollout: Streaming large-file crypto pipeline, Keychain & Touch ID passp
 
 ## What's New in v1.0.0
 
-Moaiy v1.0.0 marks the first General Availability milestone, introducing a bounded-memory streaming crypto pipeline, macOS Keychain & Touch ID integration, a companion CLI tool (`moaiy-cli`), and hardened App Sandbox staging.
+Moaiy v1.0.0 marks the first General Availability milestone, introducing a bounded-memory streaming crypto pipeline, macOS Keychain & Touch ID integration, a companion CLI tool (`moaiy`), and hardened App Sandbox staging.
 
 - **Streaming File Crypto Pipeline (`StreamingCryptoPipeline`)**: 256KB chunked I/O with independent `stdinQueue`/`stdoutQueue` 8MB backpressure throttling, per-chunk `autoreleasepool` drainage (<32MB Peak RSS delta on 64MB streams), and `0600` isolated passphrase token files.
 - **Overwrite-Safe Sandbox Staging (`commitStagedFile`)**: POSIX `statfs` net disk-space preflight, `open(O_WRONLY)` permission pre-check, rollback backup (`original.bak`) with zero-scrubbing, and in-place `ftruncate` + stream write + `fsync` to preserve `NSSavePanel` sandbox grants and target file inodes without data loss.
 - **System Keychain & Touch ID Integration (`KeychainService`)**: Stores and retrieves private key passphrases via macOS Data Protection Keychain and `LocalAuthentication` (`.userPresence` for Touch ID, Apple Watch, and device passcode), with single-pass primary/subkey fingerprint resolution (`resolvePrimaryFingerprint`).
 - **Memory & Scratch Lifecycle Hygiene (`SecureMemory` & `TransientFileRegistry`)**: Best-effort `memset_s` buffer zeroization on deallocation, automatic zero-scrubbing and purge of active scratch directories on app termination (`willTerminateNotification`), and 24-hour stale directory cleanup on launch.
-- **Companion CLI (`moaiy-cli`)**: Standalone command-line tool (`MoaiyCLI` target) supporting `status` (including Kyber-768 detection), `list-keys`, `encrypt`, and `decrypt`.
+- **Companion CLI (`moaiy`)**: Standalone command-line tool (`MoaiyCLI` target) supporting `status` (including Kyber-768 detection), `list-keys`, `encrypt`, and `decrypt`.
 - **Post-Quantum Ready (`v0.9.0`+)**: Built-in GnuPG 2.5.21 runtime (`gpg.bundle`) supporting Kyber-768 hybrid OpenPGP keys alongside classical RSA-4096 and ECC keys.
 
 ## Features
@@ -31,7 +31,7 @@ Moaiy v1.0.0 marks the first General Availability milestone, introducing a bound
 - Generate, import, export, and delete keys (ECC, RSA-4096, RSA-2048, and Kyber-768 hybrid PQC)
 - Encrypt and decrypt text and large files via bounded-memory streaming I/O
 - Store and unlock key passphrases with macOS Keychain & Touch ID
-- Companion `moaiy-cli` tool for terminal and script automation
+- Companion `moaiy` tool for terminal and script automation
 - Trust management, subkey lifecycle, ownertrust transfer, revocation certificates, and key signing flows
 - Backup and restore workflows with integrity verification
 - Bundled GnuPG 2.5.21 runtime (`gpg.bundle`) for zero-dependency sandboxed execution
@@ -71,13 +71,13 @@ xcodebuild -project Moaiy/Moaiy.xcodeproj \
            build
 ```
 
-## Companion CLI (`moaiy-cli`)
+## Companion CLI (`moaiy`)
 
 ```bash
-moaiy-cli status
-moaiy-cli list-keys --secret
-moaiy-cli encrypt --recipient <FINGERPRINT_OR_EMAIL> --input secret.txt --output secret.txt.gpg --armor
-moaiy-cli decrypt --input secret.txt.gpg --output secret.txt
+moaiy status
+moaiy list-keys --secret
+moaiy encrypt --recipient <FINGERPRINT_OR_EMAIL> --input secret.txt --output secret.txt.gpg --armor
+moaiy decrypt --input secret.txt.gpg --output secret.txt
 ```
 
 ## Package DMG
@@ -134,7 +134,7 @@ If the bundle is not added in Xcode, use:
 ```text
 moaiy/
 ├── Moaiy/                  # Main macOS SwiftUI app & MoaiyTests suite
-├── MoaiyCLI/               # Standalone moaiy-cli companion tool
+├── MoaiyCLI/               # Standalone moaiy companion tool
 ├── MoaiySandboxTest/       # Sandbox validation app/project
 ├── specs/                  # v1.0 work-package engineering specifications
 ├── scripts/                # Build, verification, and DMG release scripts
