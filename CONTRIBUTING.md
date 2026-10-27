@@ -274,8 +274,9 @@ git commit -m "test: add unit tests for encryption service"
    # Build and test in Xcode (Cmd+U)
    # Or use command line:
    xcodebuild test -project Moaiy/Moaiy.xcodeproj \
-                   -scheme Moaiy \
-                   -destination 'platform=macOS'
+                   -scheme MoaiyTests \
+                   -destination 'platform=macOS' \
+                   CODE_SIGNING_ALLOWED=NO
    ```
 
 3. **Check code style**:
@@ -347,13 +348,15 @@ func generateKeyPair() async throws {
 ```bash
 # Run all tests
 xcodebuild test -project Moaiy/Moaiy.xcodeproj \
-                -scheme Moaiy \
-                -destination 'platform=macOS'
+                -scheme MoaiyTests \
+                -destination 'platform=macOS' \
+                CODE_SIGNING_ALLOWED=NO
 
 # Run specific test
 xcodebuild test -project Moaiy/Moaiy.xcodeproj \
-                -scheme Moaiy \
+                -scheme MoaiyTests \
                 -destination 'platform=macOS' \
+                CODE_SIGNING_ALLOWED=NO \
                 -only-testing:MoaiyTests/SpecificTestClass
 ```
 
