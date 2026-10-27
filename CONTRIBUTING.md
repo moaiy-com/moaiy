@@ -304,6 +304,8 @@ git commit -m "test: add unit tests for encryption service"
 
 ### Review Process
 
+See [REVIEW.md](REVIEW.md) for severity labels, sensitive paths and required evidence.
+
 - All PRs require at least one review
 - Reviewers will check for:
   - Code quality and style
