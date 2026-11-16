@@ -304,6 +304,8 @@ git commit -m "test: add unit tests for encryption service"
 
 ### Review Process
 
+See [REVIEW.md](REVIEW.md) for severity labels, sensitive paths and required evidence.
+
 - All PRs require at least one review
 - Reviewers will check for:
   - Code quality and style
@@ -345,13 +347,15 @@ func generateKeyPair() async throws {
 ```bash
 # Run all tests
 xcodebuild test -project Moaiy/Moaiy.xcodeproj \
-                -scheme Moaiy \
-                -destination 'platform=macOS'
+                -scheme MoaiyTests \
+                -destination 'platform=macOS' \
+                CODE_SIGNING_ALLOWED=NO
 
 # Run specific test
 xcodebuild test -project Moaiy/Moaiy.xcodeproj \
-                -scheme Moaiy \
+                -scheme MoaiyTests \
                 -destination 'platform=macOS' \
+                CODE_SIGNING_ALLOWED=NO \
                 -only-testing:MoaiyTests/SpecificTestClass
 ```
 

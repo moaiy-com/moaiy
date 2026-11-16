@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Guidance for AI coding agents (and humans) working in this repository.
-Read this first, then `CONTRIBUTING.md`.
+Read this first, then `REVIEW.md` and `CONTRIBUTING.md`.
 
 ## Project
 
