@@ -165,22 +165,15 @@ struct KeyListView: View {
 
 #### Password and Key Storage
 
+Never call raw `SecItem*` APIs from UI or ViewModel layers (enforced by `./scripts/check_architecture_guards.py`). Always route passphrase storage and retrieval through `KeychainService` and `SecureString`:
+
 ```swift
-// ✅ Correct: Use Keychain Services
-class SecurePasswordStorage {
-    func savePassword(_ password: String, for keyId: String) throws {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrAccount as String: keyId,
-            kSecValueData as String: password.data(using: .utf8)!
-        ]
-        
-        let status = SecItemAdd(query as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw SecurityError.keychainSaveFailed
-        }
-    }
-}
+// ✅ Correct: Use KeychainService and SecureString
+try KeychainService.shared.savePassphrase(
+    SecureString(passphrase),
+    for: primaryFingerprint,
+    requireBiometrics: true
+)
 ```
 
 #### Sandbox Compatibility
@@ -269,21 +262,28 @@ git commit -m "test: add unit tests for encryption service"
    git rebase upstream/main
    ```
 
-2. **Run tests** to ensure everything works:
+2. **Run fast inner-loop checks during development** (guards + SwiftLint + CLI + 64MB streaming/GPG + optional single suite):
    ```bash
-   # Build and test in Xcode (Cmd+U)
-   # Or use command line:
-   xcodebuild test -project Moaiy/Moaiy.xcodeproj \
-                   -scheme Moaiy \
-                   -destination 'platform=macOS'
+   bash scripts/loop-runner.sh --fast [SuiteName]
    ```
 
-3. **Check code style**:
+3. **Run the full verification gate before opening a PR** (runs architecture guards, negative gate self-tests, localization/Pro contract checks, MAS preflight, Debug/Release builds, and all `MoaiyTests`):
    ```bash
-   swiftlint
+   bash scripts/loop-runner.sh
+   ```
+   Or run the deterministic CI guards standalone:
+   ```bash
+   ./scripts/check_architecture_guards.py
+   ./scripts/test_guards.sh
+   ./scripts/appstore-preflight.sh --allow-unsigned-ci
    ```
 
-4. **Update documentation** if needed
+4. **Check code style** (strict mode on core modules):
+   ```bash
+   swiftlint lint --config .swiftlint.yml --strict
+   ```
+
+5. **Update documentation** if needed (see [`AGENTS.md`](./AGENTS.md) for the shared Feature Map and high-risk boundaries).
 
 ### Submitting a Pull Request
 
