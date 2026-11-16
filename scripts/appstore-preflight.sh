@@ -8,8 +8,22 @@ ENTITLEMENTS_PATH="$ROOT_DIR/Moaiy/Resources/Entitlements.entitlements"
 HELPER_ENTITLEMENTS_PATH="$ROOT_DIR/Moaiy/Resources/GPGHelper.entitlements"
 PRIVACY_MANIFEST_PATH="$ROOT_DIR/Moaiy/PrivacyInfo.xcprivacy"
 INFO_PLIST_PATH="$ROOT_DIR/Moaiy/Info.plist"
-SCHEME="${1:-Moaiy}"
-CONFIGURATION="${2:-Release}"
+
+ALLOW_UNSIGNED_CI=false
+POSITIONAL_ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --allow-unsigned-ci)
+      ALLOW_UNSIGNED_CI=true
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$arg")
+      ;;
+  esac
+done
+
+SCHEME="${POSITIONAL_ARGS[0]:-Moaiy}"
+CONFIGURATION="${POSITIONAL_ARGS[1]:-Release}"
 
 if [[ ! -d "$PROJECT_PATH" ]]; then
   echo "ERROR: project not found at $PROJECT_PATH"
@@ -75,14 +89,18 @@ if xcodebuild -version >/dev/null 2>&1; then
         | xargs
     )"
 
-    if [[ "$CONFIGURATION" == "Release" ]]; then
+    if [[ "$CONFIGURATION" == "Release" && "$ALLOW_UNSIGNED_CI" == false ]]; then
       if [[ -z "$DEVELOPMENT_TEAM" || "$DEVELOPMENT_TEAM" == "__TEAM_ID_PLACEHOLDER__" || "$DEVELOPMENT_TEAM" == "YOUR_TEAM_ID" ]]; then
         echo "ERROR: Release build has no valid DEVELOPMENT_TEAM."
         echo "Set MOAIY_DEVELOPMENT_TEAM_ID in Moaiy/Config/Moaiy.Signing.xcconfig (or an included local override)."
         exit 1
       fi
     fi
-    echo "Preflight passed: scheme=$SCHEME configuration=$CONFIGURATION team=$DEVELOPMENT_TEAM"
+    if [[ "$ALLOW_UNSIGNED_CI" == true ]]; then
+      echo "Preflight passed (unsigned CI mode): scheme=$SCHEME configuration=$CONFIGURATION (DEVELOPMENT_TEAM check skipped)"
+    else
+      echo "Preflight passed: scheme=$SCHEME configuration=$CONFIGURATION team=$DEVELOPMENT_TEAM"
+    fi
   else
     echo "WARN: xcodebuild -showBuildSettings unavailable on current host; static MAS preflight checks passed."
   fi

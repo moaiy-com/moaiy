@@ -102,7 +102,7 @@ Useful standalone options:
 ./scripts/package_dmg.sh --skip-build --open
 ```
 
-## Run Tests
+## Run Tests & Verification Gates
 
 ```bash
 # Run full Xcode unit & integration test suite (451 tests)
@@ -110,8 +110,16 @@ xcodebuild test -project Moaiy/Moaiy.xcodeproj \
                 -scheme MoaiyTests \
                 -destination 'platform=macOS,arch=arm64'
 
-# Or run the full 5-stage loop verification harness (SwiftLint + CLI + 64MB streaming + MoaiyTests)
+# Run the fast inner-loop harness (guards + SwiftLint + moaiy CLI + 64MB streaming/GPG + optional single suite)
+bash scripts/loop-runner.sh --fast [SuiteName]
+
+# Run the full 5-stage verification gate (adds guard negative self-tests, Debug/Release builds & all MoaiyTests)
 bash scripts/loop-runner.sh
+
+# Run deterministic guards & negative-case self-tests standalone (same as CI)
+./scripts/check_architecture_guards.py
+./scripts/test_guards.sh
+./scripts/appstore-preflight.sh --allow-unsigned-ci
 ```
 
 ## Bundled GPG Workflow

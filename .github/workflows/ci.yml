@@ -23,6 +23,12 @@ jobs:
         with:
           xcode-version: latest-stable
 
+      - name: Architecture & Security Guards
+        run: |
+          chmod +x ./scripts/check_architecture_guards.py ./scripts/test_guards.sh
+          ./scripts/check_architecture_guards.py
+          ./scripts/test_guards.sh
+
       - name: Asset Catalog Integrity Guard
         run: |
           chmod +x ./scripts/release/check_asset_catalog_integrity.sh
@@ -37,6 +43,11 @@ jobs:
         run: |
           chmod +x ./scripts/check_pro_contracts.py
           ./scripts/check_pro_contracts.py
+
+      - name: MAS Static Preflight (Unsigned CI)
+        run: |
+          chmod +x ./scripts/appstore-preflight.sh ./scripts/verify_gpg_bundle.sh
+          ./scripts/appstore-preflight.sh --allow-unsigned-ci
 
       - name: Build
         run: |

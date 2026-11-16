@@ -102,7 +102,7 @@ moaiy decrypt --input secret.txt.gpg --output secret.txt
 ./scripts/package_dmg.sh --skip-build --open
 ```
 
-## 运行测试
+## 运行测试与验证门禁
 
 ```bash
 # 运行完整 Xcode 单元与集成测试套件（451 项测试）
@@ -110,8 +110,16 @@ xcodebuild test -project Moaiy/Moaiy.xcodeproj \
                 -scheme MoaiyTests \
                 -destination 'platform=macOS,arch=arm64'
 
-# 或运行 5 阶段完整闭环验证脚本（SwiftLint + CLI + 64MB 流式压测 + MoaiyTests）
+# 运行快速开发内循环（架构守卫 + SwiftLint + moaiy CLI + 64MB 流式/GPG 实测 + 可选单个测试套件）
+bash scripts/loop-runner.sh --fast [SuiteName]
+
+# 运行完整 5 阶段闭环门禁（含门禁负例自检、Debug/Release 构建与全量 MoaiyTests）
 bash scripts/loop-runner.sh
+
+# 单独运行零依赖确定性守卫、负例自检与无证书 MAS 预检（与 CI 一致）
+./scripts/check_architecture_guards.py
+./scripts/test_guards.sh
+./scripts/appstore-preflight.sh --allow-unsigned-ci
 ```
 
 ## 内置 GPG 工作流
