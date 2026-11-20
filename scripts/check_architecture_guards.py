@@ -31,11 +31,7 @@ PROCESS_INIT_RE = re.compile(r"\bProcess\s*\(\s*\)")
 EXTERNAL_GPG_PATH_RE = re.compile(r"""["']/(?:opt/homebrew|usr/local)/bin/gpg["']""")
 FORCE_TRY_OR_CAST_RE = re.compile(r"(?:^|[^A-Za-z0-9_])(?:try!|as!)(?:\s|$)")
 
-# Explicit legacy exemption for existing ditto ZIP archival in BackupManagerView.swift
-# until moved into a dedicated ArchiveService.
-PROCESS_UI_EXEMPTIONS = {
-    "Moaiy/Views/Backup/BackupManagerView.swift",
-}
+PROCESS_UI_EXEMPTIONS: set[str] = set()
 
 EXTERNAL_GPG_PATH_ALLOWED = {
     "Moaiy/Services/GPGService.swift",

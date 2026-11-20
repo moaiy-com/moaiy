@@ -39,6 +39,7 @@
 		4A1000012F80000100000002 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2000012F80000100000002 /* KeychainService.swift */; };
 		4A1000012F80000100000003 /* SecureMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2000012F80000100000003 /* SecureMemory.swift */; };
 		4A1000012F80000100000004 /* TransientFileRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2000012F80000100000004 /* TransientFileRegistry.swift */; };
+		4A1000012F80000100000006 /* BackupArchiveService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2000012F80000100000006 /* BackupArchiveService.swift */; };
 		4A1000012F80000100000005 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2000012F80000100000005 /* main.swift */; };
 		B00000000001 /* MoaiyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000001 /* MoaiyApp.swift */; };
 		B00000000002 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000002 /* MainView.swift */; };
@@ -98,6 +99,7 @@
 		4A2000012F80000100000002 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		4A2000012F80000100000003 /* SecureMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureMemory.swift; sourceTree = "<group>"; };
 		4A2000012F80000100000004 /* TransientFileRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransientFileRegistry.swift; sourceTree = "<group>"; };
+		4A2000012F80000100000006 /* BackupArchiveService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupArchiveService.swift; sourceTree = "<group>"; };
 		4A2000012F80000100000005 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		4A2000012F80000100000006 /* moaiy */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = moaiy; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00000000001 /* MoaiyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoaiyApp.swift; sourceTree = "<group>"; };
@@ -252,6 +254,7 @@
 				4A2000012F80000100000002 /* KeychainService.swift */,
 				4A2000012F80000100000003 /* SecureMemory.swift */,
 				4A2000012F80000100000004 /* TransientFileRegistry.swift */,
+				4A2000012F80000100000006 /* BackupArchiveService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -605,6 +608,7 @@
 				4A1000012F80000100000002 /* KeychainService.swift in Sources */,
 				4A1000012F80000100000003 /* SecureMemory.swift in Sources */,
 				4A1000012F80000100000004 /* TransientFileRegistry.swift in Sources */,
+				4A1000012F80000100000006 /* BackupArchiveService.swift in Sources */,
 				B00000000008 /* Color+Theme.swift in Sources */,
 				3A1000012F76000100000009 /* DeleteKeyOption.swift in Sources */,
 				3A1000012F76000100000001 /* OperationResult.swift in Sources */,

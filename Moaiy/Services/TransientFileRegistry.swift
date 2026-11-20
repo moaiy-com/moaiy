@@ -58,6 +58,28 @@ public final class TransientFileRegistry: @unchecked Sendable {
         for url in urlsToClean {
             if fileManager.fileExists(atPath: url.path) {
                 do {
+                    var isDirectory: ObjCBool = false
+                    if fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue {
+                        SecureTempStorage.zeroScrubDirectoryContents(at: url)
+                    } else if let attrs = try? fileManager.attributesOfItem(atPath: url.path),
+                              let size = attrs[.size] as? Int, size > 0 {
+                        let fd = open(url.path, O_WRONLY)
+                        if fd >= 0 {
+                            let zeroChunk = [UInt8](repeating: 0, count: min(size, 64 * 1024))
+                            var remaining = size
+                            zeroChunk.withUnsafeBytes { rawBuf in
+                                guard let base = rawBuf.baseAddress else { return }
+                                while remaining > 0 {
+                                    let toWrite = min(remaining, zeroChunk.count)
+                                    let written = write(fd, base, toWrite)
+                                    if written <= 0 { break }
+                                    remaining -= written
+                                }
+                            }
+                            _ = fsync(fd)
+                            _ = close(fd)
+                        }
+                    }
                     try fileManager.removeItem(at: url)
                     cleanedCount += 1
                     logger.debug("Cleaned transient item on exit: \(url.path)")
