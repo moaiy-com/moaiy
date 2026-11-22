@@ -27,6 +27,24 @@ private final class PipeAccumulator: @unchecked Sendable {
     }
 }
 
+private final class ActiveGPGHomeTracker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var paths = Set<String>()
+
+    func record(_ path: String) {
+        guard !path.isEmpty else { return }
+        lock.lock()
+        paths.insert(path)
+        lock.unlock()
+    }
+
+    var allPaths: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return Array(paths).sorted()
+    }
+}
+
 protocol SubkeyManaging {
     func listSubkeys(primaryKeyID: String) async throws -> [GPGSubkey]
     func addSubkey(
@@ -289,7 +307,14 @@ final class GPGService: SubkeyManaging {
     // MARK: - Private Properties
     
     private var gpgURL: URL?
-    private var gpgHome: URL?
+    private let activeHomeTracker = ActiveGPGHomeTracker()
+    private var gpgHome: URL? {
+        didSet {
+            if let path = gpgHome?.path, !path.isEmpty {
+                activeHomeTracker.record(path)
+            }
+        }
+    }
     private var scopedExternalGPGHomeURL: URL?
     private var gpgAgentURL: URL?
     private var gpgConnectAgentURL: URL?
@@ -439,30 +464,34 @@ final class GPGService: SubkeyManaging {
         guard let binDirectory = gpgURL?.deletingLastPathComponent() else { return }
         let gpgconfURL = binDirectory.appendingPathComponent("gpgconf")
         guard FileManager.default.isExecutableFile(atPath: gpgconfURL.path) else { return }
-        let activeHomePath = gpgHome?.path
+        let tracker = activeHomeTracker
 
         TransientFileRegistry.shared.registerExitHook {
-            let process = Process()
-            process.executableURL = gpgconfURL
-            var args: [String] = []
-            if let activeHomePath, !activeHomePath.isEmpty {
-                args.append(contentsOf: ["--homedir", activeHomePath])
-            }
-            args.append(contentsOf: ["--kill", "gpg-agent"])
-            process.arguments = args
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
-            do {
-                try process.run()
-                let deadline = Date().addingTimeInterval(1.5)
-                while process.isRunning && Date() < deadline {
-                    usleep(20_000)
+            let homePaths = tracker.allPaths
+            let targets: [String?] = homePaths.isEmpty ? [nil] : homePaths.map { Optional($0) }
+            for homePath in targets {
+                let process = Process()
+                process.executableURL = gpgconfURL
+                var args: [String] = []
+                if let homePath, !homePath.isEmpty {
+                    args.append(contentsOf: ["--homedir", homePath])
                 }
-                if process.isRunning {
-                    process.terminate()
+                args.append(contentsOf: ["--kill", "gpg-agent"])
+                process.arguments = args
+                process.standardOutput = FileHandle.nullDevice
+                process.standardError = FileHandle.nullDevice
+                do {
+                    try process.run()
+                    let deadline = Date().addingTimeInterval(1.5)
+                    while process.isRunning && Date() < deadline {
+                        usleep(20_000)
+                    }
+                    if process.isRunning {
+                        process.terminate()
+                    }
+                } catch {
+                    // Best-effort cleanup on app termination
                 }
-            } catch {
-                // Best-effort cleanup on app termination
             }
         }
     }
@@ -647,10 +676,15 @@ final class GPGService: SubkeyManaging {
             return preferredHome
         }
 
-        // Fallback to temporary directory in restricted CLI/test sandboxes where ~/Library is not writable
-        let fallbackHome = URL(fileURLWithPath: "/tmp/com.moaiy.gnupg", isDirectory: true)
+#if DEBUG
+        // Fallback to process-scoped temporary directory in restricted CLI/test sandboxes where ~/Library is not writable
+        let fallbackHome = fileManager.temporaryDirectory
+            .appendingPathComponent("com.moaiy.gnupg-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
         try ensureGPGHomeDirectoryExists(at: fallbackHome)
         return fallbackHome
+#else
+        throw GPGError.fileAccessDenied(preferredHome.path)
+#endif
     }
 
     private func preferredAppManagedGPGHomeURL() throws -> URL {
@@ -1807,7 +1841,7 @@ final class GPGService: SubkeyManaging {
         let stagedSourceURL = stagingDirectory.appendingPathComponent("input")
         let stagedOutputURL = stagingDirectory.appendingPathComponent("output")
         defer {
-            try? fileManager.removeItem(at: stagingDirectory)
+            SecureTempStorage.removeOperationDirectory(stagingDirectory)
         }
 
         try fileManager.copyItem(at: sourceURL, to: stagedSourceURL)
@@ -2156,7 +2190,7 @@ final class GPGService: SubkeyManaging {
         let stagedSourceURL = stagingDirectory.appendingPathComponent("input")
         let stagedOutputURL = stagingDirectory.appendingPathComponent("output")
         defer {
-            try? fileManager.removeItem(at: stagingDirectory)
+            SecureTempStorage.removeOperationDirectory(stagingDirectory)
         }
 
         try fileManager.copyItem(at: sourceURL, to: stagedSourceURL)
@@ -2486,7 +2520,7 @@ final class GPGService: SubkeyManaging {
         let stagedSourceURL = stagingDirectory.appendingPathComponent("input")
         let stagedOutputURL = stagingDirectory.appendingPathComponent("output.sig")
         defer {
-            try? fileManager.removeItem(at: stagingDirectory)
+            SecureTempStorage.removeOperationDirectory(stagingDirectory)
         }
 
         try fileManager.copyItem(at: sourceURL, to: stagedSourceURL)
@@ -2551,7 +2585,7 @@ final class GPGService: SubkeyManaging {
             if accessGranted {
                 fileURL.stopAccessingSecurityScopedResource()
             }
-            try? fileManager.removeItem(at: stagingDirectory)
+            SecureTempStorage.removeOperationDirectory(stagingDirectory)
         }
 
         do {
@@ -2590,8 +2624,14 @@ final class GPGService: SubkeyManaging {
         arguments.append("--armor")
         
         let result = try await executeGPG(arguments: arguments, input: passphrase + "\n" + text)
+        if result.exitCode != 0 {
+            if let credentialError = Self.credentialFailureError(from: result) {
+                throw credentialError
+            }
+            throw GPGError.encryptionFailed(result.stderr ?? "Signing failed (exit code: \(result.exitCode))")
+        }
         
-        guard let output = result.stdout else {
+        guard let output = result.stdout, !output.isEmpty else {
             throw GPGError.encryptionFailed("No output from signing")
         }
         
@@ -2607,11 +2647,22 @@ final class GPGService: SubkeyManaging {
             input: text
         )
         
-        guard let output = result.stdout else {
+        let statusOutput = [result.stdout, result.stderr]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+        guard !statusOutput.isEmpty else {
             throw GPGError.invalidOutput("No output from verification")
         }
         
-        return parseVerificationResult(output)
+        let parsed = Self.parseVerificationResult(statusOutput)
+        guard result.exitCode == 0 else {
+            return VerificationResult(
+                isValid: false,
+                signerKeyID: parsed.signerKeyID,
+                timestamp: parsed.timestamp
+            )
+        }
+        return parsed
     }
 
     /// Verify a signed file or detached signature.
@@ -2656,7 +2707,7 @@ final class GPGService: SubkeyManaging {
         let stagingDirectory = try secureOperationDirectory(prefix: "verify-inline")
         let stagedInputURL = stagingDirectory.appendingPathComponent("input")
         defer {
-            try? fileManager.removeItem(at: stagingDirectory)
+            SecureTempStorage.removeOperationDirectory(stagingDirectory)
         }
 
         let accessGranted = fileURL.startAccessingSecurityScopedResource()
@@ -2698,7 +2749,7 @@ final class GPGService: SubkeyManaging {
         let stagedSignatureURL = stagingDirectory.appendingPathComponent("signature.sig")
         let stagedSignedFileURL = stagingDirectory.appendingPathComponent("signed")
         defer {
-            try? fileManager.removeItem(at: stagingDirectory)
+            SecureTempStorage.removeOperationDirectory(stagingDirectory)
         }
 
         let signatureAccessGranted = signatureURL.startAccessingSecurityScopedResource()
@@ -2887,7 +2938,7 @@ final class GPGService: SubkeyManaging {
 
         let stagingDirectory = try secureOperationDirectory(prefix: "revocation")
         defer {
-            try? FileManager.default.removeItem(at: stagingDirectory)
+            SecureTempStorage.removeOperationDirectory(stagingDirectory)
         }
 
         let outputURL = stagingDirectory.appendingPathComponent("revocation.asc")
@@ -2944,7 +2995,14 @@ final class GPGService: SubkeyManaging {
     func signKey(keyID: String, signerKeyID: String?, passphrase: String, trustLevel: TrustLevel? = nil) async throws {
         try await ensureGPGAgentRunningIfNeeded()
 
-        var arguments = ["--command-fd", "0", "--batch", "--yes"]
+        var arguments = [
+            "--batch",
+            "--yes",
+            "--no-tty",
+            "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0",
+            "--command-fd", "0"
+        ]
         
         if let signerKeyID = signerKeyID {
             arguments.append(contentsOf: ["--local-user", signerKeyID])
@@ -2952,7 +3010,7 @@ final class GPGService: SubkeyManaging {
         
         arguments.append(contentsOf: ["--sign-key", "--", keyID])
         
-        var input = passphrase + "\n"
+        var input = sanitizeBatchPassphrase(passphrase) + "\n"
         if let trustLevel = trustLevel {
             input += "trust\n\(trustLevel.gpgCode)\ny\nsave\n"
         }
@@ -2960,6 +3018,9 @@ final class GPGService: SubkeyManaging {
         let result = try await executeGPG(arguments: arguments, input: input)
         
         if result.exitCode != 0 {
+            if let credentialError = Self.credentialFailureError(from: result) {
+                throw credentialError
+            }
             throw GPGError.keySigningFailed(result.stderr ?? "Unknown error")
         }
     }
@@ -3103,7 +3164,7 @@ final class GPGService: SubkeyManaging {
     private func importArmorData(_ data: Data, fileName: String) async throws -> KeyImportResult {
         let tempRoot = try secureOperationDirectory(prefix: "migration")
         defer {
-            try? FileManager.default.removeItem(at: tempRoot)
+            SecureTempStorage.removeOperationDirectory(tempRoot)
         }
 
         let armorFileURL = tempRoot.appendingPathComponent(fileName)
@@ -3721,7 +3782,7 @@ final class GPGService: SubkeyManaging {
             if accessGranted {
                 sourceURL.stopAccessingSecurityScopedResource()
             }
-            try? fileManager.removeItem(at: stagingDirectory)
+            SecureTempStorage.removeOperationDirectory(stagingDirectory)
         }
 
         try fileManager.copyItem(at: sourceURL, to: stagedSourceURL)
@@ -3881,12 +3942,11 @@ final class GPGService: SubkeyManaging {
     private func probeSecretKeyPassphraseRequirement(keyID: String) async throws -> Bool {
         try await ensureGPGAgentRunningIfNeeded()
 
-        let fileManager = FileManager.default
         let stagingDirectory = try secureOperationDirectory(prefix: "passphrase-probe")
         let sourceURL = stagingDirectory.appendingPathComponent("input.txt")
         let signatureURL = stagingDirectory.appendingPathComponent("probe.sig")
         defer {
-            try? fileManager.removeItem(at: stagingDirectory)
+            SecureTempStorage.removeOperationDirectory(stagingDirectory)
         }
 
         try Data("moaiy-passphrase-probe".utf8).write(to: sourceURL, options: .atomic)
@@ -4593,35 +4653,44 @@ final class GPGService: SubkeyManaging {
         )
     }
     
-    /// Parse verification result
-    private func parseVerificationResult(_ output: String) -> VerificationResult {
-        var isValid = false
+    /// Parse GPG `--status-fd` verification output strictly from `[GNUPG:]` status records.
+    nonisolated static func parseVerificationResult(_ output: String) -> VerificationResult {
+        var hasGoodSig = false
+        var hasValidSig = false
+        var hasFailureSignal = false
         var signerKeyID: String?
         var timestamp: Date?
-        
-        for line in output.components(separatedBy: "\n") {
-            if line.contains("GOODSIG") {
-                isValid = true
-                let parts = line.components(separatedBy: " ")
-                if parts.count >= 3 {
-                    signerKeyID = parts[2]
+
+        for fields in Self.parseGPGStatusFieldsStatic(from: output) {
+            guard let tag = fields.first else { continue }
+            switch tag {
+            case "GOODSIG":
+                hasGoodSig = true
+                if fields.count >= 2 {
+                    signerKeyID = fields[1]
                 }
-            }
-            if line.contains("VALIDSIG") {
-                let parts = line.components(separatedBy: " ")
-                if parts.count >= 4 {
-                    if let ts = Double(parts[3]) {
-                        timestamp = Date(timeIntervalSince1970: ts)
-                    }
+            case "VALIDSIG":
+                hasValidSig = true
+                // status-fd: VALIDSIG <fpr> <sig_creation_date> <sig-timestamp> ...
+                if fields.count >= 4, let ts = Double(fields[3]) {
+                    timestamp = Date(timeIntervalSince1970: ts)
                 }
+            case "BADSIG", "ERRSIG", "REVKEYSIG", "EXPKEYSIG", "EXPSIG", "NO_PUBKEY":
+                hasFailureSignal = true
+            default:
+                break
             }
         }
-        
+
         return VerificationResult(
-            isValid: isValid,
+            isValid: hasGoodSig && hasValidSig && !hasFailureSignal,
             signerKeyID: signerKeyID,
             timestamp: timestamp
         )
+    }
+
+    private func parseVerificationResult(_ output: String) -> VerificationResult {
+        Self.parseVerificationResult(output)
     }
 }
 

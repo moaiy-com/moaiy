@@ -328,7 +328,7 @@ enum SecureTempStorage {
     }
 
     /// Best-effort zero-overwrites regular files inside a temporary operation directory prior to unlink.
-    private static func zeroScrubDirectoryContents(at directoryURL: URL) {
+    static func zeroScrubDirectoryContents(at directoryURL: URL) {
         guard let enumerator = fileManager.enumerator(
             at: directoryURL,
             includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],

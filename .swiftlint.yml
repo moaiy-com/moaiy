@@ -44,6 +44,7 @@ included:
   - Moaiy/Services/KeychainService.swift
   - Moaiy/Services/SecureMemory.swift
   - Moaiy/Services/TransientFileRegistry.swift
+  - Moaiy/Services/BackupArchiveService.swift
   - Moaiy/Utils/Constants.swift
   - MoaiyCLI/main.swift
 

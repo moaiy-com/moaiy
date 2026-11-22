@@ -7,9 +7,37 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-23
+
 ### Changed
+- Bumped app marketing version to `1.0.2` and `CURRENT_PROJECT_VERSION` to `12`.
 - Renamed the companion command-line tool from `moaiy-cli` to `moaiy` (Xcode product `MoaiyCLI` target now builds `moaiy`; help, usage and version output updated). Moaiy never installed `moaiy-cli` system-wide, so no migration is performed; users who copied or symlinked it manually can keep a compatibility alias with `ln -sf "$(command -v moaiy)" /usr/local/bin/moaiy-cli`.
+- Extracted ZIP create/extract from `BackupManagerView` into `BackupArchiveService` with async pipe draining, timeout, and cancellation.
+
+### Fixed
+- Parsed GnuPG `VALIDSIG` unix timestamps from status-fd field 4 (`<sig-timestamp>`), instead of the human-readable `<sig_creation_date>`.
+
+### Security
+- Required `[GNUPG:]` `GOODSIG` and `VALIDSIG` together for verification success, and rejected spoofed plaintext, `BADSIG`, `REVKEYSIG`, and related failure signals.
+- Stopped Release builds from falling back to a shared `/tmp` GnuPG home when the app-managed directory cannot be created.
+- Zero-overwrite scrubbed operation staging directories through `SecureTempStorage.removeOperationDirectory` and `TransientFileRegistry` on exit.
+- Killed `gpg-agent` for every homedir used in the session on app termination.
+- Defaulted `scripts/verify_gpg_bundle.sh` to read-only SHA-256 verification of bundled GnuPG binaries against `manifest.json`.
+
+### Changed (zh-Hans)
+- 将应用营销版本号升级至 `1.0.2`，工程构建版本号递增至 `12`。
 - 命令行伴侣工具由 `moaiy-cli` 更名为 `moaiy`。应用从未自动安装 `moaiy-cli`，因此不做迁移；手动安装过的用户可自行创建 `moaiy-cli` 兼容别名。
+- 将备份 ZIP 的创建与解压从 `BackupManagerView` 下沉到 `BackupArchiveService`，并改为异步排空管道、超时与取消。
+
+### Fixed (zh-Hans)
+- 修正 GnuPG `VALIDSIG` 状态行时间戳解析，改为读取第 4 字段 unix 时间戳，而不再误读人类可读日期。
+
+### Security (zh-Hans)
+- 验签必须同时存在带 `[GNUPG:]` 前缀的 `GOODSIG` 与 `VALIDSIG`，并拒绝伪造明文、`BADSIG`、`REVKEYSIG` 等失败信号。
+- Release 在无法创建应用托管 GnuPG 目录时直接失败，不再回退到共享 `/tmp` 路径。
+- 通过 `SecureTempStorage.removeOperationDirectory` 与退出时的 `TransientFileRegistry` 对 staging 目录做零填充后删除。
+- 应用退出时对会话中使用过的每个 homedir 终止 `gpg-agent`。
+- `scripts/verify_gpg_bundle.sh` 默认只读校验捆绑 GnuPG 二进制与 `manifest.json` 的 SHA-256。
 
 ## [1.0.1] - 2026-10-22
 

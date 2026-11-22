@@ -293,53 +293,48 @@ check_bundle_size() {
     fi
 }
 
-# Generate manifest
-generate_manifest() {
-    section "Generating Manifest"
-    
+# Verify or update manifest
+verify_or_update_manifest() {
+    local update_manifest="${1:-false}"
     local manifest_file="$BUNDLE_PATH/manifest.json"
-    
+
     if [ ! -d "$BUNDLE_PATH" ]; then
-        fail "Bundle not found, cannot generate manifest"
+        fail "Bundle not found, cannot verify manifest"
         return
     fi
-    
-    info "Generating manifest file..."
-    
-    # Get GPG version
-    local gpg_version="unknown"
-    if [ -f "$BUNDLE_PATH/bin/gpg" ]; then
-        gpg_version=$("$BUNDLE_PATH/bin/gpg" --version 2>&1 | head -n 1 | awk '{print $3}')
-    fi
-    
-    # Calculate checksums
-    local -a checksum_entries=()
-    
-    # Add executables
-    for exe in "$BUNDLE_PATH/bin"/*; do
-        if [ -f "$exe" ]; then
-            local name=$(basename "$exe")
-            local sha256=$(shasum -a 256 "$exe" | awk '{print $1}')
-            checksum_entries+=("    \"$name\": \"$sha256\"")
+
+    if [ "$update_manifest" = "true" ] || [ ! -f "$manifest_file" ]; then
+        section "Generating Manifest"
+        info "Generating manifest file..."
+
+        local gpg_version="unknown"
+        if [ -f "$BUNDLE_PATH/bin/gpg" ]; then
+            gpg_version=$("$BUNDLE_PATH/bin/gpg" --version 2>&1 | head -n 1 | awk '{print $3}')
         fi
-    done
-    
-    # Add libraries
-    for lib in "$BUNDLE_PATH/lib"/*.dylib; do
-        if [ -f "$lib" ]; then
-            local name=$(basename "$lib")
-            local sha256=$(shasum -a 256 "$lib" | awk '{print $1}')
-            checksum_entries+=("    \"$name\": \"$sha256\"")
+
+        local -a checksum_entries=()
+        for exe in "$BUNDLE_PATH/bin"/*; do
+            if [ -f "$exe" ]; then
+                local name=$(basename "$exe")
+                local sha256=$(shasum -a 256 "$exe" | awk '{print $1}')
+                checksum_entries+=("    \"$name\": \"$sha256\"")
+            fi
+        done
+
+        for lib in "$BUNDLE_PATH/lib"/*.dylib; do
+            if [ -f "$lib" ]; then
+                local name=$(basename "$lib")
+                local sha256=$(shasum -a 256 "$lib" | awk '{print $1}')
+                checksum_entries+=("    \"$name\": \"$sha256\"")
+            fi
+        done
+
+        local checksums=""
+        if [ ${#checksum_entries[@]} -gt 0 ]; then
+            checksums=$(printf '%s,\n' "${checksum_entries[@]}" | sed '$ s/,$//')
         fi
-    done
-    
-    local checksums=""
-    if [ ${#checksum_entries[@]} -gt 0 ]; then
-        checksums=$(printf '%s,\n' "${checksum_entries[@]}" | sed '$ s/,$//')
-    fi
-    
-    # Create manifest
-    cat > "$manifest_file" << EOF
+
+        cat > "$manifest_file" << EOF
 {
   "version": "1.0",
   "gpg_version": "$gpg_version",
@@ -352,9 +347,46 @@ $checksums
   }
 }
 EOF
-    
-    pass "Manifest generated: $manifest_file"
-    info "GPG Version: $gpg_version"
+        pass "Manifest generated: $manifest_file"
+        info "GPG Version: $gpg_version"
+        return
+    fi
+
+    section "Verifying Manifest Checksums (Read-Only)"
+    if python3 - "$BUNDLE_PATH" "$manifest_file" << 'PYEOF'
+import hashlib, json, pathlib, sys
+
+bundle_path = pathlib.Path(sys.argv[1])
+manifest_path = pathlib.Path(sys.argv[2])
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+recorded = manifest.get("checksums", {})
+
+actual = {}
+for folder in ("bin", "lib"):
+    d = bundle_path / folder
+    if d.is_dir():
+        for item in sorted(d.iterdir()):
+            if item.is_file():
+                actual[item.name] = hashlib.sha256(item.read_bytes()).hexdigest()
+
+missing = sorted(set(actual) - set(recorded))
+extra = sorted(set(recorded) - set(actual))
+mismatched = sorted(k for k in set(actual) & set(recorded) if actual[k] != recorded[k])
+
+if missing or extra or mismatched:
+    if missing:
+        print(f"Missing in manifest: {missing}", file=sys.stderr)
+    if extra:
+        print(f"Unexpected in manifest: {extra}", file=sys.stderr)
+    if mismatched:
+        print(f"Checksum mismatch: {mismatched}", file=sys.stderr)
+    sys.exit(1)
+PYEOF
+    then
+        pass "Manifest checksums match all bundled binaries & libraries (read-only)"
+    else
+        fail "Manifest checksums out of sync with gpg.bundle (run with --update-manifest to refresh)"
+    fi
 }
 
 # Print summary
@@ -384,6 +416,15 @@ print_summary() {
 
 # Main execution
 main() {
+    local update_manifest="false"
+    for arg in "$@"; do
+        case "$arg" in
+            --update-manifest)
+                update_manifest="true"
+                ;;
+        esac
+    done
+
     echo -e "${BLUE}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
     echo "║           Moaiy - GPG Bundle Verification Script              ║"
@@ -402,7 +443,7 @@ main() {
     check_signatures
     test_gpg_execution
     check_bundle_size
-    generate_manifest
+    verify_or_update_manifest "$update_manifest"
     
     # Print summary
     print_summary

@@ -7,7 +7,6 @@
 
 import SwiftUI
 import CryptoKit
-import Darwin
 
 struct BackupManagerView: View {
     @Environment(KeyManagementViewModel.self) private var viewModel
@@ -265,7 +264,7 @@ struct BackupManagerView: View {
         let tempDir = try SecureTempStorage.makeOperationDirectory(prefix: "backup")
 
         defer {
-            try? FileManager.default.removeItem(at: tempDir)
+            SecureTempStorage.removeOperationDirectory(tempDir)
         }
 
         var exportedPublicKeyCount = 0
@@ -351,18 +350,12 @@ struct BackupManagerView: View {
         let manifestFile = tempDir.appendingPathComponent(Constants.Backup.manifestFileName)
         try writeBackupPayload(manifestData, to: manifestFile)
 
-        // Create actual ZIP archive using system ditto command
-        try await runDitto(
-            arguments: [
-                "-c",
-                "-k",
-                "--sequesterRsrc",
-                "--keepParent",
-                "--",
-                tempDir.path,
-                url.path
-            ]
-        )
+        // Create actual ZIP archive via non-blocking BackupArchiveService
+        do {
+            try await BackupArchiveService.shared.createZipArchive(from: tempDir, to: url)
+        } catch is BackupArchiveError {
+            throw BackupError.invalidBackupFormat
+        }
 
         return summary
     }
@@ -413,23 +406,19 @@ struct BackupManagerView: View {
         let tempDir = try SecureTempStorage.makeOperationDirectory(prefix: "restore")
 
         defer {
-            try? FileManager.default.removeItem(at: tempDir)
+            SecureTempStorage.removeOperationDirectory(tempDir)
         }
 
         // Determine backup type and extract if needed
         var backupDir: URL
 
         if url.pathExtension.lowercased() == "zip" {
-            // Extract ZIP archive using system ditto command
-            try await runDitto(
-                arguments: [
-                    "-x",
-                    "-k",
-                    "--",
-                    url.path,
-                    tempDir.path
-                ]
-            )
+            // Extract ZIP archive via non-blocking BackupArchiveService
+            do {
+                try await BackupArchiveService.shared.extractZipArchive(from: url, to: tempDir)
+            } catch is BackupArchiveError {
+                throw BackupError.invalidBackupFormat
+            }
 
             // ditto extracts to a subdirectory with the archive name
             // Find the extracted directory
@@ -485,79 +474,7 @@ struct BackupManagerView: View {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
-    private func runDitto(arguments: [String], timeout: TimeInterval = Constants.GPG.defaultTimeout) async throws {
-        let result = try await runExternalProcess(
-            executableURL: URL(fileURLWithPath: "/usr/bin/ditto"),
-            arguments: arguments,
-            timeout: timeout
-        )
 
-        guard result.exitCode == 0 else {
-            throw BackupError.invalidBackupFormat
-        }
-    }
-
-    private func runExternalProcess(
-        executableURL: URL,
-        arguments: [String],
-        timeout: TimeInterval
-    ) async throws -> ExternalProcessResult {
-        let process = Process()
-        process.executableURL = executableURL
-        process.arguments = arguments
-
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
-        return try await withTaskCancellationHandler {
-            try process.run()
-
-            let deadline = Date().addingTimeInterval(timeout)
-            do {
-                while process.isRunning && Date() < deadline {
-                    try Task.checkCancellation()
-                    try await Task.sleep(nanoseconds: 100_000_000)
-                }
-            } catch is CancellationError {
-                Self.forceStopProcess(process)
-                throw GPGError.operationCancelled
-            }
-
-            if process.isRunning {
-                Self.forceStopProcess(process)
-                throw BackupError.invalidBackupFormat
-            }
-
-            let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-            let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            let stdout = String(data: stdoutData, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let stderr = String(data: stderrData, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-
-            return ExternalProcessResult(
-                exitCode: Int(process.terminationStatus),
-                stdout: stdout,
-                stderr: stderr
-            )
-        } onCancel: {
-            Self.forceStopProcess(process)
-        }
-    }
-
-    nonisolated private static func forceStopProcess(_ process: Process) {
-        guard process.isRunning else { return }
-        process.terminate()
-
-        if process.isRunning {
-            let pid = process.processIdentifier
-            if pid > 0 {
-                kill(pid, SIGKILL)
-            }
-        }
-    }
 
     // MARK: - Persistence
 
@@ -589,11 +506,6 @@ private struct RestoreSummary {
     let usedLegacyRestrictedPath: Bool
 }
 
-private struct ExternalProcessResult {
-    let exitCode: Int
-    let stdout: String?
-    let stderr: String?
-}
 
 struct BackupExportSummary {
     let exportedPublicKeyCount: Int
