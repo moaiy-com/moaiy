@@ -4671,7 +4671,8 @@ final class GPGService: SubkeyManaging {
                 }
             case "VALIDSIG":
                 hasValidSig = true
-                if fields.count >= 3, let ts = Double(fields[2]) {
+                // status-fd: VALIDSIG <fpr> <sig_creation_date> <sig-timestamp> ...
+                if fields.count >= 4, let ts = Double(fields[3]) {
                     timestamp = Date(timeIntervalSince1970: ts)
                 }
             case "BADSIG", "ERRSIG", "REVKEYSIG", "EXPKEYSIG", "EXPSIG", "NO_PUBKEY":
