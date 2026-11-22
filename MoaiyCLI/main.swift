@@ -10,7 +10,7 @@ import Darwin
 
 signal(SIGPIPE, SIG_IGN)
 
-let versionString = "1.0.1"
+let versionString = "1.0.2"
 
 struct CLIStatus: Codable {
     let version: String
