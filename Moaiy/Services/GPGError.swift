@@ -119,6 +119,57 @@ enum GPGError: Error, LocalizedError {
     }
 }
 
+enum SmartCardOperationFailure: Equatable {
+    case notPresent
+    case unavailable
+    case pinInvalid
+
+    var gpgError: GPGError {
+        switch self {
+        case .notPresent:
+            return .smartCardNotPresent
+        case .unavailable:
+            return .smartCardUnavailable
+        case .pinInvalid:
+            return .smartCardPinInvalid
+        }
+    }
+}
+
+/// Classifies GnuPG stderr/status text for OpenPGP card failures.
+/// PIN values are never part of the matched phrases.
+enum SmartCardFailureClassifier {
+    static func classification(of output: String) -> SmartCardOperationFailure? {
+        let lowercased = output.lowercased()
+        if lowercased.contains("bad pin")
+            || lowercased.contains("invalid pin")
+            || lowercased.contains("wrong pin") {
+            return .pinInvalid
+        }
+        if lowercased.contains("card not present")
+            || lowercased.contains("card removed")
+            || lowercased.contains("no data <scd>") {
+            return .notPresent
+        }
+        if lowercased.contains("card error")
+            || lowercased.contains("no smartcard daemon")
+            || lowercased.contains("no scdaemon")
+            || lowercased.contains("can't connect to the scdaemon")
+            || lowercased.contains("cannot connect to the scdaemon")
+            || lowercased.contains("failed to start scdaemon")
+            || lowercased.contains("failed to spawn scdaemon")
+            || lowercased.contains("ignoring gpg-agent inquiry")
+            || lowercased.contains("inquire confirm")
+            || lowercased.contains("inquiry 'confirm")
+            || lowercased.contains("inquiry \"confirm")
+            || lowercased.contains("operation not supported by device")
+            || lowercased.contains("openpgp card not available") {
+            return .unavailable
+        }
+        return nil
+    }
+}
+
 enum UserFacingErrorContext {
     case general
     case keyList
@@ -217,8 +268,8 @@ enum UserFacingErrorMapper {
             return AppLocalization.string("error_operation_cancelled")
         case .encryptionFailed:
             return AppLocalization.string("error_encryption_failed")
-        case .decryptionFailed:
-            return AppLocalization.string("error_decryption_failed")
+        case .decryptionFailed(let message):
+            return mapRawMessage(message, context: context)
         case .importFailed:
             return AppLocalization.string("error_import_failed")
         case .exportFailed:
@@ -260,19 +311,15 @@ enum UserFacingErrorMapper {
         if lowercasedMessage.contains("cancelled") {
             return AppLocalization.string("error_operation_cancelled")
         }
-        if lowercasedMessage.contains("card not present")
-            || lowercasedMessage.contains("card removed") {
-            return AppLocalization.string("error_smartcard_not_present")
-        }
-        if lowercasedMessage.contains("operation not supported by device")
-            || lowercasedMessage.contains("openpgp card not available")
-            || lowercasedMessage.contains("no smartcard daemon") {
-            return AppLocalization.string("error_smartcard_unavailable")
-        }
-        if lowercasedMessage.contains("bad pin")
-            || lowercasedMessage.contains("invalid pin")
-            || lowercasedMessage.contains("wrong pin") {
-            return AppLocalization.string("error_smartcard_pin_invalid")
+        if let smartCardFailure = SmartCardFailureClassifier.classification(of: rawMessage) {
+            switch smartCardFailure {
+            case .notPresent:
+                return AppLocalization.string("error_smartcard_not_present")
+            case .unavailable:
+                return AppLocalization.string("error_smartcard_unavailable")
+            case .pinInvalid:
+                return AppLocalization.string("error_smartcard_pin_invalid")
+            }
         }
         if lowercasedMessage.contains("bad passphrase")
             || lowercasedMessage.contains("invalid passphrase")

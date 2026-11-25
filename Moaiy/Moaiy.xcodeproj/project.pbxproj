@@ -557,7 +557,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"$SRCROOT/../scripts/sign_embedded_gpg_bundle.sh\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/gpg.bundle\"\n";
+			shellScript = "\"$SRCROOT/../scripts/install_moaiy_pinentry.sh\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/gpg.bundle\"\n\"$SRCROOT/../scripts/sign_embedded_gpg_bundle.sh\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/gpg.bundle\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

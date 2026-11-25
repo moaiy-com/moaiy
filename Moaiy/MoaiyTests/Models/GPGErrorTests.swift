@@ -297,4 +297,105 @@ struct GPGErrorTests {
             #expect(AppLocalization.string("action_confirm") != "Confirm")
         }
     }
+
+    @Test("Card error decryption failure is not the generic decrypt message")
+    func decryptionFailed_cardError_mapsToSmartCardUnavailable() {
+        let fixture = """
+        gpg: public key decryption failed: Card error
+        [GNUPG:] DECRYPTION_FAILED
+        """
+        let mapped = UserFacingErrorMapper.message(
+            for: GPGError.decryptionFailed(fixture),
+            context: .decrypt
+        )
+        #expect(mapped == AppLocalization.string("error_smartcard_unavailable"))
+        #expect(mapped != AppLocalization.string("error_decryption_failed"))
+    }
+
+    @Test("Card error with NO_SECKEY stays a smartcard failure")
+    func validateDecryptionOutcome_cardErrorWithNoSecretKey_isSmartCardUnavailable() {
+        let fixture = """
+        gpg: public key decryption failed: Card error
+        [GNUPG:] NO_SECKEY
+        [GNUPG:] DECRYPTION_FAILED
+        """
+        do {
+            try GPGService.validateDecryptionOutcome(
+                exitCode: 2,
+                stdout: nil,
+                stderr: fixture,
+                preferredSecretKey: "CARDKEY",
+                normalizedPreferredSecretKey: "CARDKEY"
+            )
+            Issue.record("Expected smart card classification")
+        } catch GPGError.smartCardUnavailable {
+            // Card signal is classified before the generic missing-key path.
+        } catch {
+            Issue.record("Expected smartCardUnavailable, got \(error)")
+        }
+    }
+
+    @Test("Missing scdaemon text is not a generic decryption failure")
+    func executionFailed_missingScdaemon_mapsToUnavailable() {
+        let mapped = UserFacingErrorMapper.message(
+            for: GPGError.executionFailed("ERR 67125247 can't connect to the scdaemon"),
+            context: .decrypt
+        )
+        #expect(mapped == AppLocalization.string("error_smartcard_unavailable"))
+        #expect(mapped != AppLocalization.string("error_decryption_failed"))
+    }
+
+    @Test("Ignored CONFIRM inquiry is not a generic decryption failure")
+    func decryptionFailed_ignoredConfirm_mapsToUnavailable() {
+        let mapped = UserFacingErrorMapper.message(
+            for: GPGError.decryptionFailed("gpg: ignoring gpg-agent inquiry `CONFIRM 1"),
+            context: .decrypt
+        )
+        #expect(mapped == AppLocalization.string("error_smartcard_unavailable"))
+    }
+
+    @Test("Bad PIN decryption failure maps to the pin error")
+    func decryptionFailed_badPIN_mapsToPinInvalid() {
+        let mapped = UserFacingErrorMapper.message(
+            for: GPGError.decryptionFailed("gpg: public key decryption failed: Bad PIN"),
+            context: .decrypt
+        )
+        #expect(mapped == AppLocalization.string("error_smartcard_pin_invalid"))
+    }
+
+    @Test("NO_SECKEY without a card signal still requires a private key")
+    func validateDecryptionOutcome_noSecretKey_staysKeyNotFound() {
+        let fixture = """
+        gpg: public key decryption failed: No secret key
+        [GNUPG:] NO_SECKEY
+        [GNUPG:] DECRYPTION_FAILED
+        """
+        do {
+            try GPGService.validateDecryptionOutcome(
+                exitCode: 2,
+                stdout: nil,
+                stderr: fixture,
+                preferredSecretKey: "SOFTWARE",
+                normalizedPreferredSecretKey: "SOFTWARE"
+            )
+            Issue.record("Expected missing key")
+        } catch GPGError.keyNotFound {
+            let mapped = UserFacingErrorMapper.message(
+                for: GPGError.keyNotFound("SOFTWARE"),
+                context: .decrypt
+            )
+            #expect(mapped == AppLocalization.string("error_decryption_requires_private_key"))
+        } catch {
+            Issue.record("Expected keyNotFound, got \(error)")
+        }
+    }
+
+    @Test("Unclassified decryption failure stays generic")
+    func decryptionFailed_unknown_staysGeneric() {
+        let mapped = UserFacingErrorMapper.message(
+            for: GPGError.decryptionFailed("Unknown error"),
+            context: .decrypt
+        )
+        #expect(mapped == AppLocalization.string("error_decryption_failed"))
+    }
 }

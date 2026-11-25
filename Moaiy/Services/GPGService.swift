@@ -460,6 +460,59 @@ final class GPGService: SubkeyManaging {
         }
     }
 
+    private var usesBundledGPG: Bool {
+        gpgURL?.path.contains("/gpg.bundle/") == true
+    }
+
+    private func bundledExecutable(named name: String) -> URL? {
+        guard let binDirectory = gpgURL?.deletingLastPathComponent() else { return nil }
+        let url = binDirectory.appendingPathComponent(name)
+        guard FileManager.default.isExecutableFile(atPath: url.path) else { return nil }
+        return url
+    }
+
+    /// Agent configuration for the app-managed keyring.
+    /// Paths are program locations only. This never launches `scdaemon --daemon`
+    /// and never contains a PIN or passphrase.
+    nonisolated static func managedAgentConfiguration(scdaemonPath: String?, pinentryPath: String?) -> String {
+        var lines = ["allow-loopback-pinentry"]
+        if let scdaemonPath, !scdaemonPath.isEmpty {
+            lines.append("scdaemon-program \(gpgAgentConfigToken(scdaemonPath))")
+        }
+        if let pinentryPath, !pinentryPath.isEmpty {
+            lines.append("pinentry-program \(gpgAgentConfigToken(pinentryPath))")
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    nonisolated static func encryptedRecipientProbeArguments(outputPath: String, sourcePath: String) -> [String] {
+        [
+            "--decrypt",
+            "--batch",
+            "--yes",
+            "--no-tty",
+            "--pinentry-mode", "cancel",
+            "--status-fd", "1",
+            "--output", outputPath,
+            "--",
+            sourcePath
+        ]
+    }
+
+    nonisolated private static func secureStringIsEmpty(_ value: SecureString) -> Bool {
+        value.withUnsafeUTF8 { $0.isEmpty }
+    }
+
+    nonisolated private static func gpgAgentConfigToken(_ path: String) -> String {
+        guard path.contains(where: { $0.isWhitespace || $0 == "#" || $0 == "\"" }) else {
+            return path
+        }
+        let escaped = path
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
+    }
+
     private func registerAgentTerminationHook() {
         guard let binDirectory = gpgURL?.deletingLastPathComponent() else { return }
         let gpgconfURL = binDirectory.appendingPathComponent("gpgconf")
@@ -606,7 +659,12 @@ final class GPGService: SubkeyManaging {
         guard gpgHome != nil else { return }
         guard gpgAgentURL != nil, gpgConnectAgentURL != nil else { return }
 
+        let configurationChanged = try writeManagedAgentConfigurationIfNeeded()
+
         if await canConnectToGPGAgent() {
+            if configurationChanged {
+                await reloadManagedAgentConfiguration()
+            }
             return
         }
 
@@ -629,6 +687,39 @@ final class GPGService: SubkeyManaging {
 
         guard await canConnectToGPGAgent() else {
             throw GPGError.executionFailed("gpg-agent is not reachable after launch")
+        }
+    }
+
+    private func writeManagedAgentConfigurationIfNeeded() throws -> Bool {
+        guard !isUsingExternalGPGHome, let gpgHome else { return false }
+        let scdaemonPath = usesBundledGPG ? bundledExecutable(named: "scdaemon")?.path : nil
+        let pinentryPath = bundledExecutable(named: "pinentry")?.path
+        let contents = Self.managedAgentConfiguration(scdaemonPath: scdaemonPath, pinentryPath: pinentryPath)
+        let url = gpgHome.appendingPathComponent("gpg-agent.conf")
+        if let existing = try? String(contentsOf: url, encoding: .utf8), existing == contents {
+            return false
+        }
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        return true
+    }
+
+    private func reloadManagedAgentConfiguration() async {
+        guard let gpgConnectAgentURL else { return }
+        _ = try? await processExecutor.execute(
+            executableURL: gpgConnectAgentURL,
+            arguments: ["RELOADAGENT", "/bye"],
+            environment: [:],
+            gpgHome: gpgHome,
+            input: nil,
+            timeout: 5
+        )
+    }
+
+    private func ensureBundledSmartCardDecryptRuntime() throws {
+        guard usesBundledGPG else { return }
+        guard bundledExecutable(named: "scdaemon") != nil, bundledExecutable(named: "pinentry") != nil else {
+            throw GPGError.smartCardUnavailable
         }
     }
 
@@ -1996,6 +2087,9 @@ final class GPGService: SubkeyManaging {
             let combinedOutput = [stderr, stdout]
                 .compactMap { $0 }
                 .joined(separator: "\n")
+            if let smartCardFailure = SmartCardFailureClassifier.classification(of: combinedOutput) {
+                throw smartCardFailure.gpgError
+            }
             if Self.containsNoSecretKeySignalStatic(combinedOutput) {
                 throw GPGError.keyNotFound(preferredSecretKey ?? "secret-key")
             }
@@ -2007,6 +2101,9 @@ final class GPGService: SubkeyManaging {
             .compactMap { $0 }
             .joined(separator: "\n")
         guard statusOutput.contains("[GNUPG:] DECRYPTION_OKAY") else {
+            if let smartCardFailure = SmartCardFailureClassifier.classification(of: statusOutput) {
+                throw smartCardFailure.gpgError
+            }
             if Self.containsNoSecretKeySignalStatic(statusOutput) {
                 throw GPGError.keyNotFound(preferredSecretKey ?? "secret-key")
             }
@@ -2074,8 +2171,12 @@ final class GPGService: SubkeyManaging {
         destinationURL: URL,
         passphrase: SecureString? = nil,
         preferredSecretKey: String? = nil,
+        usesHardwareToken: Bool = false,
         progressHandler: (@Sendable (CryptoProgress) -> Void)? = nil
     ) async throws -> URL {
+        if usesHardwareToken {
+            try ensureBundledSmartCardDecryptRuntime()
+        }
         try await ensureGPGAgentRunningIfNeeded()
         guard let gpgURL else {
             throw GPGError.gpgNotFound
@@ -2095,6 +2196,36 @@ final class GPGService: SubkeyManaging {
         }
 
         var activePassphrase = passphrase
+        if usesHardwareToken {
+            guard let activePassphrase, !Self.secureStringIsEmpty(activePassphrase) else {
+                throw GPGError.smartCardPinInvalid
+            }
+            logger.info("Smart card file decrypt using bundled pinentry")
+            let capturedPreferredKey = preferredSecretKey
+            let capturedNormalizedKey = normalizedPreferredSecretKey
+            return try await streamingPipeline.executeStreamingFileOperation(
+                executableURL: gpgURL,
+                arguments: arguments,
+                environment: [:],
+                gpgHome: gpgHome,
+                sourceURL: sourceURL,
+                destinationURL: destinationURL,
+                isDecryption: true,
+                passphrase: activePassphrase,
+                passphraseDelivery: .hardwarePinentryToken,
+                validateCompletion: { exitCode, stderr in
+                    try Self.validateDecryptionOutcome(
+                        exitCode: exitCode,
+                        stdout: nil,
+                        stderr: stderr,
+                        preferredSecretKey: capturedPreferredKey,
+                        normalizedPreferredSecretKey: capturedNormalizedKey
+                    )
+                },
+                progressHandler: progressHandler
+            )
+        }
+
         if activePassphrase == nil, let normalizedPreferredSecretKey {
             let targetFpr = try await resolvePrimaryFingerprint(for: normalizedPreferredSecretKey)
             do {
@@ -2124,6 +2255,7 @@ final class GPGService: SubkeyManaging {
             destinationURL: destinationURL,
             isDecryption: true,
             passphrase: loopbackPassphrase,
+            passphraseDelivery: .loopbackFile,
             validateCompletion: { exitCode, stderr in
                 try Self.validateDecryptionOutcome(
                     exitCode: exitCode,
@@ -2163,14 +2295,21 @@ final class GPGService: SubkeyManaging {
         sourceURL: URL,
         destinationURL: URL,
         passphrase: String,
-        preferredSecretKey: String? = nil
+        preferredSecretKey: String? = nil,
+        usesHardwareToken: Bool = false
     ) async throws -> URL {
+        if usesHardwareToken {
+            try ensureBundledSmartCardDecryptRuntime()
+            guard !passphrase.isEmpty else {
+                throw GPGError.smartCardPinInvalid
+            }
+        }
         try await ensureGPGAgentRunningIfNeeded()
 
         let normalizedPreferredSecretKey = preferredSecretKey.flatMap { normalizeKeyReference($0) }
 
         var resolvedPassphrase = passphrase
-        if resolvedPassphrase.isEmpty, let normalizedPreferredSecretKey {
+        if !usesHardwareToken, resolvedPassphrase.isEmpty, let normalizedPreferredSecretKey {
             let targetFpr = try await resolvePrimaryFingerprint(for: normalizedPreferredSecretKey)
             do {
                 if let saved = try await KeychainService.shared.retrievePassphrase(for: targetFpr) {
@@ -2195,14 +2334,28 @@ final class GPGService: SubkeyManaging {
 
         try fileManager.copyItem(at: sourceURL, to: stagedSourceURL)
 
+        var hardwareTokenURL: URL?
+        defer {
+            if let hardwareTokenURL {
+                HardwarePINTokenFile.shred(hardwareTokenURL)
+            }
+        }
+
         var arguments = [
             "--decrypt",
             "--batch",
             "--yes",
-            "--pinentry-mode", "loopback",
-            "--passphrase-fd", "0",
             "--status-fd", "1"
         ]
+        if usesHardwareToken {
+            guard let gpgHome else {
+                throw GPGError.smartCardUnavailable
+            }
+            hardwareTokenURL = try HardwarePINTokenFile.write(SecureString(passphrase), in: gpgHome)
+            arguments.append(contentsOf: ["--no-tty", "--pinentry-mode", "ask"])
+        } else {
+            arguments.append(contentsOf: ["--pinentry-mode", "loopback", "--passphrase-fd", "0"])
+        }
 
         if let normalizedPreferredSecretKey {
             arguments.append(contentsOf: ["--try-secret-key", normalizedPreferredSecretKey])
@@ -2212,7 +2365,7 @@ final class GPGService: SubkeyManaging {
 
         let result = try await executeGPG(
             arguments: arguments,
-            input: resolvedPassphrase + "\n"
+            input: usesHardwareToken ? "" : resolvedPassphrase + "\n"
         )
 
         try Self.validateDecryptionOutcome(
@@ -2301,6 +2454,10 @@ final class GPGService: SubkeyManaging {
     /// Checks whether a smart card (YubiKey/OpenPGP Card) is currently available.
     /// Uses scdaemon SERIALNO probing to avoid mutating card state.
     func checkSmartCardPresence() async throws -> SmartCardPresence {
+        if usesBundledGPG, bundledExecutable(named: "scdaemon") == nil {
+            throw GPGError.smartCardUnavailable
+        }
+        try await ensureGPGAgentRunningIfNeeded()
         guard let gpgConnectAgentURL else {
             throw GPGError.smartCardUnavailable
         }
@@ -2323,14 +2480,11 @@ final class GPGService: SubkeyManaging {
             return SmartCardPresence(serialNumber: serial)
         }
 
-        if containsSmartCardNotPresentSignal(output) {
-            throw GPGError.smartCardNotPresent
-        }
-        if containsSmartCardUnavailableSignal(output) {
-            throw GPGError.smartCardUnavailable
+        if let smartCardFailure = SmartCardFailureClassifier.classification(of: output) {
+            throw smartCardFailure.gpgError
         }
 
-        throw GPGError.executionFailed(output.isEmpty ? "Failed to check smart card presence" : output)
+        throw GPGError.smartCardUnavailable
     }
 
     /// Learns smart-card shadow key stubs and auto-completes public keys from card URL when available.
@@ -3690,17 +3844,11 @@ final class GPGService: SubkeyManaging {
     }
 
     private func containsSmartCardNotPresentSignal(_ output: String) -> Bool {
-        let lowercased = output.lowercased()
-        return lowercased.contains("card not present")
-            || lowercased.contains("card removed")
-            || lowercased.contains("no data <scd>")
+        SmartCardFailureClassifier.classification(of: output) == .notPresent
     }
 
     private func containsSmartCardUnavailableSignal(_ output: String) -> Bool {
-        let lowercased = output.lowercased()
-        return lowercased.contains("operation not supported by device")
-            || lowercased.contains("openpgp card not available")
-            || lowercased.contains("no smartcard daemon")
+        SmartCardFailureClassifier.classification(of: output) == .unavailable
     }
 
     nonisolated static func containsNoSecretKeySignalStatic(_ output: String) -> Bool {
@@ -3788,19 +3936,11 @@ final class GPGService: SubkeyManaging {
         try fileManager.copyItem(at: sourceURL, to: stagedSourceURL)
 
         let result = try await executeGPG(
-            arguments: [
-                "--decrypt",
-                "--batch",
-                "--yes",
-                "--no-tty",
-                "--pinentry-mode", "loopback",
-                "--passphrase-fd", "0",
-                "--status-fd", "1",
-                "--output", stagedOutputURL.path,
-                "--",
-                stagedSourceURL.path
-            ],
-            input: "\n",
+            arguments: Self.encryptedRecipientProbeArguments(
+                outputPath: stagedOutputURL.path,
+                sourcePath: stagedSourceURL.path
+            ),
+            input: "",
             timeout: 30
         )
 
