@@ -191,10 +191,36 @@ check_signatures() {
         else
             fail "GPGHelper.entitlements missing app-sandbox or inherit keys"
         fi
-        if grep -q "com.apple.security.smartcard" "$helper_ent" && grep -q "com.apple.security.device.usb" "$helper_ent"; then
-            pass "Helper entitlements include smartcard and USB for ctkpcscd"
+        if grep -q "com.apple.security.smartcard" "$helper_ent" || grep -q "com.apple.security.device.usb" "$helper_ent"; then
+            fail "GPGHelper.entitlements must stay inherit-only (no smartcard or USB)"
         else
-            fail "GPGHelper.entitlements missing smartcard or USB keys (ctkpcscd checks the helper signature)"
+            pass "GPGHelper.entitlements is inherit-only"
+        fi
+        local scdaemon_ent="$PROJECT_ROOT/Moaiy/Resources/GPGScdaemon.entitlements"
+        local scdaemon_plist="$PROJECT_ROOT/Moaiy/Resources/ScdaemonInfo.plist"
+        if [ -f "$scdaemon_ent" ] && plutil -lint "$scdaemon_ent" >/dev/null 2>&1 \
+            && grep -q "com.apple.security.app-sandbox" "$scdaemon_ent" \
+            && grep -q "com.apple.security.inherit" "$scdaemon_ent" \
+            && grep -q "com.apple.security.smartcard" "$scdaemon_ent" \
+            && grep -q "com.apple.security.device.usb" "$scdaemon_ent" \
+            && ! grep -q "disable-library-validation" "$scdaemon_ent"; then
+            pass "scdaemon entitlements are sandbox, inherit, smartcard, and USB"
+        else
+            fail "GPGScdaemon.entitlements missing sandbox, inherit, smartcard, or USB"
+        fi
+        if [ -f "$scdaemon_plist" ] && grep -q "com.moaiy.app.scdaemon" "$scdaemon_plist"; then
+            pass "scdaemon Info.plist bundle id is com.moaiy.app.scdaemon"
+        else
+            fail "ScdaemonInfo.plist missing CFBundleIdentifier com.moaiy.app.scdaemon"
+        fi
+        local sign_script="$PROJECT_ROOT/scripts/sign_embedded_gpg_bundle.sh"
+        if grep -q "GPGHelper.entitlements" "$sign_script" \
+            && grep -q "GPGScdaemon.entitlements" "$sign_script" \
+            && grep -q 'exe_name" == "scdaemon"' "$sign_script" \
+            && grep -q "ScdaemonInfo.plist" "$sign_script"; then
+            pass "Only scdaemon is signed with device entitlements and a bundle id"
+        else
+            fail "sign_embedded_gpg_bundle.sh does not keep other helpers inherit-only"
         fi
     else
         fail "GPGHelper.entitlements missing or invalid plist"

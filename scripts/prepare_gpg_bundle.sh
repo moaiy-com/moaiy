@@ -301,6 +301,8 @@ sign_binaries() {
     local sign_identity="${GPG_CODESIGN_IDENTITY:--}"
     local helper_entitlements="$PROJECT_ROOT/Moaiy/Resources/GPGHelper.entitlements"
     local sign_for_sandbox="${SIGN_FOR_APP_SANDBOX:-0}"
+    # Executables are signed by scripts/sign_embedded_gpg_bundle.sh so only
+    # scdaemon receives device entitlements. Other helpers stay inherit-only.
 
     # Sign libraries first (inside-out signing, no entitlements on dylibs)
     for lib in "$TEMP_BUNDLE/lib"/*.dylib; do
@@ -326,20 +328,24 @@ sign_binaries() {
         if [ -f "$exe" ]; then
             local exe_name=$(basename "$exe")
             
-            # Remove existing signature
-            codesign --remove-signature "$exe" 2>/dev/null || true
-            
             if [ "$sign_for_sandbox" = "1" ]; then
                 if [ ! -f "$helper_entitlements" ]; then
                     error "Helper entitlements missing at $helper_entitlements"
                 fi
-                if codesign --force --entitlements "$helper_entitlements" -s "$sign_identity" "$exe" 2>/dev/null; then
-                    success "Signed (with sandbox inheritance): $exe_name"
+                if EXPANDED_CODE_SIGN_IDENTITY="$sign_identity" \
+                    "$PROJECT_ROOT/scripts/sign_embedded_gpg_bundle.sh" --executable "$exe"; then
+                    if [ "$exe_name" = "scdaemon" ]; then
+                        success "Signed scdaemon with smartcard entitlements and bundle id: $exe_name"
+                    else
+                        success "Signed (inherit-only sandbox): $exe_name"
+                    fi
                     ((sign_count+=1))
                 else
                     warning "Failed to sign: $exe_name"
                 fi
             else
+                # Ad-hoc signature for source-tree CLI/test execution. No inherit.
+                codesign --remove-signature "$exe" 2>/dev/null || true
                 if codesign --force -s "$sign_identity" "$exe" 2>/dev/null; then
                     success "Signed: $exe_name"
                     ((sign_count+=1))

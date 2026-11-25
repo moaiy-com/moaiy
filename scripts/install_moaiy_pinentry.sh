@@ -2,7 +2,8 @@
 #
 # Compile the bundled pinentry into an already-copied gpg.bundle.
 # The helper is signed afterwards by scripts/sign_embedded_gpg_bundle.sh
-# with GPGHelper.entitlements (sandbox, inherit, smartcard, USB), or ad-hoc when the host app is unsigned.
+# with inherit-only GPGHelper.entitlements, or ad-hoc when the host app is unsigned.
+# pinentry must not receive smartcard or USB entitlements; only scdaemon does.
 
 set -euo pipefail
 

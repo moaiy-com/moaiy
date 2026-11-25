@@ -67,7 +67,7 @@ Sandboxed decryption of a file encrypted to a key on an inserted OpenPGP card (Y
 - `com.apple.security.device.usb` — the card is a USB CCID device.
 - `com.apple.security.smartcard` — CryptoTokenKit / PC/SC access from the sandbox.
 
-The user consents by inserting the card and entering the User PIN in the in-app sheet. The PIN is not stored in the Keychain and is not passed on a command line. `gpg-agent`, `scdaemon`, and `pinentry` are signed with `com.apple.security.app-sandbox`, `com.apple.security.inherit`, `com.apple.security.smartcard`, and `com.apple.security.device.usb`. `inherit` copies the parent's sandbox profile, but `ctkpcscd` refuses a sandboxed PC/SC client unless `com.apple.security.smartcard` is on that helper's own signature. The same two device entitlements are therefore on `GPGHelper.entitlements`. The app does not disable library validation.
+The user consents by inserting the card and entering the User PIN in the in-app sheet. The PIN is not stored in the Keychain and is not passed on a command line. `gpg`, `gpg-agent`, `gpgconf`, `gpg-connect-agent`, and `pinentry` stay on `com.apple.security.app-sandbox` plus `com.apple.security.inherit` only. Adding device entitlements to those tools makes `libsecinit` look for a `CFBundleIdentifier` they do not have, and they SIGTRAP. `scdaemon` is the exception: `ctkpcscd` reads `com.apple.security.smartcard` from the child signature, which `inherit` does not supply. `scdaemon` is signed with sandbox, inherit, smartcard, and USB, and its code signature carries `CFBundleIdentifier` `com.moaiy.app.scdaemon`. The app does not disable library validation.
 
 ## 4. Hardware Key Support (Pro Scope)
 

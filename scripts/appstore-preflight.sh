@@ -6,6 +6,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_PATH="$ROOT_DIR/Moaiy/Moaiy.xcodeproj"
 ENTITLEMENTS_PATH="$ROOT_DIR/Moaiy/Resources/Entitlements.entitlements"
 HELPER_ENTITLEMENTS_PATH="$ROOT_DIR/Moaiy/Resources/GPGHelper.entitlements"
+SCDAEMON_ENTITLEMENTS_PATH="$ROOT_DIR/Moaiy/Resources/GPGScdaemon.entitlements"
+SCDAEMON_INFO_PLIST_PATH="$ROOT_DIR/Moaiy/Resources/ScdaemonInfo.plist"
 PRIVACY_MANIFEST_PATH="$ROOT_DIR/Moaiy/PrivacyInfo.xcprivacy"
 INFO_PLIST_PATH="$ROOT_DIR/Moaiy/Info.plist"
 
@@ -31,7 +33,7 @@ if [[ ! -d "$PROJECT_PATH" ]]; then
 fi
 
 echo "==> [1/4] Validating MAS entitlements & privacy manifest..."
-for plist_file in "$ENTITLEMENTS_PATH" "$HELPER_ENTITLEMENTS_PATH" "$PRIVACY_MANIFEST_PATH" "$INFO_PLIST_PATH"; do
+for plist_file in "$ENTITLEMENTS_PATH" "$HELPER_ENTITLEMENTS_PATH" "$SCDAEMON_ENTITLEMENTS_PATH" "$SCDAEMON_INFO_PLIST_PATH" "$PRIVACY_MANIFEST_PATH" "$INFO_PLIST_PATH"; do
   if [[ ! -f "$plist_file" ]]; then
     echo "ERROR: required plist missing at $plist_file"
     exit 1
@@ -49,12 +51,25 @@ if ! grep -q "com.apple.security.inherit" "$HELPER_ENTITLEMENTS_PATH"; then
   exit 1
 fi
 
-for helper_key in "com.apple.security.smartcard" "com.apple.security.device.usb"; do
-  if ! grep -q "$helper_key" "$HELPER_ENTITLEMENTS_PATH"; then
-    echo "ERROR: GPGHelper.entitlements is missing $helper_key (ctkpcscd checks the helper signature, not the parent app)."
+for forbidden_helper_key in "com.apple.security.smartcard" "com.apple.security.device.usb"; do
+  if grep -q "$forbidden_helper_key" "$HELPER_ENTITLEMENTS_PATH"; then
+    echo "ERROR: GPGHelper.entitlements must stay inherit-only; found $forbidden_helper_key."
+    echo "Device entitlements on gpg/gpg-agent make secinit SIGTRAP (no CFBundleIdentifier)."
     exit 1
   fi
 done
+
+for scdaemon_key in "com.apple.security.app-sandbox" "com.apple.security.inherit" "com.apple.security.smartcard" "com.apple.security.device.usb"; do
+  if ! grep -q "$scdaemon_key" "$SCDAEMON_ENTITLEMENTS_PATH"; then
+    echo "ERROR: GPGScdaemon.entitlements is missing $scdaemon_key."
+    exit 1
+  fi
+done
+
+if ! grep -q "com.moaiy.app.scdaemon" "$SCDAEMON_INFO_PLIST_PATH"; then
+  echo "ERROR: ScdaemonInfo.plist is missing CFBundleIdentifier com.moaiy.app.scdaemon."
+  exit 1
+fi
 
 for required_api in "NSPrivacyAccessedAPICategoryUserDefaults" "NSPrivacyAccessedAPICategoryDiskSpace" "NSPrivacyAccessedAPICategoryFileTimestamp"; do
   if ! grep -q "$required_api" "$PRIVACY_MANIFEST_PATH"; then
