@@ -14,13 +14,13 @@
 # scdaemon is the exception. ctkpcscd checks the helper's own signature for
 # com.apple.security.smartcard, which inherit does not supply. scdaemon is
 # signed with GPGScdaemon.entitlements (sandbox + inherit + smartcard + usb).
-# Because those device entitlements are present, its code signature must also
-# carry an Info.plist with CFBundleIdentifier. That plist is
-# Moaiy/Resources/ScdaemonInfo.plist (com.moaiy.app.scdaemon). It is embedded
-# by signing a temporary one-file bundle: codesign stores the bundle Info.plist
-# in the Mach-O signature's Info.plist slot, and that signed binary is copied
-# back. Do not re-sign the bare scdaemon afterwards or the slot is dropped.
-# Do not put device entitlements on any other helper.
+# Those device entitlements make libsecinit require CFBundleIdentifier.
+# scripts/embed_macho_info_plist.py writes Moaiy/Resources/ScdaemonInfo.plist
+# into the bare bin/scdaemon as a __TEXT,__info_plist section (the bytes otool
+# -P prints). codesign then hashes that section into the signature info slot,
+# so `codesign -d` does not report Info.plist=not bound. Signing a temporary
+# .app and copying the binary back does not do this. Other helpers stay
+# inherit-only. Do not put device entitlements on them.
 #
 # Why this runs on the embedded .app bundle copy (and not the raw source tree copy):
 # macOS libSystem_secinit aborts any executable signed with
@@ -49,23 +49,16 @@ fi
 
 sign_scdaemon_with_bundle_identifier() {
   local exe="$1"
-  local work
-  work="$(mktemp -d "${TMPDIR:-/tmp}/moaiy-scdaemon-sign.XXXXXX")"
-  mkdir -p "$work/Scdaemon.app/Contents/MacOS"
-  cp "$exe" "$work/Scdaemon.app/Contents/MacOS/scdaemon"
-  cp "$SCDAEMON_INFO_PLIST" "$work/Scdaemon.app/Contents/Info.plist"
-  chmod 755 "$work/Scdaemon.app/Contents/MacOS/scdaemon"
-  codesign --remove-signature "$work/Scdaemon.app/Contents/MacOS/scdaemon" 2>/dev/null || true
-  # Signing the bundle (not the bare Mach-O) copies ScdaemonInfo.plist into the
-  # code signature Info.plist slot, including CFBundleIdentifier.
+  # Section first. codesign --remove-signature drops the signature blob only;
+  # __TEXT,__info_plist stays, and the following codesign binds it.
+  python3 "$PROJECT_ROOT/scripts/embed_macho_info_plist.py" "$exe" "$SCDAEMON_INFO_PLIST"
+  codesign --remove-signature "$exe" 2>/dev/null || true
   codesign --force --timestamp=none \
     --identifier "com.moaiy.app.scdaemon" \
     --entitlements "$SCDAEMON_ENTITLEMENTS" \
     -s "$SIGN_IDENTITY" \
-    "$work/Scdaemon.app"
-  cp "$work/Scdaemon.app/Contents/MacOS/scdaemon" "$exe"
+    "$exe"
   chmod 755 "$exe"
-  rm -rf "$work"
 }
 
 sign_one_executable() {

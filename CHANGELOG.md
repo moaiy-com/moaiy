@@ -9,12 +9,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 - OpenPGP card / YubiKey file decryption now asks for the User PIN in the app, uses a bundled `scdaemon` and pinentry so GnuPG `CONFIRM` is answered, and shows a specific smartcard, PIN, or missing-key error instead of a generic decryption failure when the cause is known.
-- Sandboxed builds can reach a user-inserted card through `com.apple.security.device.usb` and `com.apple.security.smartcard` on the app and on `scdaemon` only. Other bundled helpers stay inherit-only so `gpg` does not SIGTRAP in `libsecinit`. `scdaemon`'s signature also carries `CFBundleIdentifier` `com.moaiy.app.scdaemon`.
+- Sandboxed builds can reach a user-inserted card through `com.apple.security.device.usb` and `com.apple.security.smartcard` on the app and on `scdaemon` only. Other bundled helpers stay inherit-only so `gpg` does not SIGTRAP in `libsecinit`. `scdaemon` has `CFBundleIdentifier` `com.moaiy.app.scdaemon` in a `__TEXT,__info_plist` section, which `codesign` binds into the signature.
 - App-managed secret key listing starts the bundled `gpg-agent` before `gpg --list-secret-keys`, so the key list does not hang waiting for an agent socket the sandboxed `gpg` cannot create.
 
 ### Fixed (zh-Hans)
 - 智能卡 / YubiKey 文件解密会在应用内询问 User PIN，使用捆绑的 `scdaemon` 与 pinentry 应答 GnuPG `CONFIRM`，并在原因明确时显示智能卡、PIN 或缺少私钥的具体错误，而不是笼统的解密失败。
-- 沙盒构建通过 `com.apple.security.device.usb` 与 `com.apple.security.smartcard` 访问用户插入的卡。这两项只签在主程序和 `scdaemon` 上；其余捆绑辅助程序仍只有 `inherit`，避免 `gpg` 在 `libsecinit` 里 SIGTRAP。`scdaemon` 的签名还带有 `CFBundleIdentifier` `com.moaiy.app.scdaemon`。
+- 沙盒构建通过 `com.apple.security.device.usb` 与 `com.apple.security.smartcard` 访问用户插入的卡。这两项只签在主程序和 `scdaemon` 上；其余捆绑辅助程序仍只有 `inherit`，避免 `gpg` 在 `libsecinit` 里 SIGTRAP。`scdaemon` 的 `__TEXT,__info_plist` 段带有 `CFBundleIdentifier` `com.moaiy.app.scdaemon`，并由 `codesign` 写入签名。
 - 应用托管的秘密钥列表会在 `gpg --list-secret-keys` 之前启动捆绑的 `gpg-agent`，避免沙盒里的 `gpg` 自己等待无法创建的 agent 套接字而卡住。
 
 ## [1.0.2] - 2026-11-23

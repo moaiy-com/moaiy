@@ -10,7 +10,7 @@
     "gpg-agent": "e3e912e501c166fec75c8440f7207d46905964ebe82f41389e2fdd3c7eac6391",
     "gpg-connect-agent": "befe3d8a1fec9d97b12daf11229c794009e20c98f0235c844a0ca8ba4d85a147",
     "gpgconf": "7e894de29c95afa3cb38440601f48c72b113be6ef6a52a4e0f12dc44b5178f66",
-    "scdaemon": "cb56ef1da319cd0e237447f382d2924d7a629a40c4f98550e410020074966613",
+    "scdaemon": "b9824517b180b2798e6b38fb7fde30a3df447751cb17df122a6ff3ebde7f76e2",
     "libassuan.9.dylib": "5141722639ae3041acbeb002398fbbd3c7e5a735c46876123fbf8bb3e0542b0d",
     "libgcrypt.20.dylib": "8f417b308bbb0ab8c0d6d6d9b117cfdb4411b2700cb46ece710adb8175feeeb3",
     "libgpg-error.0.dylib": "d8bcb0bbfb48910cd94e5d39846b0f373114c7bd68de26d04a379c09fbf0a862",

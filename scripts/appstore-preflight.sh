@@ -84,6 +84,31 @@ if ! grep -q "ITSAppUsesNonExemptEncryption" "$INFO_PLIST_PATH"; then
 fi
 
 echo "==> [2/4] Validating bundled GPG integrity & MAS helper signing script..."
+SCDAEMON_BIN="$ROOT_DIR/Moaiy/Resources/gpg.bundle/bin/scdaemon"
+if ! python3 "$ROOT_DIR/scripts/check_scdaemon_info_plist.py" "$SCDAEMON_BIN"; then
+  echo "ERROR: scdaemon Info.plist is not bound (codesign would report Info.plist=not bound)."
+  exit 1
+fi
+if command -v codesign >/dev/null 2>&1; then
+  codesign_detail="$(codesign -d --verbose=2 "$SCDAEMON_BIN" 2>&1 || true)"
+  printf '%s\n' "$codesign_detail"
+  if printf '%s\n' "$codesign_detail" | grep -q "Info.plist=not bound"; then
+    echo "ERROR: codesign reports Info.plist=not bound for scdaemon."
+    exit 1
+  fi
+  if ! printf '%s\n' "$codesign_detail" | grep -q "Identifier=com.moaiy.app.scdaemon"; then
+    echo "ERROR: scdaemon codesign identifier is not com.moaiy.app.scdaemon."
+    exit 1
+  fi
+fi
+if command -v otool >/dev/null 2>&1; then
+  otool_plist="$(otool -P "$SCDAEMON_BIN" 2>/dev/null || true)"
+  printf '%s\n' "$otool_plist"
+  if ! printf '%s\n' "$otool_plist" | grep -q "com.moaiy.app.scdaemon"; then
+    echo "ERROR: otool -P did not print CFBundleIdentifier com.moaiy.app.scdaemon."
+    exit 1
+  fi
+fi
 "$ROOT_DIR/scripts/verify_gpg_bundle.sh" >/dev/null
 
 echo "==> [3/4] Checking external support/privacy URLs referenced in app..."

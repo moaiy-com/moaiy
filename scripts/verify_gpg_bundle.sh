@@ -78,6 +78,46 @@ check_bundle_exists() {
     fi
 }
 
+# scdaemon must carry a real __TEXT,__info_plist, and its signature info slot
+# must hash that plist. Identifier-only signing leaves `Info.plist=not bound`.
+check_scdaemon_info_plist() {
+    section "Checking scdaemon Info.plist binding"
+    local scdaemon="$BUNDLE_PATH/bin/scdaemon"
+    if ! python3 "$PROJECT_ROOT/scripts/check_scdaemon_info_plist.py" "$scdaemon"; then
+        fail "scdaemon Info.plist is not bound in the Mach-O signature"
+        return
+    fi
+    pass "scdaemon __info_plist section and signature info slot match com.moaiy.app.scdaemon"
+
+    if command -v codesign >/dev/null 2>&1; then
+        local detail
+        detail="$(codesign -d --verbose=2 "$scdaemon" 2>&1 || true)"
+        printf '%s\n' "$detail"
+        if printf '%s\n' "$detail" | grep -q "Info.plist=not bound"; then
+            fail "codesign reports Info.plist=not bound for scdaemon"
+        elif ! printf '%s\n' "$detail" | grep -q "Identifier=com.moaiy.app.scdaemon"; then
+            fail "codesign identifier for scdaemon is not com.moaiy.app.scdaemon"
+        else
+            pass "codesign does not report Info.plist=not bound"
+        fi
+    else
+        warn "codesign not available; Mach-O info-slot check used instead"
+    fi
+
+    if command -v otool >/dev/null 2>&1; then
+        local dumped
+        dumped="$(otool -P "$scdaemon" 2>/dev/null || true)"
+        printf '%s\n' "$dumped"
+        if printf '%s\n' "$dumped" | grep -q "com.moaiy.app.scdaemon"; then
+            pass "otool -P prints scdaemon CFBundleIdentifier"
+        else
+            fail "otool -P did not print com.moaiy.app.scdaemon"
+        fi
+    else
+        warn "otool not available; __info_plist section was checked directly"
+    fi
+}
+
 # Check executables
 check_executables() {
     section "Checking Executables"
@@ -479,6 +519,7 @@ main() {
     check_libraries
     check_library_paths
     check_signatures
+    check_scdaemon_info_plist
     test_gpg_execution
     check_bundle_size
     verify_or_update_manifest "$update_manifest"
