@@ -67,7 +67,7 @@ Sandboxed decryption of a file encrypted to a key on an inserted OpenPGP card (Y
 - `com.apple.security.device.usb` — the card is a USB CCID device.
 - `com.apple.security.smartcard` — CryptoTokenKit / PC/SC access from the sandbox.
 
-The user consents by inserting the card and entering the User PIN in the in-app sheet. The PIN is not stored in the Keychain and is not passed on a command line. `gpg-agent`, `scdaemon`, and `pinentry` keep only `com.apple.security.app-sandbox` and `com.apple.security.inherit`; they do not receive extra device entitlements and the app does not disable library validation.
+The user consents by inserting the card and entering the User PIN in the in-app sheet. The PIN is not stored in the Keychain and is not passed on a command line. `gpg-agent`, `scdaemon`, and `pinentry` are signed with `com.apple.security.app-sandbox`, `com.apple.security.inherit`, `com.apple.security.smartcard`, and `com.apple.security.device.usb`. `inherit` copies the parent's sandbox profile, but `ctkpcscd` refuses a sandboxed PC/SC client unless `com.apple.security.smartcard` is on that helper's own signature. The same two device entitlements are therefore on `GPGHelper.entitlements`. The app does not disable library validation.
 
 ## 4. Hardware Key Support (Pro Scope)
 

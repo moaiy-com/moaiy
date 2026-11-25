@@ -191,6 +191,11 @@ check_signatures() {
         else
             fail "GPGHelper.entitlements missing app-sandbox or inherit keys"
         fi
+        if grep -q "com.apple.security.smartcard" "$helper_ent" && grep -q "com.apple.security.device.usb" "$helper_ent"; then
+            pass "Helper entitlements include smartcard and USB for ctkpcscd"
+        else
+            fail "GPGHelper.entitlements missing smartcard or USB keys (ctkpcscd checks the helper signature)"
+        fi
     else
         fail "GPGHelper.entitlements missing or invalid plist"
     fi

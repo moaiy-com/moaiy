@@ -49,6 +49,13 @@ if ! grep -q "com.apple.security.inherit" "$HELPER_ENTITLEMENTS_PATH"; then
   exit 1
 fi
 
+for helper_key in "com.apple.security.smartcard" "com.apple.security.device.usb"; do
+  if ! grep -q "$helper_key" "$HELPER_ENTITLEMENTS_PATH"; then
+    echo "ERROR: GPGHelper.entitlements is missing $helper_key (ctkpcscd checks the helper signature, not the parent app)."
+    exit 1
+  fi
+done
+
 for required_api in "NSPrivacyAccessedAPICategoryUserDefaults" "NSPrivacyAccessedAPICategoryDiskSpace" "NSPrivacyAccessedAPICategoryFileTimestamp"; do
   if ! grep -q "$required_api" "$PRIVACY_MANIFEST_PATH"; then
     echo "ERROR: PrivacyInfo.xcprivacy is missing required API category: $required_api"

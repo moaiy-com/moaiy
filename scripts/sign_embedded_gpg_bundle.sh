@@ -13,6 +13,8 @@
 # Moaiy/Resources/gpg.bundle ad-hoc signed without inherit allows CLI/test
 # tools to execute it, while signing the copy inside Moaiy.app with
 # GPGHelper.entitlements satisfies Mac App Store child process sandbox inheritance.
+# It also carries com.apple.security.smartcard and com.apple.security.device.usb.
+# ctkpcscd reads those keys from the helper's own signature; inherit does not supply them.
 
 set -euo pipefail
 

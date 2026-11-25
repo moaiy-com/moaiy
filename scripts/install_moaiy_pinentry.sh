@@ -2,7 +2,7 @@
 #
 # Compile the bundled pinentry into an already-copied gpg.bundle.
 # The helper is signed afterwards by scripts/sign_embedded_gpg_bundle.sh
-# with app-sandbox + inherit (or ad-hoc, when the host app is unsigned).
+# with GPGHelper.entitlements (sandbox, inherit, smartcard, USB), or ad-hoc when the host app is unsigned.
 
 set -euo pipefail
 
