@@ -115,6 +115,12 @@ struct SmartCardDecryptPolicyTests {
         #expect(decision == .block(mismatch))
     }
 
+    @Test("App-managed secret key listing starts the agent before gpg")
+    func appManagedKeyList_secretListingNeedsRunningAgent() {
+        #expect(GPGService.appManagedKeyListNeedsRunningAgent(secretOnly: true))
+        #expect(!GPGService.appManagedKeyListNeedsRunningAgent(secretOnly: false))
+    }
+
     @Test("Software decrypt preflight is unchanged by the smartcard gate")
     func preflight_softwareKey_proceedsWithoutMismatch() {
         let decision = KeyFileCryptoCoordinator.makeDecryptPreflightDecision(

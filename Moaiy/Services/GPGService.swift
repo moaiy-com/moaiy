@@ -485,6 +485,13 @@ final class GPGService: SubkeyManaging {
         return lines.joined(separator: "\n") + "\n"
     }
 
+    /// `--list-secret-keys` probes the agent (`agent_probe_any_secret_key` → `wait_for_sock`).
+    /// Inside the sandbox, gpg must not be the process that starts the agent: the app launches
+    /// bundled `gpg-agent --daemon` itself. Public `--list-keys` does not probe secret keys.
+    nonisolated static func appManagedKeyListNeedsRunningAgent(secretOnly: Bool) -> Bool {
+        secretOnly
+    }
+
     nonisolated static func encryptedRecipientProbeArguments(outputPath: String, sourcePath: String) -> [String] {
         [
             "--decrypt",
@@ -851,6 +858,10 @@ final class GPGService: SubkeyManaging {
     /// - Parameter secretOnly: If true, only list secret keys
     /// - Returns: Array of GPGKey objects
     func listKeys(secretOnly: Bool = false) async throws -> [GPGKey] {
+        if Self.appManagedKeyListNeedsRunningAgent(secretOnly: secretOnly) {
+            try await ensureGPGAgentRunningIfNeeded()
+        }
+
         let arguments = secretOnly
             ? ["--list-secret-keys", "--with-colons", "--fixed-list-mode"]
             : ["--list-keys", "--with-colons", "--fixed-list-mode"]
