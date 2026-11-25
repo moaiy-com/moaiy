@@ -61,6 +61,14 @@ Moaiy targets App Sandbox compatibility by design.
 - Avoid capability creep between Debug and Release.
 - Re-audit entitlements before every public release.
 
+### 3.5 OpenPGP card access
+Sandboxed decryption of a file encrypted to a key on an inserted OpenPGP card (YubiKey) needs two host-app entitlements:
+
+- `com.apple.security.device.usb` — the card is a USB CCID device.
+- `com.apple.security.smartcard` — CryptoTokenKit / PC/SC access from the sandbox.
+
+The user consents by inserting the card and entering the User PIN in the in-app sheet. The PIN is not stored in the Keychain and is not passed on a command line. `gpg-agent`, `scdaemon`, and `pinentry` keep only `com.apple.security.app-sandbox` and `com.apple.security.inherit`; they do not receive extra device entitlements and the app does not disable library validation.
+
 ## 4. Hardware Key Support (Pro Scope)
 
 If hardware token/smart card features are enabled:

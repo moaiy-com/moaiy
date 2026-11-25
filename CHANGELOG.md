@@ -7,6 +7,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+- OpenPGP card / YubiKey file decryption now asks for the User PIN in the app, uses a bundled `scdaemon` and pinentry so GnuPG `CONFIRM` is answered, and shows a specific smartcard, PIN, or missing-key error instead of a generic decryption failure when the cause is known.
+- Sandboxed builds can reach a user-inserted card through `com.apple.security.device.usb` and `com.apple.security.smartcard`. Helper binaries stay on `app-sandbox` + `inherit`.
+
+### Fixed (zh-Hans)
+- 智能卡 / YubiKey 文件解密会在应用内询问 User PIN，使用捆绑的 `scdaemon` 与 pinentry 应答 GnuPG `CONFIRM`，并在原因明确时显示智能卡、PIN 或缺少私钥的具体错误，而不是笼统的解密失败。
+- 沙盒构建通过 `com.apple.security.device.usb` 与 `com.apple.security.smartcard` 访问用户插入的卡。辅助二进制仍只使用 `app-sandbox` + `inherit`。
+
 ## [1.0.2] - 2026-11-23
 
 ### Changed
