@@ -17,13 +17,14 @@ Moaiy bundles unmodified command-line executables and shared libraries from the 
 
 ### Architectural & Licensing Boundary
 
-Moaiy (`com.moaiy.app`) is an independent macOS graphical frontend written in Swift. Moaiy **does not** statically or dynamically link against GnuPG or any GPL/LGPL C libraries. All cryptographic operations are performed at arm's length by spawning the standalone `gpg`, `gpg-agent`, `gpgconf`, and `gpg-connect-agent` executables via standard POSIX pipes (`Foundation.Process`) and parsing status-fd/colon-delimited output.
+Moaiy (`com.moaiy.app`) is an independent macOS graphical frontend written in Swift. Moaiy **does not** statically or dynamically link against GnuPG or any GPL/LGPL C libraries. All cryptographic operations are performed at arm's length by spawning the standalone `gpg`, `gpg-agent`, `gpgconf`, `gpg-connect-agent`, and `scdaemon` executables via standard POSIX pipes (`Foundation.Process`) and parsing status-fd/colon-delimited output. `bin/pinentry` is a small Moaiy-owned helper (source in `scripts/moaiy-pinentry.c`) that answers GnuPG `CONFIRM` and supplies the User PIN from a mode `0600` token file. It is not a GnuPG binary.
 
 ### Included Components & Licenses
 
 | Component | Binary / Library in `gpg.bundle` | Version | License | Upstream Project |
 | :--- | :--- | :--- | :--- | :--- |
-| **GnuPG** | `bin/gpg`, `bin/gpg-agent`, `bin/gpgconf`, `bin/gpg-connect-agent` | 2.5.21 | GPL-3.0-or-later | [gnupg.org](https://gnupg.org/) |
+| **GnuPG** | `bin/gpg`, `bin/gpg-agent`, `bin/gpgconf`, `bin/gpg-connect-agent`, `bin/scdaemon` | 2.5.21 | GPL-3.0-or-later | [gnupg.org](https://gnupg.org/) |
+| **libusb** | `lib/libusb-1.0.0.dylib` | 1.0.30 | LGPL-2.1-or-later | [libusb.info](https://libusb.info/) |
 | **Libgcrypt** | `lib/libgcrypt.20.dylib` | 1.12.2 | LGPL-2.1-or-later | [gnupg.org/software/libgcrypt](https://gnupg.org/software/libgcrypt/) |
 | **Libgpg-error** | `lib/libgpg-error.0.dylib` | 1.51+ | LGPL-2.1-or-later | [gnupg.org/software/libgpg-error](https://gnupg.org/software/libgpg-error/) |
 | **Libassuan** | `lib/libassuan.9.dylib` | 3.0+ | LGPL-2.1-or-later | [gnupg.org/software/libassuan](https://gnupg.org/software/libassuan/) |

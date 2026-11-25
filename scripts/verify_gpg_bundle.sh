@@ -82,7 +82,7 @@ check_bundle_exists() {
 check_executables() {
     section "Checking Executables"
     
-    local executables=("gpg" "gpg-agent" "gpgconf" "gpg-connect-agent")
+    local executables=("gpg" "gpg-agent" "gpgconf" "gpg-connect-agent" "scdaemon")
     
     for exe in "${executables[@]}"; do
         if [ -f "$BUNDLE_PATH/bin/$exe" ]; then
@@ -118,6 +118,7 @@ check_libraries() {
         "libnpth.0.dylib"
         "libreadline.8.dylib"
         "libintl.8.dylib"
+        "libusb-1.0.0.dylib"
     )
     
     # Check required libraries
@@ -192,6 +193,12 @@ check_signatures() {
         fi
     else
         fail "GPGHelper.entitlements missing or invalid plist"
+    fi
+
+    if [ -f "$PROJECT_ROOT/scripts/moaiy-pinentry.c" ]; then
+        pass "Bundled pinentry source present: scripts/moaiy-pinentry.c"
+    else
+        fail "Missing scripts/moaiy-pinentry.c"
     fi
 
     if [ -x "$PROJECT_ROOT/scripts/sign_embedded_gpg_bundle.sh" ]; then

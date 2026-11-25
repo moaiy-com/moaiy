@@ -125,7 +125,21 @@ copy_gpg_executables() {
     if [ $copied_count -eq 0 ]; then
         error "No GPG executables found!"
     fi
-    
+
+    local scdaemon_src=""
+    if [ -x "$HOMEBREW_PREFIX/opt/gnupg/libexec/scdaemon" ]; then
+        scdaemon_src="$HOMEBREW_PREFIX/opt/gnupg/libexec/scdaemon"
+    else
+        scdaemon_src="$(find "$HOMEBREW_PREFIX/Cellar/gnupg" -path '*/libexec/scdaemon' -type f 2>/dev/null | head -n 1 || true)"
+    fi
+    if [ -n "$scdaemon_src" ] && [ -f "$scdaemon_src" ]; then
+        cp "$scdaemon_src" "$TEMP_BUNDLE/bin/scdaemon"
+        chmod +x "$TEMP_BUNDLE/bin/scdaemon"
+        success "Copied: scdaemon"
+    else
+        error "scdaemon not found. Install GnuPG with: brew install gnupg"
+    fi
+
     info "Copied $copied_count executables"
 }
 
@@ -137,8 +151,13 @@ copy_libraries() {
     
     # Get GPG dependencies using otool
     info "Analyzing GPG dependencies..."
-    local gpg_path="$TEMP_BUNDLE/bin/gpg"
-    local deps=$(otool -L "$gpg_path" 2>/dev/null | grep "homebrew\|local" | awk '{print $1}')
+    local deps=""
+    local exe
+    for exe in "$TEMP_BUNDLE/bin"/*; do
+        if [ -f "$exe" ]; then
+            deps+=$'\n'"$(otool -L "$exe" 2>/dev/null | grep "homebrew\|local" | awk '{print $1}')"
+        fi
+    done
     
     # Copy each dependency
     for dep in $deps; do
@@ -174,6 +193,7 @@ copy_libraries() {
         "libreadline"
         "libncurses"
         "libksba"
+        "libusb"
     )
     
     for lib_prefix in "${common_libs[@]}"; do
