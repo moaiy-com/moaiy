@@ -398,4 +398,82 @@ struct GPGErrorTests {
         )
         #expect(mapped == AppLocalization.string("error_decryption_failed"))
     }
+
+    @Test(
+        "An empty reader is reported as a missing card, not unavailable support",
+        arguments: [
+            "ERR 100663408 Card not present <SCD>",
+            "ERR 100663407 Card removed <SCD>",
+            "ERR 100696144 No such device <SCD>",
+            "gpg: OpenPGP card not available: No such device",
+            "gpg: selecting card failed: No such device",
+        ]
+    )
+    func emptyReaderOutput_mapsToNotPresentMessage(fixture: String) {
+        let notPresent = AppLocalization.string("error_smartcard_not_present")
+        let unavailable = AppLocalization.string("error_smartcard_unavailable")
+
+        #expect(SmartCardFailureClassifier.classification(of: fixture) == .notPresent)
+
+        let mapped = UserFacingErrorMapper.message(
+            for: GPGError.executionFailed(fixture),
+            context: .decrypt
+        )
+        #expect(mapped == notPresent)
+        #expect(mapped != unavailable)
+        #expect(GPGError.smartCardNotPresent.localizedDescription == notPresent)
+    }
+
+    @Test("Live empty-reader SERIALNO is reported as a missing card, not unavailable support")
+    func liveEmptyReaderSerialno_mapsToNotPresentMessage() {
+        // Captured 2026-11-26 19:57 Asia/Shanghai against the app-managed
+        // S.scdaemon while the YubiKey was unplugged. Helper and sockets were
+        // up; scdaemon wrote reader_0.status=NOCARD. libgpg-error names this
+        // GPG_ERR_ENODEV but the English text is "Operation not supported by device".
+        let fixture = "ERR 100696144 Operation not supported by device <SCD>"
+        let notPresent = AppLocalization.string("error_smartcard_not_present")
+        let unavailable = AppLocalization.string("error_smartcard_unavailable")
+
+        #expect(SmartCardFailureClassifier.classification(of: fixture) == .notPresent)
+
+        let mapped = UserFacingErrorMapper.message(
+            for: GPGError.executionFailed(fixture),
+            context: .decrypt
+        )
+        #expect(mapped == notPresent)
+        #expect(mapped != unavailable)
+    }
+
+    @Test("A down scdaemon is still unavailable support, not a missing card")
+    func missingScdaemon_mapsToUnavailableNotMissingCard() {
+        let fixtures = [
+            "ERR 67108983 No SmartCard daemon",
+            "ERR 100663415 No SmartCard daemon <SCD>",
+            "ERR 67125247 can't connect to the scdaemon",
+        ]
+        let notPresent = AppLocalization.string("error_smartcard_not_present")
+        let unavailable = AppLocalization.string("error_smartcard_unavailable")
+
+        for fixture in fixtures {
+            #expect(SmartCardFailureClassifier.classification(of: fixture) == .unavailable)
+            let mapped = UserFacingErrorMapper.message(
+                for: GPGError.executionFailed(fixture),
+                context: .decrypt
+            )
+            #expect(mapped == unavailable)
+            #expect(mapped != notPresent)
+        }
+    }
+
+    @Test("OpenPGP card not available with a card error stays unavailable")
+    func openPGPCardNotAvailable_cardError_staysUnavailable() {
+        let fixture = "gpg: OpenPGP card not available: Card error"
+        #expect(SmartCardFailureClassifier.classification(of: fixture) == .unavailable)
+        let mapped = UserFacingErrorMapper.message(
+            for: GPGError.executionFailed(fixture),
+            context: .decrypt
+        )
+        #expect(mapped == AppLocalization.string("error_smartcard_unavailable"))
+        #expect(mapped != AppLocalization.string("error_smartcard_not_present"))
+    }
 }

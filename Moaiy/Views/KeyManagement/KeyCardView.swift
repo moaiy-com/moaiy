@@ -439,18 +439,25 @@ struct KeyCardView: View {
             return true
 
         case .decrypt:
-            let decision = await KeyFileCryptoCoordinator.fileDecryptPreflight(
-                key: key,
-                urls: [url],
-                availableSecretKeys: viewModel.secretKeys
-            )
-            if case .block(let message) = decision {
-                promptAlert = PromptAlertContent.failure(
-                    title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
-                    message: message
+            if key.isSmartCardStub {
+                GPGService.shared.prefetchBundledSmartCardRuntime()
+            }
+            if KeyFileCryptoCoordinator.requiresDecryptPreflightBeforeDestinationPrompt(
+                isSmartCardStub: key.isSmartCardStub
+            ) {
+                let decision = await KeyFileCryptoCoordinator.fileDecryptPreflight(
+                    key: key,
+                    urls: [url],
+                    availableSecretKeys: viewModel.secretKeys
                 )
-                pendingDecryptRequests = []
-                return false
+                if case .block(let message) = decision {
+                    promptAlert = PromptAlertContent.failure(
+                        title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
+                        message: message
+                    )
+                    pendingDecryptRequests = []
+                    return false
+                }
             }
 
             let defaultOutputURL = KeyActionFilePlanner.decryptedOutputURL(for: url)
