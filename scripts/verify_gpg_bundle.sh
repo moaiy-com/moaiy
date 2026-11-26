@@ -78,43 +78,71 @@ check_bundle_exists() {
     fi
 }
 
-# scdaemon must carry a real __TEXT,__info_plist, and its signature info slot
-# must hash that plist. Identifier-only signing leaves `Info.plist=not bound`.
-check_scdaemon_info_plist() {
-    section "Checking scdaemon Info.plist binding"
+# Source-tree gpg.bundle/bin/scdaemon is only the source binary. A real helper
+# .app with an on-disk Info.plist is installed when the bundle is signed inside
+# Moaiy.app. This source-tree check confirms the template and sign script; it
+# does not require a bound Info.plist on the bare Mach-O (that approach
+# SIGTRAPs in libsecinit).
+check_scdaemon_helper_packaging() {
+    section "Checking scdaemon helper packaging"
     local scdaemon="$BUNDLE_PATH/bin/scdaemon"
-    if ! python3 "$PROJECT_ROOT/scripts/check_scdaemon_info_plist.py" "$scdaemon"; then
-        fail "scdaemon Info.plist is not bound in the Mach-O signature"
-        return
-    fi
-    pass "scdaemon __info_plist section and signature info slot match com.moaiy.app.scdaemon"
-
-    if command -v codesign >/dev/null 2>&1; then
-        local detail
-        detail="$(codesign -d --verbose=2 "$scdaemon" 2>&1 || true)"
-        printf '%s\n' "$detail"
-        if printf '%s\n' "$detail" | grep -q "Info.plist=not bound"; then
-            fail "codesign reports Info.plist=not bound for scdaemon"
-        elif ! printf '%s\n' "$detail" | grep -q "Identifier=com.moaiy.app.scdaemon"; then
-            fail "codesign identifier for scdaemon is not com.moaiy.app.scdaemon"
-        else
-            pass "codesign does not report Info.plist=not bound"
-        fi
+    if [ -x "$scdaemon" ]; then
+        pass "Source scdaemon binary exists in gpg.bundle/bin"
     else
-        warn "codesign not available; Mach-O info-slot check used instead"
+        fail "Source scdaemon binary missing at $scdaemon"
     fi
 
-    if command -v otool >/dev/null 2>&1; then
-        local dumped
-        dumped="$(otool -P "$scdaemon" 2>/dev/null || true)"
-        printf '%s\n' "$dumped"
-        if printf '%s\n' "$dumped" | grep -q "com.moaiy.app.scdaemon"; then
-            pass "otool -P prints scdaemon CFBundleIdentifier"
-        else
-            fail "otool -P did not print com.moaiy.app.scdaemon"
-        fi
+    local sign_script="$PROJECT_ROOT/scripts/sign_embedded_gpg_bundle.sh"
+    if grep -q "MoaiyScdaemon.app" "$sign_script" \
+        && grep -q "install_scdaemon_helper_app" "$sign_script" \
+        && grep -q "Contents/Helpers" "$sign_script"; then
+        pass "sign_embedded_gpg_bundle.sh installs Helpers/MoaiyScdaemon.app"
     else
-        warn "otool not available; __info_plist section was checked directly"
+        fail "sign_embedded_gpg_bundle.sh does not install MoaiyScdaemon.app"
+    fi
+    if grep -q "install_and_sign_helper_libraries" "$sign_script" \
+        && grep -q 'helper_app/Contents/lib' "$sign_script" \
+        && grep -q '@executable_path/../lib' "$sign_script"; then
+        pass "sign_embedded_gpg_bundle.sh copies scdaemon @executable_path/../lib dylibs into the helper"
+    else
+        fail "sign_embedded_gpg_bundle.sh must copy scdaemon libraries into MoaiyScdaemon.app/Contents/lib"
+    fi
+    if grep -q "is_adhoc_sign_identity" "$sign_script" \
+        && grep -q "sign_scdaemon_helper_codesign" "$sign_script" \
+        && grep -q -- "--options runtime" "$sign_script"; then
+        pass "Helper signing omits hardened runtime for ad-hoc identities and keeps it for Team identities"
+    else
+        fail "sign_embedded_gpg_bundle.sh must sign the helper without hardened runtime when the identity is ad-hoc"
+    fi
+    local launcher_src="$PROJECT_ROOT/Moaiy/Resources/scdaemon_launcher.c"
+    local info_plist="$PROJECT_ROOT/Moaiy/Resources/ScdaemonInfo.plist"
+    if grep -q "compile_scdaemon_launcher" "$sign_script"         && grep -q "sign_scdaemon_launcher_executable" "$sign_script"         && grep -q "getpwuid" "$launcher_src"         && grep -q "multi-server" "$launcher_src"         && grep -Fq -- "--daemon" "$launcher_src"         && ! grep -q "NSHomeDirectory" "$launcher_src"         && grep -q "com.moaiy.app.scdaemon/Data/Library/gnupg" "$launcher_src"         && grep -q "proxies the Assuan socket" "$launcher_src"         && grep -q "run_agent_stdio_relay" "$launcher_src"         && grep -q "GETINFO socket_name" "$launcher_src"         && grep -q "bundledScdaemonAgentProgram" "$PROJECT_ROOT/Moaiy/Services/GPGService.swift"         && grep -q "MoaiyScdaemon" "$info_plist"; then
+        pass "Helper ships a getpwuid supervisor that execs scdaemon --multi-server, publishes S.scdaemon, and relays agent stdio"
+    else
+        fail "scdaemon helper must include a getpwuid launcher as CFBundleExecutable"
+    fi
+
+    local required_libs=(
+        "libgcrypt.20.dylib"
+        "libksba.8.dylib"
+        "libgpg-error.0.dylib"
+        "libassuan.9.dylib"
+        "libnpth.0.dylib"
+        "libusb-1.0.0.dylib"
+        "libintl.8.dylib"
+    )
+    local missing=0
+    local lib
+    for lib in "${required_libs[@]}"; do
+        if [ -f "$BUNDLE_PATH/lib/$lib" ]; then
+            pass "Source library available for helper packaging: $lib"
+        else
+            fail "Source library missing from gpg.bundle/lib: $lib"
+            missing=1
+        fi
+    done
+    if [ "$missing" -eq 0 ]; then
+        pass "All scdaemon helper libraries are present in gpg.bundle/lib"
     fi
 }
 
@@ -240,13 +268,13 @@ check_signatures() {
         local scdaemon_plist="$PROJECT_ROOT/Moaiy/Resources/ScdaemonInfo.plist"
         if [ -f "$scdaemon_ent" ] && plutil -lint "$scdaemon_ent" >/dev/null 2>&1 \
             && grep -q "com.apple.security.app-sandbox" "$scdaemon_ent" \
-            && grep -q "com.apple.security.inherit" "$scdaemon_ent" \
             && grep -q "com.apple.security.smartcard" "$scdaemon_ent" \
             && grep -q "com.apple.security.device.usb" "$scdaemon_ent" \
+            && ! grep -q "com.apple.security.inherit" "$scdaemon_ent" \
             && ! grep -q "disable-library-validation" "$scdaemon_ent"; then
-            pass "scdaemon entitlements are sandbox, inherit, smartcard, and USB"
+            pass "scdaemon entitlements are a standalone sandbox with smartcard and USB"
         else
-            fail "GPGScdaemon.entitlements missing sandbox, inherit, smartcard, or USB"
+            fail "GPGScdaemon.entitlements must be sandbox+smartcard+usb without inherit, plus GNUPGHOME access"
         fi
         if [ -f "$scdaemon_plist" ] && grep -q "com.moaiy.app.scdaemon" "$scdaemon_plist"; then
             pass "scdaemon Info.plist bundle id is com.moaiy.app.scdaemon"
@@ -256,11 +284,16 @@ check_signatures() {
         local sign_script="$PROJECT_ROOT/scripts/sign_embedded_gpg_bundle.sh"
         if grep -q "GPGHelper.entitlements" "$sign_script" \
             && grep -q "GPGScdaemon.entitlements" "$sign_script" \
-            && grep -q 'exe_name" == "scdaemon"' "$sign_script" \
-            && grep -q "ScdaemonInfo.plist" "$sign_script"; then
-            pass "Only scdaemon is signed with device entitlements and a bundle id"
+            && grep -q "MoaiyScdaemon.app" "$sign_script" \
+            && grep -q "install_scdaemon_helper_app" "$sign_script" \
+            && grep -q "install_and_sign_helper_libraries" "$sign_script" \
+            && grep -q "is_adhoc_sign_identity" "$sign_script" \
+            && grep -q "sign_scdaemon_helper_codesign" "$sign_script" \
+            && grep -q "ScdaemonInfo.plist" "$sign_script" \
+            && grep -q "sign_inherit_only_executable" "$sign_script"; then
+            pass "Only MoaiyScdaemon.app is signed with device entitlements; other helpers stay inherit-only"
         else
-            fail "sign_embedded_gpg_bundle.sh does not keep other helpers inherit-only"
+            fail "sign_embedded_gpg_bundle.sh does not keep other helpers inherit-only or is missing helper-app packaging"
         fi
     else
         fail "GPGHelper.entitlements missing or invalid plist"
@@ -519,7 +552,7 @@ main() {
     check_libraries
     check_library_paths
     check_signatures
-    check_scdaemon_info_plist
+    check_scdaemon_helper_packaging
     test_gpg_execution
     check_bundle_size
     verify_or_update_manifest "$update_manifest"
