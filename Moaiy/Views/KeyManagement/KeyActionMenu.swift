@@ -206,9 +206,7 @@ enum KeyFileCryptoCoordinator {
     /// Card presence and helper startup must not delay the decrypt save panel.
     /// Presence is still checked after a destination is chosen, before the PIN sheet.
     static func requiresDecryptPreflightBeforeDestinationPrompt(isSmartCardStub: Bool) -> Bool {
-        // Current call sites run preflight, including card presence, before
-        // the decrypt save panel. The new test requires stubs to skip that.
-        true
+        !isSmartCardStub
     }
 
     /// Decides whether a smartcard decrypt may show the User PIN sheet.
@@ -950,6 +948,7 @@ struct KeyActionMenu: View {
     @State private var pendingPassphraseAction: PassphraseAction?
     @State private var pendingPassphraseAllowsEmpty = true
     @State private var pendingYubiKeyPINAction: YubiKeyPINAction?
+    @State private var pendingHardwareDecryptRequests: [KeyFileOperationRequest] = []
     @State private var pendingYubiKeyPINFileName = ""
     @State private var pendingUntrustedEncryptURLs: [URL] = []
     @State private var operationResults: [OperationResult] = []
@@ -1216,6 +1215,7 @@ struct KeyActionMenu: View {
                     if !$0 {
                         pendingYubiKeyPINAction = nil
                         pendingYubiKeyPINFileName = ""
+                        pendingHardwareDecryptRequests = []
                     }
                 }
             )
@@ -1233,6 +1233,7 @@ struct KeyActionMenu: View {
                 onCancel: {
                     pendingYubiKeyPINAction = nil
                     pendingYubiKeyPINFileName = ""
+                    pendingHardwareDecryptRequests = []
                 }
             )
             .environment(\.locale, AppLocalization.locale)
@@ -1539,6 +1540,20 @@ struct KeyActionMenu: View {
         guard !selectedURLs.isEmpty else { return }
 
         Task { @MainActor in
+            var preselectedRequests: [KeyFileOperationRequest] = []
+            if key.isSmartCardStub {
+                GPGService.shared.prefetchBundledSmartCardRuntime()
+            }
+            if !KeyFileCryptoCoordinator.requiresDecryptPreflightBeforeDestinationPrompt(
+                isSmartCardStub: key.isSmartCardStub
+            ) {
+                preselectedRequests = collectFileOperationRequests(
+                    from: selectedURLs,
+                    defaultOutputURLProvider: KeyActionFilePlanner.decryptedOutputURL(for:)
+                )
+                guard !preselectedRequests.isEmpty else { return }
+            }
+
             let decision = await KeyFileCryptoCoordinator.fileDecryptPreflight(
                 key: key,
                 urls: selectedURLs,
@@ -1553,6 +1568,7 @@ struct KeyActionMenu: View {
                 return
             case .presentHardwarePIN:
                 pendingYubiKeyPINFileName = selectedURLs.first?.lastPathComponent ?? ""
+                pendingHardwareDecryptRequests = preselectedRequests
                 pendingYubiKeyPINAction = .decrypt(selectedURLs)
                 return
             case .proceedToSoftwareDecrypt:
@@ -1563,6 +1579,8 @@ struct KeyActionMenu: View {
             if requiresPassphrase {
                 pendingPassphraseAllowsEmpty = false
                 pendingPassphraseAction = .decrypt(selectedURLs)
+            } else if !preselectedRequests.isEmpty {
+                await decryptCollectedRequests(preselectedRequests, passphrase: "")
             } else {
                 await decryptFiles(selectedURLs, passphrase: "")
             }
@@ -1677,12 +1695,10 @@ struct KeyActionMenu: View {
     }
 
     @MainActor
-    private func decryptFiles(_ urls: [URL], passphrase: String) async {
-        let requests = collectFileOperationRequests(
-            from: urls,
-            defaultOutputURLProvider: KeyActionFilePlanner.decryptedOutputURL(for:)
-        )
-
+    private func decryptCollectedRequests(
+        _ requests: [KeyFileOperationRequest],
+        passphrase: String
+    ) async {
         let outcomes = await KeyFileCryptoCoordinator.decrypt(
             requests: requests,
             passphrase: passphrase,
@@ -1693,6 +1709,21 @@ struct KeyActionMenu: View {
             KeyFileOperationResultMapper.decryptResults(from: outcomes),
             preferredOperation: .decrypt
         )
+    }
+
+    @MainActor
+    private func decryptFiles(_ urls: [URL], passphrase: String) async {
+        let requests: [KeyFileOperationRequest]
+        if !pendingHardwareDecryptRequests.isEmpty {
+            requests = pendingHardwareDecryptRequests
+            pendingHardwareDecryptRequests = []
+        } else {
+            requests = collectFileOperationRequests(
+                from: urls,
+                defaultOutputURLProvider: KeyActionFilePlanner.decryptedOutputURL(for:)
+            )
+        }
+        await decryptCollectedRequests(requests, passphrase: passphrase)
     }
 
     @MainActor

@@ -3079,6 +3079,21 @@ final class GPGService: SubkeyManaging {
         }
     }
 
+    /// Starts the bundled scdaemon helper and gpg-agent in the background so
+    /// a later presence check does not pay the cold-start cost on the UI path.
+    /// Errors surface from `checkSmartCardPresence()`; this must not log PIN data.
+    func prefetchBundledSmartCardRuntime() {
+        Task(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.ensureBundledSmartCardDecryptRuntime()
+                try await self.ensureGPGAgentRunningIfNeeded()
+            } catch {
+                // Presence or decrypt will report a typed error to the user.
+            }
+        }
+    }
+
     /// Checks whether a smart card (YubiKey/OpenPGP Card) is currently available.
     /// Uses scdaemon SERIALNO probing to avoid mutating card state.
     func checkSmartCardPresence() async throws -> SmartCardPresence {
