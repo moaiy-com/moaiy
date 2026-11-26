@@ -21,7 +21,8 @@
 # itself is an ad-hoc sandboxed app that can apply a profile, so scdaemon is
 # packaged as a real helper .app with an on-disk Info.plist
 # (CFBundleIdentifier com.moaiy.app.scdaemon). It is signed with a standalone
-# sandbox: app-sandbox, smartcard, and usb. It must not use inherit and must not disable
+# sandbox: app-sandbox, smartcard, usb, and a home-relative read-write exception
+# for the app-managed GNUPGHOME. It must not use inherit and must not disable
 # library validation. The Mach-O __TEXT,__info_plist section is optional
 # defense-in-depth; the on-disk bundle Info.plist is the required fix.
 # gpg-agent scdaemon-program points at the launcher (stdio relay on first pipe-connect), not inner scdaemon.

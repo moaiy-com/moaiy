@@ -271,8 +271,9 @@ check_signatures() {
             && grep -q "com.apple.security.smartcard" "$scdaemon_ent" \
             && grep -q "com.apple.security.device.usb" "$scdaemon_ent" \
             && ! grep -q "com.apple.security.inherit" "$scdaemon_ent" \
-            && ! grep -q "disable-library-validation" "$scdaemon_ent"; then
-            pass "scdaemon entitlements are a standalone sandbox with smartcard and USB"
+            && ! grep -q "disable-library-validation" "$scdaemon_ent" \
+            && grep -q "Library/Containers/com.moaiy.app/Data/Library/gnupg/" "$scdaemon_ent"; then
+            pass "scdaemon entitlements are a standalone sandbox with smartcard, USB, and the app-managed GNUPGHOME"
         else
             fail "GPGScdaemon.entitlements must be sandbox+smartcard+usb without inherit, plus GNUPGHOME access"
         fi

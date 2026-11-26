@@ -8,5 +8,9 @@
 	<true/>
 	<key>com.apple.security.smartcard</key>
 	<true/>
+	<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
+	<array>
+		<string>/Library/Containers/com.moaiy.app/Data/Library/gnupg/</string>
+	</array>
 </dict>
 </plist>
