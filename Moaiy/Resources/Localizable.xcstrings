@@ -14913,67 +14913,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No YubiKey detected. Please insert your YubiKey and try again."
+            "value": "No smart card detected. Please insert your smart card and try again."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "未检测到 YubiKey。请先插入 YubiKey 后重试。"
+            "value": "未检测到智能卡。请先插入智能卡后重试。"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "No se detectó YubiKey. Inserte su YubiKey e inténtelo nuevamente."
+            "value": "No se detectó ninguna tarjeta inteligente. Inserte su tarjeta inteligente e inténtelo nuevamente."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nenhum YubiKey detectado. Insira sua YubiKey e tente novamente."
+            "value": "Nenhum cartão inteligente detectado. Insira seu cartão inteligente e tente novamente."
           }
         },
         "hi": {
           "stringUnit": {
             "state": "translated",
-            "value": "कोई YubiKey नहीं मिला. कृपया अपनी YubiKey डालें और पुनः प्रयास करें।"
+            "value": "कोई स्मार्ट कार्ड नहीं मिला. कृपया अपना स्मार्ट कार्ड डालें और पुनः प्रयास करें।"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "لم يتم اكتشاف مفتاح YubiKey. الرجاء إدخال مفتاح YubiKey الخاص بك والمحاولة مرة أخرى."
+            "value": "لم يتم اكتشاف بطاقة ذكية. الرجاء إدخال بطاقتك الذكية والمحاولة مرة أخرى."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucune YubiKey détectée. Veuillez insérer votre YubiKey et réessayer."
+            "value": "Aucune carte à puce détectée. Veuillez insérer votre carte à puce et réessayer."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kein YubiKey erkannt. Bitte stecken Sie Ihren YubiKey ein und versuchen Sie es erneut."
+            "value": "Keine Smartcard erkannt. Bitte stecken Sie Ihre Smartcard ein und versuchen Sie es erneut."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "YubiKey が検出されませんでした。 YubiKey を挿入して再試行してください。"
+            "value": "スマートカードが検出されませんでした。スマートカードを挿入して再試行してください。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "YubiKey가 감지되지 않았습니다. YubiKey를 삽입하고 다시 시도하세요."
+            "value": "스마트 카드가 감지되지 않았습니다. 스마트 카드를 삽입하고 다시 시도하세요."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "YubiKey не обнаружен. Пожалуйста, вставьте YubiKey и повторите попытку."
+            "value": "Смарт-карта не обнаружена. Вставьте смарт-карту и повторите попытку."
           }
         }
       }
@@ -14984,67 +14984,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Insert your YubiKey, wait for recognition, then retry."
+            "value": "Insert your smart card, wait for recognition, then retry."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "请插入 YubiKey，等待系统识别后重试。"
+            "value": "请插入智能卡，等待系统识别后重试。"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Inserta tu YubiKey, espera a que la reconozcan y vuelve a intentarlo."
+            "value": "Inserte su tarjeta inteligente, espere a que la reconozcan y vuelva a intentarlo."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Insira sua YubiKey, aguarde o reconhecimento e tente novamente."
+            "value": "Insira seu cartão inteligente, aguarde o reconhecimento e tente novamente."
           }
         },
         "hi": {
           "stringUnit": {
             "state": "translated",
-            "value": "अपनी YubiKey डालें, पहचान की प्रतीक्षा करें, फिर पुनः प्रयास करें।"
+            "value": "अपना स्मार्ट कार्ड डालें, पहचान की प्रतीक्षा करें, फिर पुनः प्रयास करें।"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "أدخل مفتاح YubiKey الخاص بك، وانتظر التعرف عليه، ثم أعد المحاولة."
+            "value": "أدخل بطاقتك الذكية، وانتظر التعرف عليها، ثم أعد المحاولة."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Insérez votre YubiKey, attendez la reconnaissance, puis réessayez."
+            "value": "Insérez votre carte à puce, attendez la reconnaissance, puis réessayez."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stecken Sie Ihren YubiKey ein, warten Sie auf die Erkennung und versuchen Sie es dann erneut."
+            "value": "Stecken Sie Ihre Smartcard ein, warten Sie auf die Erkennung und versuchen Sie es dann erneut."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "YubiKey を挿入し、認識されるまで待ってから、再試行してください。"
+            "value": "スマートカードを挿入し、認識されるまで待ってから、再試行してください。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "YubiKey를 삽입하고 인식될 때까지 기다린 후 다시 시도하세요."
+            "value": "스마트 카드를 삽입하고 인식될 때까지 기다린 후 다시 시도하세요."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Вставьте YubiKey, дождитесь распознавания и повторите попытку."
+            "value": "Вставьте смарт-карту, дождитесь распознавания и повторите попытку."
           }
         }
       }
@@ -52424,6 +52424,148 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сохраненный постквантовый вариант по умолчанию недоступен в этой среде GPG. Вместо него выбран RSA-4096."
+          }
+        }
+      }
+    },
+    "error_smartcard_not_present_named": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No %1$@ detected. Please insert your %1$@ and try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未检测到 %1$@。请先插入 %1$@ 后重试。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se detectó %1$@. Inserte su %1$@ e inténtelo nuevamente."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhum %1$@ detectado. Insira seu %1$@ e tente novamente."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कोई %1$@ नहीं मिला. कृपया अपना %1$@ डालें और पुनः प्रयास करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لم يتم اكتشاف %1$@. الرجاء إدخال %1$@ الخاص بك والمحاولة مرة أخرى."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun %1$@ détecté. Veuillez insérer votre %1$@ et réessayer."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein %1$@ erkannt. Bitte stecken Sie Ihren %1$@ ein und versuchen Sie es erneut."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ が検出されませんでした。%1$@ を挿入して再試行してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@가 감지되지 않았습니다. %1$@를 삽입하고 다시 시도하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ не обнаружен. Пожалуйста, вставьте %1$@ и повторите попытку."
+          }
+        }
+      }
+    },
+    "error_smartcard_not_present_named_recovery": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Insert your %1$@, wait for recognition, then retry."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请插入 %1$@，等待系统识别后重试。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inserte su %1$@, espere a que lo reconozcan y vuelva a intentarlo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Insira seu %1$@, aguarde o reconhecimento e tente novamente."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "अपना %1$@ डालें, पहचान की प्रतीक्षा करें, फिर पुनः प्रयास करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "أدخل %1$@ الخاص بك، وانتظر التعرف عليه، ثم أعد المحاولة."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Insérez votre %1$@, attendez la reconnaissance, puis réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stecken Sie Ihren %1$@ ein, warten Sie auf die Erkennung und versuchen Sie es dann erneut."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ を挿入し、認識されるまで待ってから、再試行してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@를 삽입하고 인식될 때까지 기다린 후 다시 시도하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вставьте %1$@, дождитесь распознавания и повторите попытку."
           }
         }
       }

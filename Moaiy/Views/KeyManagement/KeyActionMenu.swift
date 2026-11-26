@@ -303,7 +303,13 @@ enum KeyFileCryptoCoordinator {
             _ = try await GPGService.shared.checkSmartCardPresence()
             return nil
         } catch {
-            return UserFacingErrorMapper.message(for: error, context: context)
+            return UserFacingErrorMapper.message(
+                for: error,
+                context: context,
+                hardwareTokenDisplayName: OpenPGPCardIdentity.displayName(
+                    fromCardSerial: key.cardSerialNumber
+                )
+            )
         }
     }
 

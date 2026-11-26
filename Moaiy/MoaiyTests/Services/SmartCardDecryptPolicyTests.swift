@@ -182,6 +182,111 @@ struct SmartCardDecryptPolicyTests {
         #expect(fromDir["1111111111111111111111111111111111111111"]?.serialNumber == "D2760001240100000006198741050000")
     }
 
+    @Test("Shadow serial parser accepts the live parenthesized t1-v1 form")
+    func secretInfoFromPrivateKeyFile_readsParenthesizedShadowSerial() {
+        let serial = "D2760001240100000006ABCDEF000000"
+        let shadowed = """
+        (shadowed-private-key
+          (ecc (curve Curve25519)(flags djb-tweak)(q #00#))
+          (shadowed t1-v1 (#\(serial)# OPENPGP.2)))
+        """
+        let token = GPGService.secretInfoFromPrivateKeyFile(contents: shadowed)
+        #expect(token.isToken)
+        #expect(token.serialNumber == serial)
+
+        let preambleSerial = "D27600012401000000FFFFABCDEF000000"
+        let withPreamble = """
+        Token: \(preambleSerial) OPENPGP.2
+        Key: \(shadowed)
+        """
+        let fromPreamble = GPGService.secretInfoFromPrivateKeyFile(contents: withPreamble)
+        #expect(fromPreamble.serialNumber == serial)
+        #expect(fromPreamble.serialNumber != preambleSerial)
+
+        let fromDir = GPGService.secretInfoFromPrivateKeyDirectory(files: [
+            (keygrip: "1111111111111111111111111111111111111111", contents: shadowed)
+        ])
+        #expect(fromDir["1111111111111111111111111111111111111111"]?.serialNumber == serial)
+    }
+
+    @Test("AID manufacturer IDs map to display names and Token2 is not YubiKey")
+    func openPGPCardIdentity_mapsManufacturerDisplayNames() {
+        func aid(_ manufacturer: String) -> String {
+            "D276000124010000\(manufacturer)ABCDEF000000"
+        }
+
+        #expect(OpenPGPCardIdentity.displayName(fromCardSerial: aid("0006")) == "YubiKey")
+        #expect(OpenPGPCardIdentity.displayName(fromCardSerial: aid("000F")) == "Nitrokey")
+        #expect(OpenPGPCardIdentity.displayName(fromCardSerial: aid("000B")) == "Feitian")
+        #expect(OpenPGPCardIdentity.displayName(fromCardSerial: aid("0011")) == "Token2")
+        #expect(OpenPGPCardIdentity.displayName(fromCardSerial: aid("0011")) != "YubiKey")
+        #expect(OpenPGPCardIdentity.displayName(fromCardSerial: aid("F1D0")) == "CanoKey")
+        #expect(OpenPGPCardIdentity.displayName(fromCardSerial: aid("F517")) == "Gnuk")
+        #expect(OpenPGPCardIdentity.displayName(fromCardSerial: aid("0006").lowercased()) == "YubiKey")
+        #expect(OpenPGPCardIdentity.displayName(fromCardSerial: aid("0000")) == nil)
+        #expect(OpenPGPCardIdentity.displayName(fromCardSerial: aid("FFFF")) == nil)
+        #expect(OpenPGPCardIdentity.displayName(fromCardSerial: aid("00AB")) == nil)
+        #expect(OpenPGPCardIdentity.displayName(fromCardSerial: "00112233445566778899AABBCCDDEEFF") == nil)
+        #expect(OpenPGPCardIdentity.displayName(fromCardSerial: "00") == nil)
+        #expect(OpenPGPCardIdentity.displayName(fromCardSerial: nil) == nil)
+        #expect(OpenPGPCardIdentity.manufacturerID(fromCardSerial: aid("0006")) == 0x0006)
+        #expect(OpenPGPCardIdentity.manufacturerID(fromCardSerial: aid("0011")) == 0x0011)
+    }
+
+    @Test("Missing-card copy uses the selected stub name or a generic fallback")
+    func notPresentCopy_usesSelectedStubNameOrGeneric() {
+        let yubicoSerial = "D2760001240100000006ABCDEF000000"
+        let yubiName = OpenPGPCardIdentity.displayName(fromCardSerial: yubicoSerial)
+        let named = SmartCardNotPresentCopy.message(displayName: yubiName)
+        #expect(yubiName == "YubiKey")
+        #expect(named == String(format: AppLocalization.string("error_smartcard_not_present_named"), "YubiKey"))
+        #expect(
+            SmartCardNotPresentCopy.recovery(displayName: yubiName)
+                == String(format: AppLocalization.string("error_smartcard_not_present_named_recovery"), "YubiKey")
+        )
+
+        let generic = SmartCardNotPresentCopy.message(displayName: nil)
+        #expect(generic == AppLocalization.string("error_smartcard_not_present"))
+        #expect(!generic.contains("YubiKey"))
+        #expect(
+            SmartCardNotPresentCopy.recovery(displayName: nil)
+                == AppLocalization.string("error_smartcard_not_present_recovery")
+        )
+        #expect(!AppLocalization.string("error_smartcard_not_present_recovery").contains("YubiKey"))
+
+        let token2Serial = "D2760001240100000011ABCDEF000000"
+        let token2Name = OpenPGPCardIdentity.displayName(fromCardSerial: token2Serial)
+        let token2Message = UserFacingErrorMapper.message(
+            for: GPGError.smartCardNotPresent,
+            context: .decrypt,
+            hardwareTokenDisplayName: token2Name
+        )
+        #expect(token2Name == "Token2")
+        #expect(
+            token2Message
+                == String(format: AppLocalization.string("error_smartcard_not_present_named"), "Token2")
+        )
+        #expect(!token2Message.contains("YubiKey"))
+
+        let unkeyed = UserFacingErrorMapper.message(
+            for: GPGError.smartCardNotPresent,
+            context: .decrypt
+        )
+        #expect(unkeyed == AppLocalization.string("error_smartcard_not_present"))
+        #expect(!unkeyed.contains("YubiKey"))
+
+        let unknownSerial = "D27600012401000000ABABCDEF000000"
+        let unknownName = OpenPGPCardIdentity.displayName(fromCardSerial: unknownSerial)
+        #expect(unknownName == nil)
+        #expect(
+            UserFacingErrorMapper.message(
+                for: GPGError.smartCardNotPresent,
+                context: .sign,
+                hardwareTokenDisplayName: unknownName
+            ) == generic
+        )
+    }
+
     @Test("Secret key list merge uses KEYINFO stubs instead of card I/O")
     func keysByMergingAgentSecretInfo_usesFileBackedStubs() {
         let output = """

@@ -803,7 +803,7 @@ final class GPGService: SubkeyManaging {
         let patterns = [
             #"serial-no\s*#([A-Fa-f0-9]{16,})#"#,
             #"serial-no\s+([A-Fa-f0-9]{16,})"#,
-            #"\(shadowed\s+"?t1-v1"?\s*#([A-Fa-f0-9]{16,})#"#
+            #"\(shadowed\s+"?t1-v1"?\s*\(?\s*#([A-Fa-f0-9]{16,})#"#
         ]
         for pattern in patterns {
             if let serial = firstRegularExpressionCapture(in: contents, pattern: pattern) {
@@ -6491,5 +6491,55 @@ private class GPGKeyBuilder {
                 encryptionSubkeys: encryptionSubkeys
             )
         )
+    }
+}
+
+/// OpenPGP card identity that can be read from a stored shadow-key AID
+/// without talking to scdaemon or the token itself.
+enum OpenPGPCardIdentity {
+    static let aidPrefix = "D276000124"
+
+    nonisolated static func manufacturerID(fromCardSerial serial: String?) -> UInt16? {
+        guard let normalized = normalizedSerial(serial) else {
+            return nil
+        }
+        guard normalized.hasPrefix(aidPrefix), normalized.count >= 20 else {
+            return nil
+        }
+        let manufacturerHex = String(normalized.dropFirst(16).prefix(4))
+        return UInt16(manufacturerHex, radix: 16)
+    }
+
+    nonisolated static func displayName(fromCardSerial serial: String?) -> String? {
+        guard let manufacturerID = manufacturerID(fromCardSerial: serial) else {
+            return nil
+        }
+        switch manufacturerID {
+        case 0x0006:
+            return "YubiKey"
+        case 0x000F:
+            return "Nitrokey"
+        case 0x000B:
+            return "Feitian"
+        case 0x0011:
+            return "Token2"
+        case 0xF1D0:
+            return "CanoKey"
+        case 0xF517:
+            return "Gnuk"
+        default:
+            return nil
+        }
+    }
+
+    nonisolated private static func normalizedSerial(_ serial: String?) -> String? {
+        guard let serial else {
+            return nil
+        }
+        let normalized = serial
+            .replacingOccurrences(of: " ", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        return normalized.isEmpty ? nil : normalized
     }
 }
