@@ -104,14 +104,43 @@ $asset_rows
 EOF
 )"
 
-known_issues_en="- Unsigned distribution track is active when signing mode is \`unsigned\`."
-known_issues_zh="- 当签名模式为 \`unsigned\` 时，当前为未签名分发轨道。"
-if [[ "$signing_mode" == "signed" ]]; then
-  known_issues_en="- Signed distribution track is active. Verify notarization status before public rollout."
-  known_issues_zh="- 当前为已签名分发轨道。对外发布前请先确认公证（notarization）状态。"
+x86_artifact_count="$(jq -r '[.artifacts[] | select(.arch == "x86_64")] | length' "$MANIFEST_PATH")"
+if [[ "$x86_artifact_count" != "0" && "$x86_artifact_count" != "1" ]]; then
+  echo "ERROR: manifest must contain zero or one x86_64 artifact (found $x86_artifact_count)"
+  exit 1
 fi
 
-if [[ "$gate_mode" == "balanced" ]]; then
+if [[ "$x86_artifact_count" == "1" ]]; then
+  packaging_summary_en="- Dual-architecture DMG artifacts (\`arm64\` and \`x86_64\`) are packaged and checksummed in one run."
+  packaging_summary_zh="- 一次流程产出双架构（\`arm64\` 与 \`x86_64\`）DMG 并生成校验值。"
+else
+  packaging_summary_en="- This release packages an Apple Silicon (\`arm64\`) DMG only. No Intel (\`x86_64\`) disk image is included."
+  packaging_summary_zh="- 本次仅打包 Apple Silicon（\`arm64\`）DMG，不包含 Intel（\`x86_64\`）安装镜像。"
+fi
+
+if [[ "$signing_mode" == "signed" ]]; then
+  distribution_notice_en="> **Signed build.** This package is code-signed with the configured Apple Development Team. \`package_dmg.sh\` does not notarize it. Confirm notarization separately before treating this as a notarized release."
+  distribution_notice_zh="> **已签名构建。** 此安装包使用已配置的 Apple Development Team 做了代码签名。\`package_dmg.sh\` 不会对它做公证。在把它当作已公证发布之前，请另行确认公证状态。"
+  known_issues_en="- Signed distribution track is active. \`package_dmg.sh\` does not notarize the package; verify notarization status before treating this as a notarized release."
+  known_issues_zh="- 当前为已签名分发轨道。\`package_dmg.sh\` 不会公证安装包；在将其视为已公证发布之前，请先确认公证状态。"
+elif [[ "$signing_mode" == "unsigned" ]]; then
+  distribution_notice_en="> **Unsigned build.** This package is not code-signed and is not notarized. macOS Gatekeeper will block opening it until you allow it in System Settings → Privacy & Security, or by right-clicking the app and choosing Open. This GitHub Release is not a substitute for a Developer ID signed and notarized release."
+  distribution_notice_zh="> **未签名构建。** 此安装包未经代码签名，也未经公证。macOS Gatekeeper 会阻止打开应用，直到你在“系统设置 → 隐私与安全性”中允许，或右键点按应用并选择“打开”。此 GitHub Release 不能代替 Developer ID 签名并完成公证的发布。"
+  known_issues_en="- Unsigned build: the package is not code-signed and is not notarized. macOS Gatekeeper will block opening it until you allow it. This is not a substitute for a Developer ID signed and notarized release."
+  known_issues_zh="- 未签名构建：安装包未经代码签名，也未经公证。macOS Gatekeeper 会阻止打开，直到你手动允许。它不能代替 Developer ID 签名并完成公证的发布。"
+else
+  echo "ERROR: unsupported signing_mode '$signing_mode'"
+  exit 1
+fi
+
+if [[ "$signing_mode" == "unsigned" ]]; then
+  known_issues_en="$known_issues_en
+- The unsigned track uses the Debug build configuration so Release signing preflight can run without an Apple Development Team."
+  known_issues_zh="$known_issues_zh
+- 未签名轨道使用 Debug 构建配置，这样在没有 Apple Development Team 时也能跳过 Release 签名预检。"
+fi
+
+if [[ "$gate_mode" == "balanced" && "$x86_artifact_count" == "1" ]]; then
   known_issues_en="$known_issues_en
 - Balanced gate: x86_64 uses build + smoke fallback when Intel physical hardware is unavailable."
   known_issues_zh="$known_issues_zh
@@ -205,6 +234,18 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     *"{{ASSET_TABLE}}"*)
       # Backward compatibility for templates that still use a shared key.
       printf '%s\n' "$asset_table_en"
+      ;;
+    *"{{DISTRIBUTION_NOTICE_EN}}"*)
+      printf '%s\n' "$distribution_notice_en"
+      ;;
+    *"{{DISTRIBUTION_NOTICE_ZH}}"*)
+      printf '%s\n' "$distribution_notice_zh"
+      ;;
+    *"{{PACKAGING_SUMMARY_EN}}"*)
+      printf '%s\n' "$packaging_summary_en"
+      ;;
+    *"{{PACKAGING_SUMMARY_ZH}}"*)
+      printf '%s\n' "$packaging_summary_zh"
       ;;
     *"{{KNOWN_ISSUES_EN}}"*)
       printf '%s\n' "$known_issues_en"

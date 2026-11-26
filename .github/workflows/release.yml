@@ -16,7 +16,7 @@ on:
           - draft
           - publish
       signing:
-        description: "Signing strategy"
+        description: "Signing strategy. auto prefers signed when a Development Team ID is configured; otherwise an official publish ships an unsigned build."
         required: true
         default: auto
         type: choice
@@ -163,7 +163,11 @@ jobs:
 
           echo "release_dir_name=$(basename "$RELEASE_DIR")" >> "$GITHUB_OUTPUT"
           echo "arm64_dmg_name=$(basename "$ARM64_DMG_PATH")" >> "$GITHUB_OUTPUT"
-          echo "x86_64_dmg_name=$(basename "$X64_DMG_PATH")" >> "$GITHUB_OUTPUT"
+          if [[ -n "$X64_DMG_PATH" ]]; then
+            echo "x86_64_dmg_name=$(basename "$X64_DMG_PATH")" >> "$GITHUB_OUTPUT"
+          else
+            echo "x86_64_dmg_name=" >> "$GITHUB_OUTPUT"
+          fi
           echo "sha256_name=$(basename "$SHA256_PATH")" >> "$GITHUB_OUTPUT"
           echo "manifest_name=$(basename "$MANIFEST_PATH")" >> "$GITHUB_OUTPUT"
           echo "notes_name=$(basename "$NOTES_PATH")" >> "$GITHUB_OUTPUT"
@@ -221,25 +225,25 @@ jobs:
           tar -C "$GITHUB_WORKSPACE/dist/release" -xzf "$ARCHIVE_PATH"
 
           RELEASE_DIR="$GITHUB_WORKSPACE/dist/release/${{ needs.release_build.outputs.release_dir_name }}"
-          ASSET_DIR="$RELEASE_DIR/assets"
-          ARM64_DMG_PATH="$ASSET_DIR/${{ needs.release_build.outputs.arm64_dmg_name }}"
-          X64_DMG_PATH="$ASSET_DIR/${{ needs.release_build.outputs.x86_64_dmg_name }}"
           SHA256_PATH="$RELEASE_DIR/${{ needs.release_build.outputs.sha256_name }}"
           MANIFEST_PATH="$RELEASE_DIR/${{ needs.release_build.outputs.manifest_name }}"
           NOTES_PATH="$RELEASE_DIR/${{ needs.release_build.outputs.notes_name }}"
 
-          for path in "$ARM64_DMG_PATH" "$X64_DMG_PATH" "$SHA256_PATH" "$MANIFEST_PATH" "$NOTES_PATH"; do
+          for path in "$SHA256_PATH" "$MANIFEST_PATH" "$NOTES_PATH"; do
             if [[ ! -f "$path" ]]; then
               echo "ERROR: expected release file missing: $path"
               exit 1
             fi
           done
 
+          # Manifest decides whether an Intel DMG exists. Apple Silicon-only
+          # bundles (current gpg.bundle) must not fail for a missing x86_64 file.
+          bash ./scripts/release/list_release_assets.sh \
+            --manifest "$MANIFEST_PATH" \
+            --sha256 "$SHA256_PATH" \
+            --github-output "$GITHUB_OUTPUT"
+
           echo "release_dir=$RELEASE_DIR" >> "$GITHUB_OUTPUT"
-          echo "arm64_dmg_path=$ARM64_DMG_PATH" >> "$GITHUB_OUTPUT"
-          echo "x86_64_dmg_path=$X64_DMG_PATH" >> "$GITHUB_OUTPUT"
-          echo "sha256_path=$SHA256_PATH" >> "$GITHUB_OUTPUT"
-          echo "manifest_path=$MANIFEST_PATH" >> "$GITHUB_OUTPUT"
           echo "notes_path=$NOTES_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Verify tag still matches release commit
@@ -298,12 +302,32 @@ jobs:
 
           TAG="v${{ github.event.inputs.version }}"
           REPO="${{ github.repository }}"
+          UPLOAD_LIST="${{ steps.paths.outputs.upload_list_path }}"
+
+          if [[ ! -f "$UPLOAD_LIST" ]]; then
+            echo "ERROR: upload list missing: $UPLOAD_LIST"
+            exit 1
+          fi
+
+          files=()
+          while IFS= read -r path; do
+            if [[ -z "$path" ]]; then
+              continue
+            fi
+            if [[ ! -f "$path" ]]; then
+              echo "ERROR: upload file missing: $path"
+              exit 1
+            fi
+            files+=("$path")
+          done < "$UPLOAD_LIST"
+
+          if [[ "${#files[@]}" -lt 1 ]]; then
+            echo "ERROR: upload list is empty"
+            exit 1
+          fi
 
           gh release upload "$TAG" \
-            "${{ steps.paths.outputs.arm64_dmg_path }}" \
-            "${{ steps.paths.outputs.x86_64_dmg_path }}" \
-            "${{ steps.paths.outputs.sha256_path }}" \
-            "${{ steps.paths.outputs.manifest_path }}" \
+            "${files[@]}" \
             --repo "$REPO" \
             --clobber
 
@@ -330,13 +354,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          bash ./scripts/release/verify_github_release.sh \
-            --repo "${{ github.repository }}" \
-            --tag "v${{ github.event.inputs.version }}" \
-            --mode "${{ github.event.inputs.mode }}" \
-            --arm64-dmg-path "${{ steps.paths.outputs.arm64_dmg_path }}" \
-            --x86-64-dmg-path "${{ steps.paths.outputs.x86_64_dmg_path }}" \
-            --sha256-path "${{ steps.paths.outputs.sha256_path }}" \
-            --manifest-path "${{ steps.paths.outputs.manifest_path }}" \
-            --wait-seconds 180 \
+          verify_cmd=(
+            bash ./scripts/release/verify_github_release.sh
+            --repo "${{ github.repository }}"
+            --tag "v${{ github.event.inputs.version }}"
+            --mode "${{ github.event.inputs.mode }}"
+            --arm64-dmg-path "${{ steps.paths.outputs.arm64_dmg_path }}"
+            --sha256-path "${{ steps.paths.outputs.sha256_path }}"
+            --manifest-path "${{ steps.paths.outputs.manifest_path }}"
+            --wait-seconds 180
             --poll-interval 5
+          )
+          if [[ -n "${{ steps.paths.outputs.x86_64_dmg_path }}" ]]; then
+            verify_cmd+=(--x86-64-dmg-path "${{ steps.paths.outputs.x86_64_dmg_path }}")
+          fi
+          "${verify_cmd[@]}"
