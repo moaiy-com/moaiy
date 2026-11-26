@@ -139,6 +139,20 @@ enum SmartCardOperationFailure: Equatable {
 /// Classifies GnuPG stderr/status text for OpenPGP card failures.
 /// PIN values are never part of the matched phrases.
 enum SmartCardFailureClassifier {
+    /// libgpg-error codes observed from scdaemon when no card is in the reader.
+    /// `ENODEV` is `GPG_ERR_SYSTEM_ERROR | 80` (32848). On current libgpg-error
+    /// the English text is "Operation not supported by device", not "No such device".
+    private static let missingCardErrorCodes: Set<Int> = [
+        110,   // GPG_ERR_CARD_REMOVED
+        112,   // GPG_ERR_CARD_NOT_PRESENT
+        32848, // GPG_ERR_ENODEV
+    ]
+
+    /// libgpg-error codes that mean the daemon or platform support is down.
+    private static let unavailableErrorCodes: Set<Int> = [
+        119, // GPG_ERR_NO_SCDAEMON
+    ]
+
     static func classification(of output: String) -> SmartCardOperationFailure? {
         let lowercased = output.lowercased()
         if lowercased.contains("bad pin")
@@ -146,11 +160,11 @@ enum SmartCardFailureClassifier {
             || lowercased.contains("wrong pin") {
             return .pinInvalid
         }
-        if lowercased.contains("card not present")
-            || lowercased.contains("card removed")
-            || lowercased.contains("no data <scd>") {
-            return .notPresent
+        if assuanErrorCodes(in: output).contains(where: { unavailableErrorCodes.contains($0) }) {
+            return .unavailable
         }
+        // Genuine support/daemon failures first, so "OpenPGP card not
+        // available: Card error" stays unavailable rather than a missing card.
         if lowercased.contains("card error")
             || lowercased.contains("no smartcard daemon")
             || lowercased.contains("no scdaemon")
@@ -161,12 +175,38 @@ enum SmartCardFailureClassifier {
             || lowercased.contains("ignoring gpg-agent inquiry")
             || lowercased.contains("inquire confirm")
             || lowercased.contains("inquiry 'confirm")
-            || lowercased.contains("inquiry \"confirm")
-            || lowercased.contains("operation not supported by device")
-            || lowercased.contains("openpgp card not available") {
+            || lowercased.contains("inquiry \"confirm") {
             return .unavailable
         }
+        if assuanErrorCodes(in: output).contains(where: { missingCardErrorCodes.contains($0) }) {
+            return .notPresent
+        }
+        // GnuPG reports an empty reader as CARD_NOT_PRESENT or ENODEV.
+        // Live SCD SERIALNO on this Mac uses "Operation not supported by device".
+        if lowercased.contains("card not present")
+            || lowercased.contains("card removed")
+            || lowercased.contains("no data <scd>")
+            || lowercased.contains("no such device")
+            || lowercased.contains("no card inserted")
+            || lowercased.contains("no current card")
+            || lowercased.contains("operation not supported by device")
+            || lowercased.contains("openpgp card not available") {
+            return .notPresent
+        }
         return nil
+    }
+
+    /// Extracts the libgpg-error code (low 24 bits) from Assuan `ERR <n> ...` lines.
+    static func assuanErrorCodes(in output: String) -> [Int] {
+        output.split(whereSeparator: \.isNewline).compactMap { line in
+            let parts = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                .split(whereSeparator: \.isWhitespace)
+            guard parts.count >= 2, parts[0].uppercased() == "ERR",
+                  let value = Int(parts[1]) else {
+                return nil
+            }
+            return value & 0x00FF_FFFF
+        }
     }
 }
 
@@ -185,12 +225,47 @@ enum UserFacingErrorContext {
     case keyserverUpload
 }
 
-enum UserFacingErrorMapper {
-    static func message(for error: Error, context: UserFacingErrorContext = .general) -> String {
-        if let gpgError = error as? GPGError {
-            return message(for: gpgError, context: context)
+
+enum SmartCardNotPresentCopy {
+    static func message(displayName: String?) -> String {
+        if let displayName, !displayName.isEmpty {
+            return String(
+                format: AppLocalization.string("error_smartcard_not_present_named"),
+                displayName
+            )
         }
-        return mapRawMessage(error.localizedDescription, context: context)
+        return AppLocalization.string("error_smartcard_not_present")
+    }
+
+    static func recovery(displayName: String?) -> String {
+        if let displayName, !displayName.isEmpty {
+            return String(
+                format: AppLocalization.string("error_smartcard_not_present_named_recovery"),
+                displayName
+            )
+        }
+        return AppLocalization.string("error_smartcard_not_present_recovery")
+    }
+}
+
+enum UserFacingErrorMapper {
+    static func message(
+        for error: Error,
+        context: UserFacingErrorContext = .general,
+        hardwareTokenDisplayName: String? = nil
+    ) -> String {
+        if let gpgError = error as? GPGError {
+            return message(
+                for: gpgError,
+                context: context,
+                hardwareTokenDisplayName: hardwareTokenDisplayName
+            )
+        }
+        return mapRawMessage(
+            error.localizedDescription,
+            context: context,
+            hardwareTokenDisplayName: hardwareTokenDisplayName
+        )
     }
 
     static func decryptionKeyMismatchMessage(
@@ -258,7 +333,11 @@ enum UserFacingErrorMapper {
         }
     }
 
-    private static func message(for error: GPGError, context: UserFacingErrorContext) -> String {
+    private static func message(
+        for error: GPGError,
+        context: UserFacingErrorContext,
+        hardwareTokenDisplayName: String? = nil
+    ) -> String {
         switch error {
         case .gpgNotFound:
             return AppLocalization.string("error_gpg_not_found")
@@ -269,7 +348,11 @@ enum UserFacingErrorMapper {
         case .encryptionFailed:
             return AppLocalization.string("error_encryption_failed")
         case .decryptionFailed(let message):
-            return mapRawMessage(message, context: context)
+            return mapRawMessage(
+                message,
+                context: context,
+                hardwareTokenDisplayName: hardwareTokenDisplayName
+            )
         case .importFailed:
             return AppLocalization.string("error_import_failed")
         case .exportFailed:
@@ -290,19 +373,31 @@ enum UserFacingErrorMapper {
         case .keySigningFailed:
             return AppLocalization.string("error_key_signing_failed")
         case .keyserverUploadFailed(let message):
-            return mapRawMessage(message, context: .keyserverUpload)
+            return mapRawMessage(
+                message,
+                context: .keyserverUpload,
+                hardwareTokenDisplayName: hardwareTokenDisplayName
+            )
         case .smartCardNotPresent:
-            return AppLocalization.string("error_smartcard_not_present")
+            return SmartCardNotPresentCopy.message(displayName: hardwareTokenDisplayName)
         case .smartCardUnavailable:
             return AppLocalization.string("error_smartcard_unavailable")
         case .smartCardPinInvalid:
             return AppLocalization.string("error_smartcard_pin_invalid")
         case .invalidOutput(let message), .executionFailed(let message):
-            return mapRawMessage(message, context: context)
+            return mapRawMessage(
+                message,
+                context: context,
+                hardwareTokenDisplayName: hardwareTokenDisplayName
+            )
         }
     }
 
-    private static func mapRawMessage(_ rawMessage: String, context: UserFacingErrorContext) -> String {
+    private static func mapRawMessage(
+        _ rawMessage: String,
+        context: UserFacingErrorContext,
+        hardwareTokenDisplayName: String? = nil
+    ) -> String {
         if isFriendlyMessage(rawMessage) {
             return rawMessage
         }
@@ -314,7 +409,7 @@ enum UserFacingErrorMapper {
         if let smartCardFailure = SmartCardFailureClassifier.classification(of: rawMessage) {
             switch smartCardFailure {
             case .notPresent:
-                return AppLocalization.string("error_smartcard_not_present")
+                return SmartCardNotPresentCopy.message(displayName: hardwareTokenDisplayName)
             case .unavailable:
                 return AppLocalization.string("error_smartcard_unavailable")
             case .pinInvalid:
