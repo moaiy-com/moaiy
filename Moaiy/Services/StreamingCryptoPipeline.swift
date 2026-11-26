@@ -54,11 +54,83 @@ public actor StreamingProgressReporter {
 
 // MARK: - Streaming Process Pipeline Engine
 
+public enum StreamingPassphraseDelivery: Sendable {
+    /// Software keys: `--pinentry-mode loopback` plus a mode `0600` passphrase file.
+    case loopbackFile
+    /// OpenPGP card: the User PIN is written to `GNUPGHOME/moaiy-pinentry.token` for the bundled pinentry.
+    /// GnuPG is started with `--pinentry-mode ask` so `INQUIRE CONFIRM` is answered instead of ignored.
+    case hardwarePinentryToken
+}
+
+enum HardwarePINTokenFile {
+    static let fileName = "moaiy-pinentry.token"
+
+    static func write(_ passphrase: SecureString, in gpgHome: URL) throws -> URL {
+        let url = gpgHome.appendingPathComponent(fileName)
+        if FileManager.default.fileExists(atPath: url.path) {
+            shred(url)
+        }
+        let fd = Darwin.open(url.path, O_CREAT | O_WRONLY | O_TRUNC | O_EXCL | O_NOFOLLOW, 0o600)
+        guard fd >= 0 else {
+            throw GPGError.smartCardUnavailable
+        }
+        var committed = false
+        defer {
+            Darwin.close(fd)
+            if !committed {
+                shred(url)
+            }
+        }
+        try passphrase.withUnsafeUTF8 { rawBuffer in
+            guard rawBuffer.count > 0, let base = rawBuffer.baseAddress else {
+                throw GPGError.smartCardPinInvalid
+            }
+            let written = Darwin.write(fd, base, rawBuffer.count)
+            if written != rawBuffer.count {
+                throw GPGError.smartCardUnavailable
+            }
+        }
+        Darwin.fsync(fd)
+        committed = true
+        return url
+    }
+
+    static func shred(_ url: URL) {
+        let path = url.path
+        let fd = Darwin.open(path, O_WRONLY | O_NOFOLLOW)
+        if fd >= 0 {
+            let end = Darwin.lseek(fd, 0, SEEK_END)
+            if end > 0 {
+                _ = Darwin.lseek(fd, 0, SEEK_SET)
+                var zeroes = [UInt8](repeating: 0, count: Int(end))
+                _ = zeroes.withUnsafeMutableBytes { buf in
+                    Darwin.write(fd, buf.baseAddress, buf.count)
+                }
+                Darwin.fsync(fd)
+            }
+            Darwin.close(fd)
+        }
+        Darwin.unlink(path)
+    }
+}
+
 /// Asynchronous streaming manager for running cryptographic processes with constant memory consumption
 public final class StreamingCryptoPipeline: Sendable {
     private static let logger = Logger(subsystem: "com.moaiy.app", category: "StreamingCryptoPipeline")
 
     /// 256KB default chunk size for streaming I/O
+    public static func passphraseArguments(
+        delivery: StreamingPassphraseDelivery,
+        passphraseFile: String
+    ) -> [String] {
+        switch delivery {
+        case .loopbackFile:
+            return ["--pinentry-mode", "loopback", "--passphrase-file", passphraseFile]
+        case .hardwarePinentryToken:
+            return ["--pinentry-mode", "ask", "--no-tty"]
+        }
+    }
+
     public static let defaultChunkSize = 256 * 1024
     /// 8MB maximum in-flight stdout buffer before throttling stdin
     public static let maxInFlightOutputBytes: Int64 = 8 * 1024 * 1024
@@ -76,6 +148,7 @@ public final class StreamingCryptoPipeline: Sendable {
         destinationURL: URL,
         isDecryption: Bool = false,
         passphrase: SecureString? = nil,
+        passphraseDelivery: StreamingPassphraseDelivery = .loopbackFile,
         validateCompletion: (@Sendable (_ exitCode: Int, _ stderr: String) throws -> Void)? = nil,
         progressHandler: (@Sendable (CryptoProgress) -> Void)? = nil
     ) async throws -> URL {
@@ -91,9 +164,13 @@ public final class StreamingCryptoPipeline: Sendable {
         let stagedOutputFile = stagingDir.appendingPathComponent("output.tmp")
 
         var tempPassphrasePath: String?
+        var hardwareTokenURL: URL?
         var passphraseByteCount = 0
 
         defer {
+            if let hardwareTokenURL {
+                HardwarePINTokenFile.shred(hardwareTokenURL)
+            }
             if let passPath = tempPassphrasePath {
                 // Securely scrub the temporary passphrase file with zeros before unlink
                 if passphraseByteCount > 0 {
@@ -128,33 +205,47 @@ public final class StreamingCryptoPipeline: Sendable {
 
         var processArgs = arguments
 
-        // Handle passphrase via dedicated loopback passphrase file created strictly with 0600
+        // Software keys use a loopback passphrase file. Card decrypts use a mode 0600 token
+        // under GNUPGHOME so the bundled pinentry can answer GETPIN and CONFIRM.
         if let passphrase = passphrase, !passphrase.isCleaned {
-            let passFile = stagingDir.appendingPathComponent("passphrase.token")
-            tempPassphrasePath = passFile.path
+            switch passphraseDelivery {
+            case .loopbackFile:
+                let passFile = stagingDir.appendingPathComponent("passphrase.token")
+                tempPassphrasePath = passFile.path
 
-            try passphrase.withUnsafeUTF8 { rawBuffer in
-                passphraseByteCount = rawBuffer.count
-                let fd = open(passFile.path, O_CREAT | O_WRONLY | O_TRUNC | O_EXCL, 0o600)
-                guard fd >= 0 else {
-                    let err = errno
-                    throw GPGError.executionFailed("Failed to securely open passphrase token file: \(String(cString: strerror(err)))")
-                }
-                if let base = rawBuffer.baseAddress, rawBuffer.count > 0 {
-                    let written = write(fd, base, rawBuffer.count)
-                    if written != rawBuffer.count {
-                        close(fd)
-                        throw GPGError.executionFailed("Failed to complete write to passphrase token file.")
+                try passphrase.withUnsafeUTF8 { rawBuffer in
+                    passphraseByteCount = rawBuffer.count
+                    let fd = open(passFile.path, O_CREAT | O_WRONLY | O_TRUNC | O_EXCL, 0o600)
+                    guard fd >= 0 else {
+                        let err = errno
+                        throw GPGError.executionFailed("Failed to securely open passphrase token file: \(String(cString: strerror(err)))")
                     }
+                    if let base = rawBuffer.baseAddress, rawBuffer.count > 0 {
+                        let written = write(fd, base, rawBuffer.count)
+                        if written != rawBuffer.count {
+                            close(fd)
+                            throw GPGError.executionFailed("Failed to complete write to passphrase token file.")
+                        }
+                    }
+                    fsync(fd)
+                    close(fd)
                 }
-                fsync(fd)
-                close(fd)
-            }
 
-            processArgs.append(contentsOf: [
-                "--pinentry-mode", "loopback",
-                "--passphrase-file", passFile.path
-            ])
+                processArgs.append(contentsOf: Self.passphraseArguments(
+                    delivery: .loopbackFile,
+                    passphraseFile: passFile.path
+                ))
+            case .hardwarePinentryToken:
+                guard let gpgHome else {
+                    throw GPGError.smartCardUnavailable
+                }
+                let tokenURL = try HardwarePINTokenFile.write(passphrase, in: gpgHome)
+                hardwareTokenURL = tokenURL
+                processArgs.append(contentsOf: Self.passphraseArguments(
+                    delivery: .hardwarePinentryToken,
+                    passphraseFile: tokenURL.path
+                ))
+            }
         }
 
         let reporter = StreamingProgressReporter(intervalSeconds: 0.1, progressHandler: progressHandler)

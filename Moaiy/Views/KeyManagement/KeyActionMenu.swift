@@ -175,7 +175,8 @@ enum KeyFileCryptoCoordinator {
     static func decryptionKeyMismatchMessageIfNeeded(
         for urls: [URL],
         preferredSecretKey: String,
-        availableSecretKeys: [GPGKey]
+        availableSecretKeys: [GPGKey],
+        blockOnProbeFailure: Bool = true
     ) async -> String? {
         for url in urls {
             do {
@@ -192,11 +193,87 @@ enum KeyFileCryptoCoordinator {
                     availableSecretKeys: availableSecretKeys
                 )
             } catch {
-                return UserFacingErrorMapper.message(for: error, context: .decrypt)
+                if blockOnProbeFailure {
+                    return UserFacingErrorMapper.message(for: error, context: .decrypt)
+                }
+                return nil
             }
         }
 
         return nil
+    }
+
+    /// Decides whether a smartcard decrypt may show the User PIN sheet.
+    /// A recipient probe that cannot finish without a PIN, or that only produced the
+    /// generic decrypt failure, must not hide the sheet.
+    static func makeDecryptPreflightDecision(
+        isSmartCardStub: Bool,
+        presenceMessage: String?,
+        recipientProbeNeedsPIN: Bool,
+        recipientMismatchMessage: String?
+    ) -> DecryptPreflightDecision {
+        let genericDecryptFailure = AppLocalization.string("error_decryption_failed")
+        if isSmartCardStub {
+            if let presenceMessage, !presenceMessage.isEmpty {
+                if presenceMessage == genericDecryptFailure {
+                    return .block(AppLocalization.string("error_smartcard_unavailable"))
+                }
+                return .block(presenceMessage)
+            }
+            if recipientProbeNeedsPIN {
+                return .presentHardwarePIN
+            }
+            if let recipientMismatchMessage,
+               !recipientMismatchMessage.isEmpty,
+               recipientMismatchMessage != genericDecryptFailure {
+                return .block(recipientMismatchMessage)
+            }
+            return .presentHardwarePIN
+        }
+        if let recipientMismatchMessage, !recipientMismatchMessage.isEmpty {
+            return .block(recipientMismatchMessage)
+        }
+        return .proceedToSoftwareDecrypt
+    }
+
+    @MainActor
+    static func fileDecryptPreflight(
+        key: GPGKey,
+        urls: [URL],
+        availableSecretKeys: [GPGKey]
+    ) async -> DecryptPreflightDecision {
+        if key.isSmartCardStub {
+            let presenceMessage = await hardwareTokenPresenceErrorMessageIfNeeded(
+                for: key,
+                context: .decrypt
+            )
+            let mismatch = presenceMessage == nil
+                ? await decryptionKeyMismatchMessageIfNeeded(
+                    for: urls,
+                    preferredSecretKey: key.fingerprint,
+                    availableSecretKeys: availableSecretKeys,
+                    blockOnProbeFailure: false
+                )
+                : nil
+            return makeDecryptPreflightDecision(
+                isSmartCardStub: true,
+                presenceMessage: presenceMessage,
+                recipientProbeNeedsPIN: false,
+                recipientMismatchMessage: mismatch
+            )
+        }
+
+        let mismatch = await decryptionKeyMismatchMessageIfNeeded(
+            for: urls,
+            preferredSecretKey: key.fingerprint,
+            availableSecretKeys: availableSecretKeys
+        )
+        return makeDecryptPreflightDecision(
+            isSmartCardStub: false,
+            presenceMessage: nil,
+            recipientProbeNeedsPIN: false,
+            recipientMismatchMessage: mismatch
+        )
     }
 
     @MainActor
@@ -208,7 +285,6 @@ enum KeyFileCryptoCoordinator {
         }
     }
 
-    @MainActor
     static func hardwareTokenPresenceErrorMessageIfNeeded(
         for key: GPGKey,
         context: UserFacingErrorContext
@@ -272,7 +348,8 @@ enum KeyFileCryptoCoordinator {
     static func decrypt(
         requests: [KeyFileOperationRequest],
         passphrase: String,
-        preferredSecretKey: String
+        preferredSecretKey: String,
+        usesHardwareToken: Bool = false
     ) async -> [KeyFileOperationOutcome] {
         var outcomes: [KeyFileOperationOutcome] = []
         outcomes.reserveCapacity(requests.count)
@@ -288,7 +365,8 @@ enum KeyFileCryptoCoordinator {
                         sourceURL: request.sourceURL,
                         destinationURL: request.destinationURL,
                         passphrase: secPass,
-                        preferredSecretKey: preferredSecretKey
+                        preferredSecretKey: preferredSecretKey,
+                        usesHardwareToken: usesHardwareToken
                     )
                 }
 
@@ -357,6 +435,12 @@ enum KeyFileCryptoCoordinator {
 
         return try await operation()
     }
+}
+
+enum DecryptPreflightDecision: Equatable {
+    case proceedToSoftwareDecrypt
+    case presentHardwarePIN
+    case block(String)
 }
 
 enum KeyActionAlertDecision: Equatable {
@@ -1447,33 +1531,24 @@ struct KeyActionMenu: View {
         guard !selectedURLs.isEmpty else { return }
 
         Task { @MainActor in
-            if let hardwareTokenError = await KeyFileCryptoCoordinator.hardwareTokenPresenceErrorMessageIfNeeded(
-                for: key,
-                context: .decrypt
-            ) {
-                showError(
-                    title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
-                    message: hardwareTokenError
-                )
-                return
-            }
-
-            if let mismatchMessage = await KeyFileCryptoCoordinator.decryptionKeyMismatchMessageIfNeeded(
-                for: selectedURLs,
-                preferredSecretKey: key.fingerprint,
+            let decision = await KeyFileCryptoCoordinator.fileDecryptPreflight(
+                key: key,
+                urls: selectedURLs,
                 availableSecretKeys: viewModel.secretKeys
-            ) {
+            )
+            switch decision {
+            case .block(let message):
                 showError(
                     title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
-                    message: mismatchMessage
+                    message: message
                 )
                 return
-            }
-
-            if key.isSmartCardStub {
+            case .presentHardwarePIN:
                 pendingYubiKeyPINFileName = selectedURLs.first?.lastPathComponent ?? ""
                 pendingYubiKeyPINAction = .decrypt(selectedURLs)
                 return
+            case .proceedToSoftwareDecrypt:
+                break
             }
 
             let requiresPassphrase = await KeyFileCryptoCoordinator.requiresPassphrase(for: key.fingerprint)
@@ -1603,7 +1678,8 @@ struct KeyActionMenu: View {
         let outcomes = await KeyFileCryptoCoordinator.decrypt(
             requests: requests,
             passphrase: passphrase,
-            preferredSecretKey: key.fingerprint
+            preferredSecretKey: key.fingerprint,
+            usesHardwareToken: key.isSmartCardStub
         )
         showOperationResults(
             KeyFileOperationResultMapper.decryptResults(from: outcomes),

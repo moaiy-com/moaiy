@@ -166,12 +166,19 @@ final class KeyManagementViewModel {
         errorContext = .general
 
         do {
-            // Load both public and secret keys
+            // Load public keys first so the list can appear even if the card path is down.
             let publicKeys = try await gpgService.listKeys(secretOnly: false)
             logger.info("Loaded \(publicKeys.count) public keys")
 
-            let secretKeys = try await gpgService.listKeys(secretOnly: true)
-            logger.info("Loaded \(secretKeys.count) secret keys")
+            var secretKeys: [GPGKey] = []
+            var secretListError: Error?
+            do {
+                secretKeys = try await gpgService.listKeys(secretOnly: true)
+                logger.info("Loaded \(secretKeys.count) secret keys")
+            } catch {
+                secretListError = error
+                logger.error("Failed to load secret keys: \(error.localizedDescription)")
+            }
 
             // Merge keys, marking secret ones
             var allKeys = publicKeys
@@ -200,33 +207,58 @@ final class KeyManagementViewModel {
 
             keys = allKeys.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
             logger.info("Total keys after merge: \(self.keys.count)")
-            errorMessage = nil
-            retryCount = 0 // Reset retry count on success
 
             // Update expiration reminders
             expirationReminder.updateKeys(keys)
             await expirationReminder.scheduleReminders()
+
+            if let secretListError {
+                let policy = GPGService.keyListRetryPolicy(for: secretListError)
+                if policy == .doNotRetry {
+                    // Card-path failures must not hide the list or start 2^n retries.
+                    errorMessage = nil
+                    retryCount = 0
+                } else {
+                    setError(secretListError, context: .keyList)
+                    scheduleKeyListRetry(policy: policy)
+                }
+            } else {
+                errorMessage = nil
+                retryCount = 0
+            }
         } catch {
             setError(error, context: .keyList)
             logger.error("Failed to load keys: \(error.localizedDescription)")
-
-            // Auto-retry with exponential backoff
-            if retryCount < maxRetries {
-                retryCount += 1
-                let delay = UInt64(pow(2.0, Double(retryCount)) * 1_000_000_000) // 2^n seconds
-                logger.info("Scheduling retry \(self.retryCount)/\(self.maxRetries) in \(delay / 1_000_000_000) seconds")
-
-                retryTask?.cancel()
-                retryTask = Task {
-                    try? await Task.sleep(nanoseconds: delay)
-                    if !Task.isCancelled {
-                        await loadKeys()
-                    }
-                }
-            }
+            scheduleKeyListRetry(policy: GPGService.keyListRetryPolicy(for: error))
         }
 
         isLoading = false
+    }
+
+    private func scheduleKeyListRetry(policy: GPGService.KeyListRetryPolicy) {
+        let delay: UInt64
+        switch policy {
+        case .doNotRetry:
+            return
+        case .retryOnceShort:
+            guard retryCount == 0 else { return }
+            retryCount = 1
+            delay = 1_000_000_000
+            logger.info("Scheduling a single short key-list retry in 1 second")
+        case .retryWithBackoff:
+            guard retryCount < maxRetries else { return }
+            retryCount += 1
+            delay = UInt64(pow(2.0, Double(retryCount)) * 1_000_000_000)
+            logger.info("Scheduling retry \(self.retryCount)/\(self.maxRetries) in \(delay / 1_000_000_000) seconds")
+        }
+
+        retryTask?.cancel()
+        retryTask = Task {
+            try? await Task.sleep(nanoseconds: delay)
+            if !Task.isCancelled {
+                await loadKeys()
+            }
+        }
     }
     
     // MARK: - Key Generation

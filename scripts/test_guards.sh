@@ -96,4 +96,7 @@ cat > "${BAD_LOC}" << 'EOF'
 EOF
 assert_fails "localization-empty-translation" python3 scripts/check_localization.py --catalog "${BAD_LOC}"
 
+echo "=== [Guard Self-Tests] Bundled pinentry protocol ==="
+bash scripts/test_moaiy_pinentry.sh
+
 echo "✅ All guard positive & negative self-tests passed!"

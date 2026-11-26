@@ -6,6 +6,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_PATH="$ROOT_DIR/Moaiy/Moaiy.xcodeproj"
 ENTITLEMENTS_PATH="$ROOT_DIR/Moaiy/Resources/Entitlements.entitlements"
 HELPER_ENTITLEMENTS_PATH="$ROOT_DIR/Moaiy/Resources/GPGHelper.entitlements"
+SCDAEMON_ENTITLEMENTS_PATH="$ROOT_DIR/Moaiy/Resources/GPGScdaemon.entitlements"
+SCDAEMON_INFO_PLIST_PATH="$ROOT_DIR/Moaiy/Resources/ScdaemonInfo.plist"
 PRIVACY_MANIFEST_PATH="$ROOT_DIR/Moaiy/PrivacyInfo.xcprivacy"
 INFO_PLIST_PATH="$ROOT_DIR/Moaiy/Info.plist"
 
@@ -31,7 +33,7 @@ if [[ ! -d "$PROJECT_PATH" ]]; then
 fi
 
 echo "==> [1/4] Validating MAS entitlements & privacy manifest..."
-for plist_file in "$ENTITLEMENTS_PATH" "$HELPER_ENTITLEMENTS_PATH" "$PRIVACY_MANIFEST_PATH" "$INFO_PLIST_PATH"; do
+for plist_file in "$ENTITLEMENTS_PATH" "$HELPER_ENTITLEMENTS_PATH" "$SCDAEMON_ENTITLEMENTS_PATH" "$SCDAEMON_INFO_PLIST_PATH" "$PRIVACY_MANIFEST_PATH" "$INFO_PLIST_PATH"; do
   if [[ ! -f "$plist_file" ]]; then
     echo "ERROR: required plist missing at $plist_file"
     exit 1
@@ -49,6 +51,36 @@ if ! grep -q "com.apple.security.inherit" "$HELPER_ENTITLEMENTS_PATH"; then
   exit 1
 fi
 
+for forbidden_helper_key in "com.apple.security.smartcard" "com.apple.security.device.usb"; do
+  if grep -q "$forbidden_helper_key" "$HELPER_ENTITLEMENTS_PATH"; then
+    echo "ERROR: GPGHelper.entitlements must stay inherit-only; found $forbidden_helper_key."
+    echo "Device entitlements on gpg/gpg-agent make secinit SIGTRAP (no CFBundleIdentifier)."
+    exit 1
+  fi
+done
+
+for scdaemon_key in "com.apple.security.app-sandbox" "com.apple.security.smartcard" "com.apple.security.device.usb"; do
+  if ! grep -q "$scdaemon_key" "$SCDAEMON_ENTITLEMENTS_PATH"; then
+    echo "ERROR: GPGScdaemon.entitlements is missing $scdaemon_key."
+    exit 1
+  fi
+done
+
+if grep -q "com.apple.security.inherit" "$SCDAEMON_ENTITLEMENTS_PATH"; then
+  echo "ERROR: GPGScdaemon.entitlements must not use inherit; inherit plus device entitlements makes secinit SIGTRAP (SYSCALL_SET_USERLAND_PROFILE)."
+  exit 1
+fi
+
+if ! grep -q "Library/Containers/com.moaiy.app/Data/Library/gnupg/" "$SCDAEMON_ENTITLEMENTS_PATH"; then
+  echo "ERROR: GPGScdaemon.entitlements must allow the app-managed GNUPGHOME in the Moaiy container."
+  exit 1
+fi
+
+if ! grep -q "com.moaiy.app.scdaemon" "$SCDAEMON_INFO_PLIST_PATH"; then
+  echo "ERROR: ScdaemonInfo.plist is missing CFBundleIdentifier com.moaiy.app.scdaemon."
+  exit 1
+fi
+
 for required_api in "NSPrivacyAccessedAPICategoryUserDefaults" "NSPrivacyAccessedAPICategoryDiskSpace" "NSPrivacyAccessedAPICategoryFileTimestamp"; do
   if ! grep -q "$required_api" "$PRIVACY_MANIFEST_PATH"; then
     echo "ERROR: PrivacyInfo.xcprivacy is missing required API category: $required_api"
@@ -62,6 +94,34 @@ if ! grep -q "ITSAppUsesNonExemptEncryption" "$INFO_PLIST_PATH"; then
 fi
 
 echo "==> [2/4] Validating bundled GPG integrity & MAS helper signing script..."
+SCDAEMON_BIN="$ROOT_DIR/Moaiy/Resources/gpg.bundle/bin/scdaemon"
+if [[ ! -x "$SCDAEMON_BIN" ]]; then
+  echo "ERROR: source scdaemon binary missing at $SCDAEMON_BIN"
+  exit 1
+fi
+if ! grep -q "MoaiyScdaemon.app" "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh" \
+  || ! grep -q "install_scdaemon_helper_app" "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh"; then
+  echo "ERROR: sign_embedded_gpg_bundle.sh must package scdaemon as Helpers/MoaiyScdaemon.app."
+  exit 1
+fi
+if ! grep -q "install_and_sign_helper_libraries" "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh" \
+  || ! grep -q 'helper_app/Contents/lib' "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh"; then
+  echo "ERROR: sign_embedded_gpg_bundle.sh must copy scdaemon libraries into MoaiyScdaemon.app/Contents/lib."
+  exit 1
+fi
+if ! grep -q "is_adhoc_sign_identity" "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh" \
+  || ! grep -q "sign_scdaemon_helper_codesign" "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh"; then
+  echo "ERROR: sign_embedded_gpg_bundle.sh must omit hardened runtime on the scdaemon helper when signing ad-hoc."
+  exit 1
+fi
+if ! grep -q "compile_scdaemon_launcher" "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh" \
+  || ! grep -q "sign_scdaemon_launcher_executable" "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh" \
+  || ! grep -q "CFBundleExecutable</key>" "$ROOT_DIR/Moaiy/Resources/ScdaemonInfo.plist" \
+  || ! grep -q "MoaiyScdaemon" "$ROOT_DIR/Moaiy/Resources/ScdaemonInfo.plist" \
+  || [[ ! -f "$ROOT_DIR/Moaiy/Resources/scdaemon_launcher.c" ]]; then
+  echo "ERROR: scdaemon helper must ship a getpwuid launcher as CFBundleExecutable."
+  exit 1
+fi
 "$ROOT_DIR/scripts/verify_gpg_bundle.sh" >/dev/null
 
 echo "==> [3/4] Checking external support/privacy URLs referenced in app..."

@@ -347,13 +347,20 @@ struct KeyCardView: View {
     @MainActor
     private func startQueuedDecryptionFlow() async {
         if key.isSmartCardStub {
-            if let hardwareTokenError = await KeyFileCryptoCoordinator.hardwareTokenPresenceErrorMessageIfNeeded(
+            let presenceMessage = await KeyFileCryptoCoordinator.hardwareTokenPresenceErrorMessageIfNeeded(
                 for: key,
                 context: .decrypt
-            ) {
+            )
+            let decision = KeyFileCryptoCoordinator.makeDecryptPreflightDecision(
+                isSmartCardStub: true,
+                presenceMessage: presenceMessage,
+                recipientProbeNeedsPIN: false,
+                recipientMismatchMessage: nil
+            )
+            if case .block(let message) = decision {
                 promptAlert = PromptAlertContent.failure(
                     title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
-                    message: hardwareTokenError
+                    message: message
                 )
                 pendingDecryptRequests = []
                 return
@@ -432,26 +439,15 @@ struct KeyCardView: View {
             return true
 
         case .decrypt:
-            if let hardwareTokenError = await KeyFileCryptoCoordinator.hardwareTokenPresenceErrorMessageIfNeeded(
-                for: key,
-                context: .decrypt
-            ) {
-                promptAlert = PromptAlertContent.failure(
-                    title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
-                    message: hardwareTokenError
-                )
-                pendingDecryptRequests = []
-                return false
-            }
-
-            if let mismatchMessage = await KeyFileCryptoCoordinator.decryptionKeyMismatchMessageIfNeeded(
-                for: [url],
-                preferredSecretKey: key.fingerprint,
+            let decision = await KeyFileCryptoCoordinator.fileDecryptPreflight(
+                key: key,
+                urls: [url],
                 availableSecretKeys: viewModel.secretKeys
-            ) {
+            )
+            if case .block(let message) = decision {
                 promptAlert = PromptAlertContent.failure(
                     title: LocalizedStringKey(UserFacingErrorMapper.alertTitleKey(for: .decrypt)),
-                    message: mismatchMessage
+                    message: message
                 )
                 pendingDecryptRequests = []
                 return false
@@ -510,7 +506,8 @@ struct KeyCardView: View {
         let outcomes = await KeyFileCryptoCoordinator.decrypt(
             requests: requests,
             passphrase: password,
-            preferredSecretKey: key.fingerprint
+            preferredSecretKey: key.fingerprint,
+            usesHardwareToken: key.isSmartCardStub
         )
         operationResults.append(contentsOf: KeyFileOperationResultMapper.decryptResults(from: outcomes))
         

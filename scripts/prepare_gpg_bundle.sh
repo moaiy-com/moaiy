@@ -125,7 +125,21 @@ copy_gpg_executables() {
     if [ $copied_count -eq 0 ]; then
         error "No GPG executables found!"
     fi
-    
+
+    local scdaemon_src=""
+    if [ -x "$HOMEBREW_PREFIX/opt/gnupg/libexec/scdaemon" ]; then
+        scdaemon_src="$HOMEBREW_PREFIX/opt/gnupg/libexec/scdaemon"
+    else
+        scdaemon_src="$(find "$HOMEBREW_PREFIX/Cellar/gnupg" -path '*/libexec/scdaemon' -type f 2>/dev/null | head -n 1 || true)"
+    fi
+    if [ -n "$scdaemon_src" ] && [ -f "$scdaemon_src" ]; then
+        cp "$scdaemon_src" "$TEMP_BUNDLE/bin/scdaemon"
+        chmod +x "$TEMP_BUNDLE/bin/scdaemon"
+        success "Copied: scdaemon"
+    else
+        error "scdaemon not found. Install GnuPG with: brew install gnupg"
+    fi
+
     info "Copied $copied_count executables"
 }
 
@@ -137,8 +151,13 @@ copy_libraries() {
     
     # Get GPG dependencies using otool
     info "Analyzing GPG dependencies..."
-    local gpg_path="$TEMP_BUNDLE/bin/gpg"
-    local deps=$(otool -L "$gpg_path" 2>/dev/null | grep "homebrew\|local" | awk '{print $1}')
+    local deps=""
+    local exe
+    for exe in "$TEMP_BUNDLE/bin"/*; do
+        if [ -f "$exe" ]; then
+            deps+=$'\n'"$(otool -L "$exe" 2>/dev/null | grep "homebrew\|local" | awk '{print $1}')"
+        fi
+    done
     
     # Copy each dependency
     for dep in $deps; do
@@ -174,6 +193,7 @@ copy_libraries() {
         "libreadline"
         "libncurses"
         "libksba"
+        "libusb"
     )
     
     for lib_prefix in "${common_libs[@]}"; do
@@ -281,6 +301,10 @@ sign_binaries() {
     local sign_identity="${GPG_CODESIGN_IDENTITY:--}"
     local helper_entitlements="$PROJECT_ROOT/Moaiy/Resources/GPGHelper.entitlements"
     local sign_for_sandbox="${SIGN_FOR_APP_SANDBOX:-0}"
+    # Executables are signed by scripts/sign_embedded_gpg_bundle.sh. When that
+    # script signs an embedded Moaiy.app copy, scdaemon is packaged as
+    # Helpers/MoaiyScdaemon.app with device entitlements. Other helpers, and
+    # the leftover gpg.bundle/bin/scdaemon source copy, stay inherit-only.
 
     # Sign libraries first (inside-out signing, no entitlements on dylibs)
     for lib in "$TEMP_BUNDLE/lib"/*.dylib; do
@@ -306,20 +330,24 @@ sign_binaries() {
         if [ -f "$exe" ]; then
             local exe_name=$(basename "$exe")
             
-            # Remove existing signature
-            codesign --remove-signature "$exe" 2>/dev/null || true
-            
             if [ "$sign_for_sandbox" = "1" ]; then
                 if [ ! -f "$helper_entitlements" ]; then
                     error "Helper entitlements missing at $helper_entitlements"
                 fi
-                if codesign --force --entitlements "$helper_entitlements" -s "$sign_identity" "$exe" 2>/dev/null; then
-                    success "Signed (with sandbox inheritance): $exe_name"
+                if EXPANDED_CODE_SIGN_IDENTITY="$sign_identity" \
+                    "$PROJECT_ROOT/scripts/sign_embedded_gpg_bundle.sh" --executable "$exe"; then
+                    if [ "$exe_name" = "scdaemon" ]; then
+                        success "Signed source-tree scdaemon inherit-only; helper .app is created when signing Moaiy.app: $exe_name"
+                    else
+                        success "Signed (inherit-only sandbox): $exe_name"
+                    fi
                     ((sign_count+=1))
                 else
                     warning "Failed to sign: $exe_name"
                 fi
             else
+                # Ad-hoc signature for source-tree CLI/test execution. No inherit.
+                codesign --remove-signature "$exe" 2>/dev/null || true
                 if codesign --force -s "$sign_identity" "$exe" 2>/dev/null; then
                     success "Signed: $exe_name"
                     ((sign_count+=1))
