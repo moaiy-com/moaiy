@@ -46,8 +46,9 @@ Moaiy v1.0.0 正式发布首个 GA 稳定版，引入恒定低内存开销的流
 ### 方式 1：下载发布版本
 
 - 从 [GitHub Releases](https://github.com/moaiy-com/moaiy/releases) 下载最新 `.dmg`
-- Apple Silicon 芯片 Mac：`Moaiy-1.0.0-macos-apple-silicon.dmg`
-- Intel 芯片 Mac：`Moaiy-1.0.0-macos-intel-chip.dmg`
+- Apple Silicon 芯片 Mac：`Moaiy-<version>-macos-apple-silicon.dmg`
+- Intel 芯片 Mac：仅当该版本的捆绑运行时包含 `x86_64` 时才有 `Moaiy-<version>-macos-intel-chip.dmg`。当前构建只有 Apple Silicon。
+- 未签名下载包没有代码签名，也没有公证。macOS Gatekeeper 会阻止打开，直到你在“系统设置 → 隐私与安全性”中允许。它不能代替 Developer ID 签名并公证的发布。
 
 ### 方式 2：源码构建
 
@@ -88,7 +89,7 @@ moaiy decrypt --input secret.txt.gpg --output secret.txt
 ./scripts/package_dmg.sh
 ```
 
-或运行双架构（`arm64` + `x86_64`）完整发布编排脚本（自动生成双架构 DMG、`SHA256SUMS.txt`、`release-manifest.json` 与双语 `release-notes.md`）：
+或运行发布编排脚本。只有 `gpg.bundle` 含有 `x86_64` 时才会打 Intel DMG。`--signing auto` 在配置了 Development Team ID 时走签名 Release 轨道，否则走未签名 Debug 轨道。未签名轨道允许 `--mode publish`，生成的说明会包含上面的 Gatekeeper 警告。把文件上传到 GitHub Release 由 `Release` 工作流完成，而不是只靠这条命令。
 
 ```bash
 ./scripts/release/run_release.sh --version 1.0.0 --mode draft --signing auto --gate balanced

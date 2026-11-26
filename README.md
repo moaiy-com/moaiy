@@ -46,8 +46,9 @@ Moaiy v1.0.0 marks the first General Availability milestone, introducing a bound
 ### Option 1: Download Release
 
 - Download the latest `.dmg` from [GitHub Releases](https://github.com/moaiy-com/moaiy/releases)
-- Apple Silicon Macs: `Moaiy-1.0.0-macos-apple-silicon.dmg`
-- Intel Macs: `Moaiy-1.0.0-macos-intel-chip.dmg`
+- Apple Silicon Macs: `Moaiy-<version>-macos-apple-silicon.dmg`
+- Intel Macs: `Moaiy-<version>-macos-intel-chip.dmg` only when that release bundled an `x86_64` runtime. Current builds are Apple Silicon only.
+- An unsigned download is not code-signed and is not notarized. macOS Gatekeeper will block opening it until you allow it in System Settings → Privacy & Security. It is not a substitute for a Developer ID signed and notarized release.
 
 ### Option 2: Build from Source
 
@@ -88,7 +89,7 @@ Use one command to build and package a timestamped DMG:
 ./scripts/package_dmg.sh
 ```
 
-Or run the full dual-architecture (`arm64` + `x86_64`) release orchestrator:
+Or run the release orchestrator. It packages an Intel DMG only when `gpg.bundle` contains `x86_64`. `--signing auto` uses the signed Release track when a Development Team ID is configured, and the unsigned Debug track otherwise. `--mode publish` is allowed on that unsigned track; the generated notes include the Gatekeeper warning above. Uploading the GitHub Release is done by the `Release` workflow, not by this command alone.
 
 ```bash
 ./scripts/release/run_release.sh --version 1.0.0 --mode draft --signing auto --gate balanced
