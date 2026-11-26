@@ -291,6 +291,20 @@ struct SmartCardDecryptPolicyTests {
         #expect(!GPGService.appManagedKeyListNeedsRunningAgent(secretOnly: false))
     }
 
+    @Test("Smartcard file decrypt asks for a destination before checking the card")
+    func smartCardDecrypt_promptsForDestinationBeforePresence() {
+        #expect(
+            !KeyFileCryptoCoordinator.requiresDecryptPreflightBeforeDestinationPrompt(
+                isSmartCardStub: true
+            )
+        )
+        #expect(
+            KeyFileCryptoCoordinator.requiresDecryptPreflightBeforeDestinationPrompt(
+                isSmartCardStub: false
+            )
+        )
+    }
+
     @Test("Software decrypt preflight is unchanged by the smartcard gate")
     func preflight_softwareKey_proceedsWithoutMismatch() {
         let decision = KeyFileCryptoCoordinator.makeDecryptPreflightDecision(

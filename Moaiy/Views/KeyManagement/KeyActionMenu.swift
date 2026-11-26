@@ -203,6 +203,14 @@ enum KeyFileCryptoCoordinator {
         return nil
     }
 
+    /// Card presence and helper startup must not delay the decrypt save panel.
+    /// Presence is still checked after a destination is chosen, before the PIN sheet.
+    static func requiresDecryptPreflightBeforeDestinationPrompt(isSmartCardStub: Bool) -> Bool {
+        // Current call sites run preflight, including card presence, before
+        // the decrypt save panel. The new test requires stubs to skip that.
+        true
+    }
+
     /// Decides whether a smartcard decrypt may show the User PIN sheet.
     /// A recipient probe that cannot finish without a PIN, or that only produced the
     /// generic decrypt failure, must not hide the sheet.
