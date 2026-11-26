@@ -46,6 +46,10 @@ jobs:
           chmod +x ./scripts/package_dmg.sh
           chmod +x ./scripts/release/*.sh
 
+      - name: Unsigned publish policy tests
+        run: |
+          bash ./scripts/release/test_unsigned_publish.sh
+
       - name: Asset catalog integrity guard
         run: |
           ./scripts/release/check_asset_catalog_integrity.sh

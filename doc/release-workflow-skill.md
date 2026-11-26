@@ -35,12 +35,13 @@ use the controlled fallback path.
 
 4. Review generated artifacts:
    - `dist/release/vX.Y.Z-*/assets/Moaiy-X.Y.Z-macos-apple-silicon.dmg`
-   - `dist/release/vX.Y.Z-*/assets/Moaiy-X.Y.Z-macos-intel-chip.dmg`
+   - `dist/release/vX.Y.Z-*/assets/Moaiy-X.Y.Z-macos-intel-chip.dmg` only when `gpg.bundle` contains an `x86_64` slice
    - `dist/release/vX.Y.Z-*/SHA256SUMS.txt`
    - `dist/release/vX.Y.Z-*/release-manifest.json`
    - `dist/release/vX.Y.Z-*/release-notes.md`
    - `release-notes.md` must include a detailed change list for the target version
      (auto-extracted from `CHANGELOG.md`, not only packaging metadata)
+   - Current `gpg.bundle` is arm64-only, so the official path publishes the Apple Silicon DMG and does not require an Intel file.
 5. Create or verify release tag `vX.Y.Z` on `origin/main`.
 6. Publish with GitHub workflow (`Release`) after draft verification.
 7. Verify published release state and digests:
@@ -51,10 +52,11 @@ use the controlled fallback path.
   --tag vX.Y.Z \
   --mode draft|publish \
   --arm64-dmg-path <path> \
-  --x86-64-dmg-path <path> \
   --sha256-path <path> \
   --manifest-path <path>
 ```
+
+Add `--x86-64-dmg-path` only when `release-manifest.json` lists an `x86_64` artifact. Omitting it for an Apple Silicon-only manifest is required. Passing it when the manifest has no Intel artifact fails closed, and a manifest that lists Intel without the flag also fails.
 
 ## Release Note Policy
 
@@ -74,15 +76,36 @@ gh release edit vX.Y.Z --repo moaiy-com/moaiy --notes-file <release-notes.md>
 
 ## Gate Policy
 
-- `balanced` (default): arm64 full test gate + x86_64 smoke gate
-- `strict`: arm64 full test gate + x86_64 full test gate
+x86_64 gates run only when `lipo` reports an `x86_64` slice in `gpg.bundle`. The current bundle does not, so every gate level runs the arm64 gate only.
+
+- `balanced` (default): arm64 full test gate, plus x86_64 smoke when that slice exists
+- `strict`: arm64 full test gate, plus x86_64 full when that slice exists
 - `fast`: arm64 full test gate only
 
 ## Signing Policy (Dual Track)
 
-- `auto`: signed track when team id is configured, otherwise unsigned track
-- `unsigned`: always use unsigned distribution path
+- `auto`: signed Release track when `MOAIY_DEVELOPMENT_TEAM_ID` (environment or `Moaiy/Config/Moaiy.Signing.xcconfig`) is a real team id. Otherwise the unsigned Debug track. Placeholders (`YOUR_TEAM_ID`, `__TEAM_ID_PLACEHOLDER__`) are not valid.
+- `unsigned`: always use the unsigned Debug path, including `--mode publish`
 - `signed`: fail fast if no valid team id is configured
+- `--mode publish` does not require a signed artifact. With no valid team id, publish completes on the unsigned track.
+- Unsigned release notes must say the build is not code-signed, is not notarized, that macOS Gatekeeper will block opening it until the user allows it, and that it is not a substitute for a Developer ID signed and notarized release. `package_dmg.sh` has no notarization step; do not describe an unsigned package as notarized.
+- Signed notes must still say that packaging itself does not notarize the app.
+
+## Unsigned official publish (no Apple Developer account)
+
+Tag `vX.Y.Z` must already point at the `origin/main` commit that contains this policy, and `build-and-test` must be green on that commit. Then dispatch the `Release` workflow:
+
+```bash
+gh workflow dispatch Release \
+  --repo moaiy-com/moaiy \
+  --ref main \
+  -f version=X.Y.Z \
+  -f mode=publish \
+  -f signing=auto \
+  -f gate=balanced
+```
+
+`signing=auto` stays on the signed Release track once a team id is configured. `signing=unsigned` forces the unsigned track even if a team id is present. The workflow creates a draft only as the upload staging step, then edits it to a public release when `mode=publish`.
 
 ## Repository Ruleset Prerequisite
 
@@ -122,7 +145,7 @@ Use only when `Release` workflow fails due workflow logic defects
 
 - Version mismatch: fix `MARKETING_VERSION` + `CHANGELOG` before rerun.
 - Gate failure: do not create/update tag; fix tests first.
-- Artifact mismatch: regenerate both architectures in the same run.
+- Artifact mismatch: regenerate the architectures this runtime can package in the same run. Do not publish an Intel DMG the manifest does not list, and do not omit one it does list.
 - Existing tag conflict: resolve tag target mismatch before any release update.
 - Workflow defect fallback used: publish can proceed with controlled fallback,
   but workflow fix PR is mandatory before next release.

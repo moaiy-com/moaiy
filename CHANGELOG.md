@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 - Bumped app marketing version to `1.0.5` and `CURRENT_PROJECT_VERSION` to `13`.
+- Official GitHub Releases can publish an unsigned build when no valid Apple Development Team ID is configured. The release notes state that the build is unsigned, not notarized, and that macOS Gatekeeper will block opening it until the user allows it. A configured team ID still selects the signed track.
+- Release packaging includes an Intel DMG only when the bundled GnuPG runtime contains an `x86_64` slice. The current runtime is Apple Silicon only, so the official publish uploads that DMG and does not require an Intel artifact.
 
 ### Fixed
 - OpenPGP card / YubiKey file decryption now asks for the User PIN in the app, uses a bundled `scdaemon` and pinentry so GnuPG `CONFIRM` is answered, and shows a specific smartcard, PIN, or missing-key error instead of a generic decryption failure when the cause is known.
@@ -21,6 +23,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed (zh-Hans)
 - 将应用营销版本号升级至 `1.0.5`，工程构建版本号递增至 `13`。
+- 在没有有效 Apple Development Team ID 时，官方 GitHub Release 可以发布未签名构建。发布说明会写明该构建未签名、未经公证，以及 macOS Gatekeeper 会在用户允许之前阻止打开。配置了 Team ID 时仍优先走签名轨道。
+- 仅当捆绑的 GnuPG 运行时包含 `x86_64` 切片时才附带 Intel DMG。当前运行时只有 Apple Silicon，因此正式发布只上传该 DMG，不再强制要求 Intel 产物。
 
 ### Fixed (zh-Hans)
 - 智能卡 / YubiKey 文件解密会在应用内询问 User PIN，使用捆绑的 `scdaemon` 与 pinentry 应答 GnuPG `CONFIRM`，并在原因明确时显示智能卡、PIN 或缺少私钥的具体错误，而不是笼统的解密失败。

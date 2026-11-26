@@ -17,6 +17,8 @@ Options:
   --dist-dir <path>             Output root (default: <repo>/dist/release)
   --allow-existing-tag          Allow local existing tag during reruns
   --github-output <path>        Optional GitHub output file path
+  --dry-run                     Resolve signing and architectures, then exit
+                                before version sync, gates, or packaging
   -h, --help                    Show help
 
 Outputs:
@@ -35,6 +37,7 @@ GATE="balanced"
 DIST_DIR="$ROOT_DIR/dist/release"
 ALLOW_EXISTING_TAG=false
 GITHUB_OUTPUT_PATH=""
+DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -65,6 +68,10 @@ while [[ $# -gt 0 ]]; do
     --github-output)
       GITHUB_OUTPUT_PATH="${2:-}"
       shift 2
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
       ;;
     -h|--help)
       usage
@@ -108,9 +115,17 @@ if [[ -n "$GITHUB_OUTPUT_PATH" ]]; then
   mkdir -p "$(dirname "$GITHUB_OUTPUT_PATH")"
 fi
 
+is_valid_team_id() {
+  local team_id="$1"
+  [[ -n "$team_id" && "$team_id" != "__TEAM_ID_PLACEHOLDER__" && "$team_id" != "YOUR_TEAM_ID" ]]
+}
+
 has_valid_team_id() {
+  # A non-empty environment value wins, including an invalid placeholder.
+  # An unset or empty variable falls through to Moaiy/Config/Moaiy.Signing.xcconfig.
   if [[ -n "${MOAIY_DEVELOPMENT_TEAM_ID:-}" ]]; then
-    return 0
+    is_valid_team_id "${MOAIY_DEVELOPMENT_TEAM_ID}"
+    return
   fi
 
   local signing_config="$ROOT_DIR/Moaiy/Config/Moaiy.Signing.xcconfig"
@@ -125,7 +140,34 @@ has_valid_team_id() {
       | xargs
   )"
 
-  [[ -n "$team_id" && "$team_id" != "__TEAM_ID_PLACEHOLDER__" && "$team_id" != "YOUR_TEAM_ID" ]]
+  is_valid_team_id "$team_id"
+}
+
+# True when the bundled GnuPG runtime contains an x86_64 slice.
+# package_dmg.sh refuses to build an architecture the bundle does not contain,
+# and the Xcode project currently sets ARCHS = arm64. Intel packaging stays
+# enabled only when lipo can see x86_64, so a universal runtime is not dropped.
+bundled_runtime_supports_x86_64() {
+  local gpg_bin="$ROOT_DIR/Moaiy/Resources/gpg.bundle/bin/gpg"
+  local archs=""
+
+  if [[ ! -f "$gpg_bin" ]]; then
+    echo "ERROR: bundled gpg binary missing: $gpg_bin" >&2
+    return 2
+  fi
+
+  if ! command -v lipo >/dev/null 2>&1; then
+    echo "WARNING: lipo is not available; treating the bundled runtime as arm64-only." >&2
+    return 1
+  fi
+
+  if ! archs="$(lipo -archs "$gpg_bin" 2>/dev/null)"; then
+    echo "ERROR: lipo could not read architectures from $gpg_bin." >&2
+    echo "Refusing to guess and omit an Intel artifact." >&2
+    return 2
+  fi
+
+  [[ "$archs" == *"x86_64"* ]]
 }
 
 EFFECTIVE_SIGNING_MODE="$SIGNING"
@@ -151,10 +193,29 @@ else
   BUILD_CONFIGURATION="Debug"
 fi
 
-if [[ "$MODE" == "publish" && "$EFFECTIVE_SIGNING_MODE" != "signed" ]]; then
-  echo "ERROR: publish mode requires signed artifacts."
-  echo "Use --signing signed, or --signing auto with a valid MOAIY_DEVELOPMENT_TEAM_ID."
+if [[ "$MODE" == "publish" && "$EFFECTIVE_SIGNING_MODE" == "unsigned" ]]; then
+  echo "WARNING: publishing an unsigned build. It is not code-signed and is not notarized." >&2
+  echo "WARNING: macOS Gatekeeper will block opening it until the user allows it." >&2
+  echo "WARNING: this is not a substitute for a Developer ID signed and notarized release." >&2
+fi
+
+SUPPORTS_X86_64=false
+set +e
+bundled_runtime_supports_x86_64
+arch_status=$?
+set -e
+if [[ "$arch_status" -eq 0 ]]; then
+  SUPPORTS_X86_64=true
+elif [[ "$arch_status" -eq 2 ]]; then
   exit 1
+fi
+
+if [[ "$DRY_RUN" == true ]]; then
+  echo "signing_mode=$EFFECTIVE_SIGNING_MODE"
+  echo "build_configuration=$BUILD_CONFIGURATION"
+  echo "supports_x86_64=$SUPPORTS_X86_64"
+  echo "release_mode=$MODE"
+  exit 0
 fi
 
 SYNC_ARGS=(--version "$VERSION")
@@ -194,12 +255,6 @@ run_gate() {
 
 run_gate "arm64" "full"
 
-BUNDLED_GPG_ARCHS="$(lipo -archs "$ROOT_DIR/Moaiy/Resources/gpg.bundle/bin/gpg" 2>/dev/null || echo "arm64")"
-SUPPORTS_X86_64=false
-if [[ "$BUNDLED_GPG_ARCHS" == *"x86_64"* ]]; then
-  SUPPORTS_X86_64=true
-fi
-
 if [[ "$SUPPORTS_X86_64" == true ]]; then
   if [[ "$GATE" == "balanced" ]]; then
     run_gate "x86_64" "smoke"
@@ -213,6 +268,7 @@ else
 fi
 
 ARM64_DMG_NAME="Moaiy-${VERSION}-macos-apple-silicon.dmg"
+X64_DMG_PATH=""
 
 "$ROOT_DIR/scripts/package_dmg.sh" \
   --scheme Moaiy \
@@ -318,12 +374,29 @@ fi
   --manifest "$MANIFEST_PATH" \
   --output "$NOTES_PATH"
 
+if [[ "$EFFECTIVE_SIGNING_MODE" == "unsigned" ]]; then
+  if ! grep -Fq "not code-signed" "$NOTES_PATH" \
+    || ! grep -Fq "not notarized" "$NOTES_PATH" \
+    || ! grep -Fq "Gatekeeper will block" "$NOTES_PATH" \
+    || ! grep -Fq "not a substitute for a Developer ID signed and notarized release" "$NOTES_PATH" \
+    || ! grep -Fq "未经代码签名" "$NOTES_PATH" \
+    || ! grep -Fq "未经公证" "$NOTES_PATH" \
+    || ! grep -Fq "不能代替" "$NOTES_PATH"; then
+    echo "ERROR: unsigned release notes are missing the Gatekeeper warning."
+    exit 1
+  fi
+fi
+
 echo "Release orchestration completed."
 echo "  notes: $NOTES_PATH"
 echo "  manifest: $MANIFEST_PATH"
 echo "  checksums: $SHA256_PATH"
 echo "  arm64 dmg: $ARM64_DMG_PATH"
-echo "  x86_64 dmg: $X64_DMG_PATH"
+if [[ -n "$X64_DMG_PATH" ]]; then
+  echo "  x86_64 dmg: $X64_DMG_PATH"
+else
+  echo "  x86_64 dmg: (not packaged; bundled runtime has no x86_64 slice)"
+fi
 
 if [[ -n "$GITHUB_OUTPUT_PATH" ]]; then
   {

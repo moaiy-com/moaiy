@@ -16,11 +16,14 @@ Required options:
   --tag <vX.Y.Z>
   --mode <draft|publish>
   --arm64-dmg-path <path>
-  --x86-64-dmg-path <path>
   --sha256-path <path>
   --manifest-path <path>
 
 Optional:
+  --x86-64-dmg-path <path>  Required only when the manifest lists an x86_64 artifact.
+                            Omit it for an Apple Silicon-only release. Passing it when
+                            the manifest has no Intel artifact is an error.
+
   --wait-seconds <n>        Max wait time for release/asset consistency (default: 180)
   --poll-interval <n>       Poll interval in seconds (default: 5)
   -h, --help                Show help
@@ -98,12 +101,17 @@ if [[ "$MODE" != "draft" && "$MODE" != "publish" ]]; then
   exit 1
 fi
 
-for path in "$ARM64_DMG_PATH" "$X64_DMG_PATH" "$SHA256_PATH" "$MANIFEST_PATH"; do
-  if [[ ! -f "$path" ]]; then
-    echo "ERROR: required file missing: $path"
+for path in "$ARM64_DMG_PATH" "$SHA256_PATH" "$MANIFEST_PATH"; do
+  if [[ -z "$path" || ! -f "$path" ]]; then
+    echo "ERROR: required file missing: ${path:-<empty>}"
     exit 1
   fi
 done
+
+if [[ -n "$X64_DMG_PATH" && ! -f "$X64_DMG_PATH" ]]; then
+  echo "ERROR: required file missing: $X64_DMG_PATH"
+  exit 1
+fi
 
 if ! [[ "$WAIT_SECONDS" =~ ^[0-9]+$ ]] || ! [[ "$POLL_INTERVAL" =~ ^[0-9]+$ ]]; then
   echo "ERROR: --wait-seconds and --poll-interval must be positive integers"
@@ -121,35 +129,84 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 arm64_name="$(basename "$ARM64_DMG_PATH")"
-x64_name="$(basename "$X64_DMG_PATH")"
+x64_name=""
+if [[ -n "$X64_DMG_PATH" ]]; then
+  x64_name="$(basename "$X64_DMG_PATH")"
+fi
 sha256_name="$(basename "$SHA256_PATH")"
 manifest_name="$(basename "$MANIFEST_PATH")"
 
+manifest_arm_count="$(jq -r '[.artifacts[] | select(.arch == "arm64")] | length' "$MANIFEST_PATH")"
+manifest_x64_count="$(jq -r '[.artifacts[] | select(.arch == "x86_64")] | length' "$MANIFEST_PATH")"
+if [[ "$manifest_arm_count" != "1" ]]; then
+  echo "ERROR: manifest must contain exactly one arm64 artifact (found $manifest_arm_count)"
+  exit 1
+fi
+if [[ "$manifest_x64_count" != "0" && "$manifest_x64_count" != "1" ]]; then
+  echo "ERROR: manifest must contain zero or one x86_64 artifact (found $manifest_x64_count)"
+  exit 1
+fi
+if [[ "$manifest_x64_count" == "1" && -z "$X64_DMG_PATH" ]]; then
+  echo "ERROR: manifest lists an x86_64 artifact; refusing to verify a release that drops it."
+  echo "Pass --x86-64-dmg-path for $(jq -r '.artifacts[] | select(.arch == "x86_64") | .name' "$MANIFEST_PATH")."
+  exit 1
+fi
+if [[ "$manifest_x64_count" == "0" && -n "$X64_DMG_PATH" ]]; then
+  echo "ERROR: --x86-64-dmg-path was provided but the manifest has no x86_64 artifact."
+  exit 1
+fi
+
 arm64_sha="$(shasum -a 256 "$ARM64_DMG_PATH" | awk '{print $1}')"
-x64_sha="$(shasum -a 256 "$X64_DMG_PATH" | awk '{print $1}')"
 sha256_sha="$(shasum -a 256 "$SHA256_PATH" | awk '{print $1}')"
 manifest_sha="$(shasum -a 256 "$MANIFEST_PATH" | awk '{print $1}')"
 
 manifest_arm64_sha="$(jq -r --arg name "$arm64_name" '.sha256[$name] // empty' "$MANIFEST_PATH")"
-manifest_x64_sha="$(jq -r --arg name "$x64_name" '.sha256[$name] // empty' "$MANIFEST_PATH")"
-if [[ -z "$manifest_arm64_sha" || -z "$manifest_x64_sha" ]]; then
-  echo "ERROR: manifest missing DMG sha256 entries"
-  exit 1
-fi
-if [[ "$manifest_arm64_sha" != "$arm64_sha" || "$manifest_x64_sha" != "$x64_sha" ]]; then
-  echo "ERROR: local DMG hashes do not match release-manifest.json"
+manifest_arm64_arch="$(jq -r --arg name "$arm64_name" '.artifacts[] | select(.name == $name) | .arch' "$MANIFEST_PATH")"
+if [[ -z "$manifest_arm64_sha" || "$manifest_arm64_sha" != "$arm64_sha" || "$manifest_arm64_arch" != "arm64" ]]; then
+  echo "ERROR: arm64 DMG does not match release-manifest.json"
   exit 1
 fi
 
 file_sha_arm64="$(awk -v n="$arm64_name" '$2==n {print $1}' "$SHA256_PATH")"
-file_sha_x64="$(awk -v n="$x64_name" '$2==n {print $1}' "$SHA256_PATH")"
-if [[ "$file_sha_arm64" != "$arm64_sha" || "$file_sha_x64" != "$x64_sha" ]]; then
-  echo "ERROR: SHA256SUMS.txt content does not match local DMG hashes"
+if [[ "$file_sha_arm64" != "$arm64_sha" ]]; then
+  echo "ERROR: SHA256SUMS.txt content does not match the local arm64 DMG hash"
   exit 1
 fi
 
-ASSET_NAMES=("$arm64_name" "$x64_name" "$sha256_name" "$manifest_name")
-ASSET_HASHES=("$arm64_sha" "$x64_sha" "$sha256_sha" "$manifest_sha")
+ASSET_NAMES=("$arm64_name" "$sha256_name" "$manifest_name")
+ASSET_HASHES=("$arm64_sha" "$sha256_sha" "$manifest_sha")
+
+if [[ -n "$X64_DMG_PATH" ]]; then
+  x64_sha="$(shasum -a 256 "$X64_DMG_PATH" | awk '{print $1}')"
+  manifest_x64_sha="$(jq -r --arg name "$x64_name" '.sha256[$name] // empty' "$MANIFEST_PATH")"
+  manifest_x64_arch="$(jq -r --arg name "$x64_name" '.artifacts[] | select(.name == $name) | .arch' "$MANIFEST_PATH")"
+  if [[ -z "$manifest_x64_sha" || "$manifest_x64_sha" != "$x64_sha" || "$manifest_x64_arch" != "x86_64" ]]; then
+    echo "ERROR: x86_64 DMG does not match release-manifest.json"
+    exit 1
+  fi
+  file_sha_x64="$(awk -v n="$x64_name" '$2==n {print $1}' "$SHA256_PATH")"
+  if [[ "$file_sha_x64" != "$x64_sha" ]]; then
+    echo "ERROR: SHA256SUMS.txt content does not match the local x86_64 DMG hash"
+    exit 1
+  fi
+  ASSET_NAMES+=("$x64_name")
+  ASSET_HASHES+=("$x64_sha")
+fi
+
+while read -r sum name; do
+  if [[ -z "${sum:-}" ]]; then
+    continue
+  fi
+  case "$name" in
+    *.dmg)
+      if [[ "$name" != "$arm64_name" && "$name" != "$x64_name" ]]; then
+        echo "ERROR: SHA256SUMS.txt lists $name, which is not an artifact being verified."
+        echo "Refusing to ignore a disk image that is not in the manifest set."
+        exit 1
+      fi
+      ;;
+  esac
+done < "$SHA256_PATH"
 
 MAX_ATTEMPTS=$(( (WAIT_SECONDS + POLL_INTERVAL - 1) / POLL_INTERVAL ))
 if [[ "$MAX_ATTEMPTS" -lt 1 ]]; then
