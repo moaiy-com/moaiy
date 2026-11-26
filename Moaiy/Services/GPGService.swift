@@ -3096,7 +3096,7 @@ final class GPGService: SubkeyManaging {
             result = try await processExecutor.execute(
                 executableURL: gpgConnectAgentURL,
                 arguments: ["SCD SERIALNO", "/bye"],
-                environment: [:],
+                environment: ["LC_ALL": "C"],
                 gpgHome: gpgHome,
                 input: nil,
                 timeout: Self.smartCardPresenceTimeout

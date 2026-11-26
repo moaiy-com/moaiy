@@ -146,11 +146,8 @@ enum SmartCardFailureClassifier {
             || lowercased.contains("wrong pin") {
             return .pinInvalid
         }
-        if lowercased.contains("card not present")
-            || lowercased.contains("card removed")
-            || lowercased.contains("no data <scd>") {
-            return .notPresent
-        }
+        // Genuine support/daemon failures first, so "OpenPGP card not
+        // available: Card error" stays unavailable rather than a missing card.
         if lowercased.contains("card error")
             || lowercased.contains("no smartcard daemon")
             || lowercased.contains("no scdaemon")
@@ -162,9 +159,19 @@ enum SmartCardFailureClassifier {
             || lowercased.contains("inquire confirm")
             || lowercased.contains("inquiry 'confirm")
             || lowercased.contains("inquiry \"confirm")
-            || lowercased.contains("operation not supported by device")
-            || lowercased.contains("openpgp card not available") {
+            || lowercased.contains("operation not supported by device") {
             return .unavailable
+        }
+        // GnuPG reports an empty reader as CARD_NOT_PRESENT or ENODEV
+        // ("No such device"), including "OpenPGP card not available: No such device".
+        if lowercased.contains("card not present")
+            || lowercased.contains("card removed")
+            || lowercased.contains("no data <scd>")
+            || lowercased.contains("no such device")
+            || lowercased.contains("no card inserted")
+            || lowercased.contains("no current card")
+            || lowercased.contains("openpgp card not available") {
+            return .notPresent
         }
         return nil
     }
