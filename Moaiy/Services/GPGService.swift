@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AppKit
 import os.log
 import Darwin
 
@@ -473,7 +474,11 @@ final class GPGService: SubkeyManaging {
 
     /// Agent configuration for the app-managed keyring.
     /// Paths are program locations only. This never launches `scdaemon --daemon`
-    /// and never contains a PIN or passphrase.
+    /// and never contains a PIN or passphrase. `gpg-agent` always pipe-connects
+    /// `scdaemon-program --multi-server` on first use; it does not attach to an
+    /// already-listening `S.scdaemon`. The path must therefore be the helper
+    /// launcher, which relays that pipe to the published socket instead of
+    /// inherit-spawning the standalone-sandboxed `scdaemon`.
     nonisolated static func managedAgentConfiguration(scdaemonPath: String?, pinentryPath: String?) -> String {
         var lines = ["allow-loopback-pinentry"]
         if let scdaemonPath, !scdaemonPath.isEmpty {
@@ -485,11 +490,382 @@ final class GPGService: SubkeyManaging {
         return lines.joined(separator: "\n") + "\n"
     }
 
-    /// `--list-secret-keys` probes the agent (`agent_probe_any_secret_key` → `wait_for_sock`).
-    /// Inside the sandbox, gpg must not be the process that starts the agent: the app launches
-    /// bundled `gpg-agent --daemon` itself. Public `--list-keys` does not probe secret keys.
+    /// Secret listing reads stubs from `private-keys-v1.d` and public key metadata.
+    /// It must not start `gpg-agent` or `scdaemon`, and must not issue `SCD SERIALNO`.
     nonisolated static func appManagedKeyListNeedsRunningAgent(secretOnly: Bool) -> Bool {
-        secretOnly
+        // Public and secret listing both stay off the agent/scdaemon path.
+        _ = secretOnly
+        return false
+    }
+
+    nonisolated static func secretKeyListArgumentsWithoutCardIO() -> [String] {
+        [
+            "--list-keys",
+            "--with-colons",
+            "--fixed-list-mode",
+            "--with-keygrip",
+            "--no-autostart"
+        ]
+    }
+
+    /// Safety net only. Secret listing is designed not to wait on a live card.
+    nonisolated static let secretKeyListTimeout: TimeInterval = 5
+
+    /// Card presence is for decrypt and card operations only.
+    nonisolated static let smartCardPresenceTimeout: TimeInterval = 3
+
+    nonisolated static let bundledScdaemonHelperAppRelativePath =
+        "Contents/Helpers/MoaiyScdaemon.app"
+
+    nonisolated static let bundledScdaemonHelperRelativePath =
+        "Contents/Helpers/MoaiyScdaemon.app/Contents/MacOS/scdaemon"
+
+    /// gpg-agent `scdaemon-program`: the launcher, not the inner scdaemon.
+    nonisolated static let bundledScdaemonAgentProgramRelativePath =
+        "Contents/Helpers/MoaiyScdaemon.app/Contents/MacOS/MoaiyScdaemon"
+
+    /// Launch Services can take a moment to bring the helper up. Card
+    /// presence itself stays on the shorter `smartCardPresenceTimeout`.
+    nonisolated static let scdaemonHelperReadyTimeout: TimeInterval = 5
+
+    nonisolated static let managedScdaemonRequiredOptions = [
+        "disable-ccid",
+        "pcsc-shared"
+    ]
+
+    enum KeyListRetryPolicy: Equatable {
+        case doNotRetry
+        case retryOnceShort
+        case retryWithBackoff
+    }
+
+    struct AgentSecretKeyInfo: Equatable {
+        var isToken: Bool
+        var serialNumber: String?
+    }
+
+    nonisolated static func bundledScdaemonHelperURL(fromGPGExecutable gpgURL: URL) -> URL? {
+        let binDirectory = gpgURL.deletingLastPathComponent()
+        guard binDirectory.lastPathComponent == "bin" else { return nil }
+        let bundleDirectory = binDirectory.deletingLastPathComponent()
+        guard bundleDirectory.lastPathComponent == "gpg.bundle" else { return nil }
+        let resourcesDirectory = bundleDirectory.deletingLastPathComponent()
+        guard resourcesDirectory.lastPathComponent == "Resources" else { return nil }
+        let contentsDirectory = resourcesDirectory.deletingLastPathComponent()
+        guard contentsDirectory.lastPathComponent == "Contents" else { return nil }
+        return contentsDirectory
+            .appendingPathComponent("Helpers", isDirectory: true)
+            .appendingPathComponent("MoaiyScdaemon.app", isDirectory: true)
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("MacOS", isDirectory: true)
+            .appendingPathComponent("scdaemon")
+    }
+
+    nonisolated static func bundledScdaemonHelperAppURL(fromGPGExecutable gpgURL: URL) -> URL? {
+        guard let helper = bundledScdaemonHelperURL(fromGPGExecutable: gpgURL) else {
+            return nil
+        }
+        let appURL = helper
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        guard appURL.lastPathComponent == "MoaiyScdaemon.app" else {
+            return nil
+        }
+        return appURL
+    }
+
+    nonisolated static func bundledScdaemonAgentProgramURL(fromGPGExecutable gpgURL: URL) -> URL? {
+        guard let appURL = bundledScdaemonHelperAppURL(fromGPGExecutable: gpgURL) else {
+            return nil
+        }
+        return appURL
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("MacOS", isDirectory: true)
+            .appendingPathComponent("MoaiyScdaemon")
+    }
+
+    /// Relative to the *real* user home from `getpwuid`, never a container `$HOME`.
+    /// Keys, `scdaemon.conf`, and the published `S.scdaemon` live here.
+    nonisolated static let appManagedGnuPGHomeRelativePath =
+        "Library/Containers/com.moaiy.app/Data/Library/gnupg"
+
+    /// Where the standalone-sandboxed `scdaemon` image can bind its socket.
+    /// A unix-domain bind in the Moaiy container is denied (EPERM).
+    nonisolated static let scdaemonHelperSandboxHomeRelativePath =
+        "Library/Containers/com.moaiy.app.scdaemon/Data/Library/gnupg"
+
+    /// Rejects container homes. `passwdDirectory` is for tests; production
+    /// uses `getpwuid(getuid())` and never `NSHomeDirectory()` or `$HOME`.
+    nonisolated static func realUserHomeDirectoryPath(passwdDirectory: String? = nil) -> String? {
+        let raw: String
+        if let passwdDirectory {
+            raw = passwdDirectory
+        } else if let pw = getpwuid(getuid()) {
+            raw = String(cString: pw.pointee.pw_dir)
+        } else {
+            return nil
+        }
+        guard raw.hasPrefix("/"),
+              !raw.contains("/Library/Containers/") else {
+            return nil
+        }
+        return raw
+    }
+
+    nonisolated static func launcherResolvedGnuPGHomePath(realHome: String) -> String? {
+        guard let home = realUserHomeDirectoryPath(passwdDirectory: realHome) else {
+            return nil
+        }
+        return URL(fileURLWithPath: home, isDirectory: true)
+            .appendingPathComponent(appManagedGnuPGHomeRelativePath, isDirectory: true)
+            .path
+    }
+
+    nonisolated static func launcherResolvedScdaemonSandboxHomePath(realHome: String) -> String? {
+        guard let home = realUserHomeDirectoryPath(passwdDirectory: realHome) else {
+            return nil
+        }
+        return URL(fileURLWithPath: home, isDirectory: true)
+            .appendingPathComponent(scdaemonHelperSandboxHomeRelativePath, isDirectory: true)
+            .path
+    }
+
+    /// Arguments the helper supervisor execs into `scdaemon`. Launch Services
+    /// from a sandboxed Moaiy cannot be relied on to deliver these.
+    /// `--daemon` would background and exit the Launch Services process.
+    /// `--homedir` is the helper container path scdaemon can bind; the
+    /// supervisor then publishes `S.scdaemon` in the app-managed home.
+    nonisolated static func scdaemonHelperExecArguments(homePath: String) -> [String] {
+        ["--homedir", homePath, "--multi-server"]
+    }
+
+    nonisolated static let scdaemonHelperPublishesSocketInAppManagedHome = true
+
+    /// CoreServicesUIAgent drops argv and environment from a sandboxed opener.
+    nonisolated static let scdaemonHelperLaunchServicesPassesArguments = false
+
+    /// Keeps `disable-ccid` and `pcsc-shared` in effect without discarding
+    /// any other user lines already in `scdaemon.conf`.
+    nonisolated static func managedScdaemonConfiguration(existing: String?) -> String {
+        let existingText = existing ?? ""
+        let lines = existingText.split(whereSeparator: \.isNewline).map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let missing = managedScdaemonRequiredOptions.filter { option in
+            !lines.contains { line in
+                guard !line.hasPrefix("#") else { return false }
+                return line == option
+            }
+        }
+        if missing.isEmpty {
+            if existingText.isEmpty {
+                return managedScdaemonRequiredOptions.joined(separator: "\n") + "\n"
+            }
+            return existingText.hasSuffix("\n") ? existingText : existingText + "\n"
+        }
+
+        var result = existingText
+        if !result.isEmpty && !result.hasSuffix("\n") {
+            result += "\n"
+        }
+        result += missing.joined(separator: "\n") + "\n"
+        return result
+    }
+
+    nonisolated static func keyListRetryPolicy(for error: Error) -> KeyListRetryPolicy {
+        guard let gpgError = error as? GPGError else {
+            return .retryWithBackoff
+        }
+        switch gpgError {
+        case .smartCardUnavailable, .smartCardNotPresent, .smartCardPinInvalid:
+            return .doNotRetry
+        case .executionFailed(let message):
+            if SmartCardFailureClassifier.classification(of: message) != nil {
+                return .doNotRetry
+            }
+            if isCardPathKeyListMessage(message) {
+                return .doNotRetry
+            }
+            if isAgentStartFailureMessage(message) {
+                return .retryOnceShort
+            }
+            return .retryWithBackoff
+        default:
+            return .retryWithBackoff
+        }
+    }
+
+    nonisolated static func isCardPathKeyListMessage(_ message: String) -> Bool {
+        let lowercased = message.lowercased()
+        return lowercased.contains("scdaemon")
+            || lowercased.contains("smartcard")
+            || lowercased.contains("smart card")
+            || lowercased.contains("serialno")
+            || lowercased.contains("scd ")
+    }
+
+    nonisolated static func isAgentStartFailureMessage(_ message: String) -> Bool {
+        let lowercased = message.lowercased()
+        return lowercased.contains("failed to launch gpg-agent")
+            || lowercased.contains("gpg-agent is not reachable after launch")
+    }
+
+    /// Associates every `grp` record with the primary fingerprint of the key block.
+    nonisolated static func parseKeygripsByPrimaryFingerprint(_ output: String) -> [String: [String]] {
+        var result: [String: [String]] = [:]
+        var primaryFingerprint: String?
+        var awaitingPrimaryFingerprint = false
+        var pendingGrips: [String] = []
+
+        func flush() {
+            guard let primaryFingerprint, !pendingGrips.isEmpty else { return }
+            result[primaryFingerprint, default: []].append(contentsOf: pendingGrips)
+        }
+
+        for line in output.components(separatedBy: "\n") {
+            let fields = line.components(separatedBy: ":")
+            guard let recordType = fields.first else { continue }
+            switch recordType {
+            case "pub", "sec":
+                flush()
+                primaryFingerprint = nil
+                awaitingPrimaryFingerprint = true
+                pendingGrips = []
+            case "fpr":
+                guard fields.count > 9 else { continue }
+                let fingerprint = fields[9].trimmingCharacters(in: .whitespacesAndNewlines)
+                if awaitingPrimaryFingerprint, !fingerprint.isEmpty {
+                    primaryFingerprint = fingerprint
+                    awaitingPrimaryFingerprint = false
+                }
+            case "grp":
+                guard fields.count > 9 else { continue }
+                let grip = fields[9].trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                if grip.range(of: "^[A-F0-9]{40}$", options: .regularExpression) != nil {
+                    pendingGrips.append(grip)
+                }
+            default:
+                break
+            }
+        }
+        flush()
+        return result
+    }
+
+    nonisolated static func parseAgentSecretKeyInfo(_ output: String) -> [String: AgentSecretKeyInfo] {
+        var result: [String: AgentSecretKeyInfo] = [:]
+        for line in output.split(separator: "\n") {
+            let tokens = line.split(whereSeparator: \.isWhitespace).map(String.init)
+            guard tokens.count >= 4, tokens[0] == "S", tokens[1] == "KEYINFO" else {
+                continue
+            }
+            let grip = tokens[2].trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            guard grip.range(of: "^[A-F0-9]{40}$", options: .regularExpression) != nil else {
+                continue
+            }
+            let tokenType = tokens[3]
+            let isToken = tokenType == "T"
+            var serial: String?
+            if isToken, tokens.count >= 5 {
+                let candidate = tokens[4]
+                    .replacingOccurrences(of: " ", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .uppercased()
+                if !candidate.isEmpty && candidate != "-" {
+                    serial = candidate
+                }
+            }
+            result[grip] = AgentSecretKeyInfo(isToken: isToken, serialNumber: serial)
+        }
+        return result
+    }
+
+    nonisolated static func firstRegularExpressionCapture(in text: String, pattern: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return nil
+        }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, options: [], range: range),
+              match.numberOfRanges > 1,
+              let capture = Range(match.range(at: 1), in: text) else {
+            return nil
+        }
+        let value = String(text[capture])
+            .replacingOccurrences(of: " ", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        return value.isEmpty ? nil : value
+    }
+
+    /// Card serials already stored in a stub file. This never logs file contents.
+    nonisolated static func cardSerialFromPrivateKeyFile(_ contents: String) -> String? {
+        let patterns = [
+            #"serial-no\s*#([A-Fa-f0-9]{16,})#"#,
+            #"serial-no\s+([A-Fa-f0-9]{16,})"#,
+            #"\(shadowed\s+"?t1-v1"?\s*#([A-Fa-f0-9]{16,})#"#
+        ]
+        for pattern in patterns {
+            if let serial = firstRegularExpressionCapture(in: contents, pattern: pattern) {
+                return serial
+            }
+        }
+        return nil
+    }
+
+    nonisolated static func secretInfoFromPrivateKeyFile(contents: String) -> AgentSecretKeyInfo {
+        let isToken = contents.contains("shadowed-private-key") || contents.contains("(shadowed")
+        return AgentSecretKeyInfo(
+            isToken: isToken,
+            serialNumber: isToken ? cardSerialFromPrivateKeyFile(contents) : nil
+        )
+    }
+
+    nonisolated static func secretInfoFromPrivateKeyDirectory(
+        files: [(keygrip: String, contents: String)]
+    ) -> [String: AgentSecretKeyInfo] {
+        var result: [String: AgentSecretKeyInfo] = [:]
+        for file in files {
+            let grip = file.keygrip.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            guard grip.range(of: "^[A-F0-9]{40}$", options: .regularExpression) != nil else {
+                continue
+            }
+            result[grip] = secretInfoFromPrivateKeyFile(contents: file.contents)
+        }
+        return result
+    }
+
+    nonisolated static func keysByMergingAgentSecretInfo(
+        publicKeys: [GPGKey],
+        keygripsByFingerprint: [String: [String]],
+        secretInfoByKeygrip: [String: AgentSecretKeyInfo],
+        secretOnly: Bool
+    ) -> [GPGKey] {
+        publicKeys.compactMap { key in
+            let grips = keygripsByFingerprint[key.fingerprint] ?? []
+            let infos = grips.compactMap { secretInfoByKeygrip[$0] }
+            if infos.isEmpty {
+                return secretOnly ? nil : key
+            }
+            let token = infos.first(where: \.isToken)
+            let material: SecretKeyMaterial = token != nil ? .smartCardStub : .localSecret
+            return GPGKey(
+                id: key.id,
+                keyID: key.keyID,
+                fingerprint: key.fingerprint,
+                name: key.name,
+                email: key.email,
+                algorithm: key.algorithm,
+                keyLength: key.keyLength,
+                isSecret: true,
+                createdAt: key.createdAt,
+                expiresAt: key.expiresAt,
+                trustLevel: key.trustLevel,
+                secretMaterial: material,
+                cardSerialNumber: token?.serialNumber,
+                algorithmSummary: key.algorithmSummary
+            )
+        }
     }
 
     nonisolated static func encryptedRecipientProbeArguments(outputPath: String, sourcePath: String) -> [String] {
@@ -662,11 +1038,80 @@ final class GPGService: SubkeyManaging {
         }
     }
 
+    /// gpg-agent can leave S.scdaemon behind after scdaemon SIGTRAPs. A stale
+    /// socket makes --list-secret-keys and SCD SERIALNO wait out the GPG
+    /// timeout instead of starting a new daemon.
+    private func removeStaleScdaemonSocketIfNeeded() {
+        guard let gpgHome else { return }
+        let socketURL = gpgHome.appendingPathComponent("S.scdaemon")
+        let path = socketURL.path
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else {
+            return
+        }
+        if isUnixSocketAcceptingConnections(at: path) {
+            return
+        }
+        do {
+            try FileManager.default.removeItem(at: socketURL)
+            logger.notice("Removed stale scdaemon socket")
+        } catch {
+            logger.error("Failed to remove stale scdaemon socket: \(error.localizedDescription)")
+        }
+    }
+
+    private func isUnixSocketAcceptingConnections(at path: String) -> Bool {
+        let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { _ = Darwin.close(fd) }
+
+        let flags = Darwin.fcntl(fd, F_GETFL)
+        guard flags >= 0, Darwin.fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0 else {
+            return false
+        }
+
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let sunPathSize = MemoryLayout.size(ofValue: addr.sun_path)
+        guard path.utf8.count < sunPathSize else { return false }
+        withUnsafeMutablePointer(to: &addr.sun_path.0) { dst in
+            path.withCString { src in
+                _ = strncpy(dst, src, sunPathSize)
+            }
+        }
+
+        let status = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
+                Darwin.connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        if status == 0 {
+            return true
+        }
+        if errno != EINPROGRESS && errno != EALREADY {
+            return false
+        }
+
+        var pollfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+        let ready = Darwin.poll(&pollfd, 1, 200)
+        guard ready > 0, pollfd.revents & Int16(POLLOUT) != 0 else {
+            return false
+        }
+        var soError: Int32 = 0
+        var length = socklen_t(MemoryLayout<Int32>.size)
+        let result = Darwin.getsockopt(fd, SOL_SOCKET, SO_ERROR, &soError, &length)
+        return result == 0 && soError == 0
+    }
+
     private func ensureGPGAgentRunningIfNeeded() async throws {
         guard gpgHome != nil else { return }
         guard gpgAgentURL != nil, gpgConnectAgentURL != nil else { return }
 
+        removeStaleScdaemonSocketIfNeeded()
+
         let configurationChanged = try writeManagedAgentConfigurationIfNeeded()
+        _ = try writeManagedScdaemonConfigurationIfNeeded()
 
         if await canConnectToGPGAgent() {
             if configurationChanged {
@@ -697,13 +1142,39 @@ final class GPGService: SubkeyManaging {
         }
     }
 
+    private func bundledScdaemonProgramURL() -> URL? {
+        guard usesBundledGPG, let gpgURL else { return nil }
+        guard let program = Self.bundledScdaemonAgentProgramURL(fromGPGExecutable: gpgURL),
+              let inner = Self.bundledScdaemonHelperURL(fromGPGExecutable: gpgURL) else {
+            return nil
+        }
+        guard FileManager.default.isExecutableFile(atPath: program.path),
+              FileManager.default.isExecutableFile(atPath: inner.path) else {
+            return nil
+        }
+        return program
+    }
+
     private func writeManagedAgentConfigurationIfNeeded() throws -> Bool {
         guard !isUsingExternalGPGHome, let gpgHome else { return false }
-        let scdaemonPath = usesBundledGPG ? bundledExecutable(named: "scdaemon")?.path : nil
+        let scdaemonPath = bundledScdaemonProgramURL()?.path
         let pinentryPath = bundledExecutable(named: "pinentry")?.path
         let contents = Self.managedAgentConfiguration(scdaemonPath: scdaemonPath, pinentryPath: pinentryPath)
         let url = gpgHome.appendingPathComponent("gpg-agent.conf")
         if let existing = try? String(contentsOf: url, encoding: .utf8), existing == contents {
+            return false
+        }
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        return true
+    }
+
+    private func writeManagedScdaemonConfigurationIfNeeded() throws -> Bool {
+        guard !isUsingExternalGPGHome, let gpgHome else { return false }
+        let url = gpgHome.appendingPathComponent("scdaemon.conf")
+        let existing = try? String(contentsOf: url, encoding: .utf8)
+        let contents = Self.managedScdaemonConfiguration(existing: existing)
+        if existing == contents {
             return false
         }
         try contents.write(to: url, atomically: true, encoding: .utf8)
@@ -723,11 +1194,102 @@ final class GPGService: SubkeyManaging {
         )
     }
 
-    private func ensureBundledSmartCardDecryptRuntime() throws {
-        guard usesBundledGPG else { return }
-        guard bundledExecutable(named: "scdaemon") != nil, bundledExecutable(named: "pinentry") != nil else {
+    private func bundledScdaemonHelperApplicationURL() -> URL? {
+        guard usesBundledGPG, let gpgURL else { return nil }
+        guard let appURL = Self.bundledScdaemonHelperAppURL(fromGPGExecutable: gpgURL) else {
+            return nil
+        }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: appURL.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            return nil
+        }
+        return appURL
+    }
+
+    private func isScdaemonSocketAcceptingConnections() -> Bool {
+        guard let gpgHome else { return false }
+        return isUnixSocketAcceptingConnections(at: gpgHome.appendingPathComponent("S.scdaemon").path)
+    }
+
+    /// Start the helper through Launch Services so it is not born already
+    /// sandboxed as a child of `gpg-agent`. Wait until `S.scdaemon` accepts
+    /// connections before any card command is issued.
+    private func ensureBundledScdaemonListeningIfNeeded() async throws {
+        guard usesBundledGPG, !isUsingExternalGPGHome else { return }
+        guard gpgHome != nil else {
             throw GPGError.smartCardUnavailable
         }
+        guard bundledScdaemonHelperApplicationURL() != nil else {
+            throw GPGError.smartCardUnavailable
+        }
+
+        _ = try writeManagedScdaemonConfigurationIfNeeded()
+        removeStaleScdaemonSocketIfNeeded()
+        if isScdaemonSocketAcceptingConnections() {
+            return
+        }
+
+        try startBundledScdaemonHelperViaLaunchServicesIfNeeded()
+        try await waitUntilScdaemonSocketAcceptsConnections()
+    }
+
+    private func isScdaemonHelperAlreadyRunning() -> Bool {
+        !NSRunningApplication.runningApplications(
+            withBundleIdentifier: "com.moaiy.app.scdaemon"
+        ).isEmpty
+    }
+
+    /// Kick Launch Services off the caller's actor (often the main actor).
+    /// Awaiting `openApplication` on the main actor can deadlock because the
+    /// system completion needs the main run loop, while the socket coming up
+    /// is enough to proceed.
+    private func startBundledScdaemonHelperViaLaunchServicesIfNeeded() throws {
+        guard let helperAppURL = bundledScdaemonHelperApplicationURL() else {
+            throw GPGError.smartCardUnavailable
+        }
+        if isScdaemonSocketAcceptingConnections() || isScdaemonHelperAlreadyRunning() {
+            return
+        }
+
+        // Do not set arguments or environment. A sandboxed Moaiy is opened
+        // through CoreServicesUIAgent, which drops both (`args=-`, and
+        // "Ignoring environment variable GNUPGHOME"). The helper launcher
+        // resolves the Moaiy container GNUPGHOME itself and execs scdaemon
+        // with --multi-server.
+        Task.detached(priority: .userInitiated) {
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = false
+            configuration.addsToRecentItems = false
+            configuration.createsNewApplicationInstance = false
+            do {
+                _ = try await NSWorkspace.shared.openApplication(at: helperAppURL, configuration: configuration)
+            } catch {
+                // The waiter still times out on S.scdaemon if the helper never listens.
+            }
+        }
+    }
+
+    private func waitUntilScdaemonSocketAcceptsConnections() async throws {
+        let deadline = Date().addingTimeInterval(Self.scdaemonHelperReadyTimeout)
+        while Date() < deadline {
+            if isScdaemonSocketAcceptingConnections() {
+                return
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        logger.error("scdaemon helper did not accept connections on S.scdaemon")
+        throw GPGError.smartCardUnavailable
+    }
+
+    private func ensureBundledSmartCardDecryptRuntime() async throws {
+        guard usesBundledGPG else { return }
+        guard bundledScdaemonProgramURL() != nil,
+              bundledScdaemonHelperApplicationURL() != nil,
+              bundledExecutable(named: "pinentry") != nil else {
+            throw GPGError.smartCardUnavailable
+        }
+        try await ensureBundledScdaemonListeningIfNeeded()
     }
 
     private func canConnectToGPGAgent() async -> Bool {
@@ -858,26 +1420,81 @@ final class GPGService: SubkeyManaging {
     /// - Parameter secretOnly: If true, only list secret keys
     /// - Returns: Array of GPGKey objects
     func listKeys(secretOnly: Bool = false) async throws -> [GPGKey] {
-        if Self.appManagedKeyListNeedsRunningAgent(secretOnly: secretOnly) {
-            try await ensureGPGAgentRunningIfNeeded()
+        if !secretOnly {
+            let result = try await executeGPG(
+                arguments: ["--list-keys", "--with-colons", "--fixed-list-mode", "--no-autostart"]
+            )
+
+            guard let output = result.stdout else {
+                // Empty keyring is a valid state for first launch in release builds.
+                if result.exitCode == 0 {
+                    return []
+                }
+                let message = result.stderr ?? "No output from key list (exit code: \(result.exitCode))"
+                throw GPGError.executionFailed(message)
+            }
+
+            return parseKeyList(output, secretOnly: false)
         }
 
-        let arguments = secretOnly
-            ? ["--list-secret-keys", "--with-colons", "--fixed-list-mode"]
-            : ["--list-keys", "--with-colons", "--fixed-list-mode"]
-        
-        let result = try await executeGPG(arguments: arguments)
-        
+        return try await listSecretKeysWithoutCardIO(homeURL: nil)
+    }
+
+    /// Lists secret keys from public key metadata plus `private-keys-v1.d`
+    /// stubs, without starting the agent, `gpg --list-secret-keys`, or
+    /// `SCD SERIALNO` card I/O.
+    private func listSecretKeysWithoutCardIO(homeURL: URL?) async throws -> [GPGKey] {
+        var environment: [String: String] = [:]
+        if let homeURL {
+            environment["GNUPGHOME"] = homeURL.path
+        }
+        let result = try await executeGPG(
+            arguments: Self.secretKeyListArgumentsWithoutCardIO(),
+            environment: environment,
+            timeout: Self.secretKeyListTimeout
+        )
+
         guard let output = result.stdout else {
-            // Empty keyring is a valid state for first launch in release builds.
             if result.exitCode == 0 {
                 return []
             }
             let message = result.stderr ?? "No output from key list (exit code: \(result.exitCode))"
             throw GPGError.executionFailed(message)
         }
-        
-        return parseKeyList(output, secretOnly: secretOnly)
+
+        let publicKeys = parseKeyList(output, secretOnly: false)
+        let keygripsByFingerprint = Self.parseKeygripsByPrimaryFingerprint(output)
+        let secretInfo = readFileBackedSecretKeyInfo(from: homeURL ?? gpgHome)
+        return Self.keysByMergingAgentSecretInfo(
+            publicKeys: publicKeys,
+            keygripsByFingerprint: keygripsByFingerprint,
+            secretInfoByKeygrip: secretInfo,
+            secretOnly: true
+        )
+    }
+
+    private func readFileBackedSecretKeyInfo(from homeURL: URL?) -> [String: AgentSecretKeyInfo] {
+        guard let homeURL else { return [:] }
+        let directory = homeURL.appendingPathComponent("private-keys-v1.d", isDirectory: true)
+        let fileManager = FileManager.default
+        guard let contents = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return [:]
+        }
+
+        var files: [(keygrip: String, contents: String)] = []
+        for url in contents {
+            guard url.pathExtension == "key" else { continue }
+            let grip = url.deletingPathExtension().lastPathComponent
+            guard let data = try? Data(contentsOf: url) else { continue }
+            let contents = String(data: data, encoding: .utf8)
+                ?? String(decoding: data, as: UTF8.self)
+            files.append((keygrip: grip, contents: contents))
+        }
+        return Self.secretInfoFromPrivateKeyDirectory(files: files)
     }
 
     func inspectKeyring(at homeURL: URL) async throws -> KeyringSnapshot {
@@ -2186,7 +2803,7 @@ final class GPGService: SubkeyManaging {
         progressHandler: (@Sendable (CryptoProgress) -> Void)? = nil
     ) async throws -> URL {
         if usesHardwareToken {
-            try ensureBundledSmartCardDecryptRuntime()
+            try await ensureBundledSmartCardDecryptRuntime()
         }
         try await ensureGPGAgentRunningIfNeeded()
         guard let gpgURL else {
@@ -2310,7 +2927,7 @@ final class GPGService: SubkeyManaging {
         usesHardwareToken: Bool = false
     ) async throws -> URL {
         if usesHardwareToken {
-            try ensureBundledSmartCardDecryptRuntime()
+            try await ensureBundledSmartCardDecryptRuntime()
             guard !passphrase.isEmpty else {
                 throw GPGError.smartCardPinInvalid
             }
@@ -2465,22 +3082,37 @@ final class GPGService: SubkeyManaging {
     /// Checks whether a smart card (YubiKey/OpenPGP Card) is currently available.
     /// Uses scdaemon SERIALNO probing to avoid mutating card state.
     func checkSmartCardPresence() async throws -> SmartCardPresence {
-        if usesBundledGPG, bundledExecutable(named: "scdaemon") == nil {
+        if usesBundledGPG, bundledScdaemonProgramURL() == nil {
             throw GPGError.smartCardUnavailable
         }
+        try await ensureBundledSmartCardDecryptRuntime()
         try await ensureGPGAgentRunningIfNeeded()
         guard let gpgConnectAgentURL else {
             throw GPGError.smartCardUnavailable
         }
 
-        let result = try await processExecutor.execute(
-            executableURL: gpgConnectAgentURL,
-            arguments: ["SCD SERIALNO", "/bye"],
-            environment: [:],
-            gpgHome: gpgHome,
-            input: nil,
-            timeout: 10
-        )
+        let result: GPGExecutionResult
+        do {
+            result = try await processExecutor.execute(
+                executableURL: gpgConnectAgentURL,
+                arguments: ["SCD SERIALNO", "/bye"],
+                environment: [:],
+                gpgHome: gpgHome,
+                input: nil,
+                timeout: Self.smartCardPresenceTimeout
+            )
+        } catch let error as GPGError {
+            if case .smartCardNotPresent = error { throw error }
+            if case .smartCardUnavailable = error { throw error }
+            if case .smartCardPinInvalid = error { throw error }
+            if case .executionFailed(let message) = error,
+               let failure = SmartCardFailureClassifier.classification(of: message) {
+                throw failure.gpgError
+            }
+            throw GPGError.smartCardUnavailable
+        } catch {
+            throw GPGError.smartCardUnavailable
+        }
 
         let output = [result.stdout, result.stderr]
             .compactMap { $0 }
@@ -3305,13 +3937,14 @@ final class GPGService: SubkeyManaging {
     }
 
     private func listKeys(at homeURL: URL, secretOnly: Bool) async throws -> [GPGKey] {
-        let arguments = secretOnly
-            ? ["--list-secret-keys", "--with-colons", "--fixed-list-mode"]
-            : ["--list-keys", "--with-colons", "--fixed-list-mode"]
+        if secretOnly {
+            return try await listSecretKeysWithoutCardIO(homeURL: homeURL)
+        }
 
         let result = try await executeGPG(
-            arguments: arguments,
-            environment: ["GNUPGHOME": homeURL.path]
+            arguments: ["--list-keys", "--with-colons", "--fixed-list-mode", "--no-autostart"],
+            environment: ["GNUPGHOME": homeURL.path],
+            timeout: Constants.GPG.defaultTimeout
         )
 
         guard result.exitCode == 0 else {
@@ -3323,7 +3956,7 @@ final class GPGService: SubkeyManaging {
             return []
         }
 
-        return parseKeyList(output, secretOnly: secretOnly)
+        return parseKeyList(output, secretOnly: false)
     }
 
     private func importArmorData(_ data: Data, fileName: String) async throws -> KeyImportResult {

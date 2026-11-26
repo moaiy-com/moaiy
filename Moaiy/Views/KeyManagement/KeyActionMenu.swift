@@ -285,7 +285,6 @@ enum KeyFileCryptoCoordinator {
         }
     }
 
-    @MainActor
     static func hardwareTokenPresenceErrorMessageIfNeeded(
         for key: GPGKey,
         context: UserFacingErrorContext
