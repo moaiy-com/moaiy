@@ -424,6 +424,26 @@ struct GPGErrorTests {
         #expect(GPGError.smartCardNotPresent.localizedDescription == notPresent)
     }
 
+    @Test("Live empty-reader SERIALNO is reported as a missing card, not unavailable support")
+    func liveEmptyReaderSerialno_mapsToNotPresentMessage() {
+        // Captured 2026-11-26 19:57 Asia/Shanghai against the app-managed
+        // S.scdaemon while the YubiKey was unplugged. Helper and sockets were
+        // up; scdaemon wrote reader_0.status=NOCARD. libgpg-error names this
+        // GPG_ERR_ENODEV but the English text is "Operation not supported by device".
+        let fixture = "ERR 100696144 Operation not supported by device <SCD>"
+        let notPresent = AppLocalization.string("error_smartcard_not_present")
+        let unavailable = AppLocalization.string("error_smartcard_unavailable")
+
+        #expect(SmartCardFailureClassifier.classification(of: fixture) == .notPresent)
+
+        let mapped = UserFacingErrorMapper.message(
+            for: GPGError.executionFailed(fixture),
+            context: .decrypt
+        )
+        #expect(mapped == notPresent)
+        #expect(mapped != unavailable)
+    }
+
     @Test("A down scdaemon is still unavailable support, not a missing card")
     func missingScdaemon_mapsToUnavailableNotMissingCard() {
         let fixtures = [
