@@ -45,7 +45,8 @@ def find_text_segment(data: bytes) -> tuple[int, int, int, int, int, int]:
     raise SystemExit("__TEXT segment not found")
 
 
-def existing_info_plist(data: bytes) -> bytes | None:
+def existing_info_plist_section(data: bytes) -> tuple[int, int, int] | None:
+    """Return (section_header_offset, file_off, size) for __TEXT,__info_plist."""
     text_off, cmdsize, _, _, _, nsects = find_text_segment(data)
     section = text_off + 72
     for _ in range(nsects):
@@ -53,11 +54,19 @@ def existing_info_plist(data: bytes) -> bytes | None:
         if name == "__info_plist":
             size = struct.unpack_from("<Q", data, section + 40)[0]
             file_off = struct.unpack_from("<I", data, section + 48)[0]
-            return data[file_off : file_off + size]
+            return section, file_off, size
         section += SECTION_SIZE
     if text_off + cmdsize != section:
         raise SystemExit("__TEXT command size does not match its sections")
     return None
+
+
+def existing_info_plist(data: bytes) -> bytes | None:
+    found = existing_info_plist_section(data)
+    if found is None:
+        return None
+    _, file_off, size = found
+    return data[file_off : file_off + size]
 
 
 def last_text_content_end(data: bytes) -> int:
@@ -73,13 +82,34 @@ def last_text_content_end(data: bytes) -> int:
     return end
 
 
-def embed(path: pathlib.Path, plist: bytes) -> str:
-    original = path.read_bytes()
-    current = existing_info_plist(original)
+def replace_existing_info_plist(path: pathlib.Path, data: bytearray, plist: bytes) -> str | None:
+    found = existing_info_plist_section(data)
+    if found is None:
+        return None
+    section, file_off, size = found
+    current = bytes(data[file_off : file_off + size])
     if current == plist:
         return "already-embedded"
-    if current is not None:
-        raise SystemExit("scdaemon already has a different __TEXT,__info_plist section")
+    _, _, _, _, filesize, _ = find_text_segment(data)
+    text_end = filesize  # __TEXT starts at file offset 0
+    if file_off + len(plist) > text_end:
+        if b"com.moaiy.app.scdaemon" in current:
+            return "kept-existing-too-small-to-replace"
+        raise SystemExit("existing __TEXT,__info_plist is too small to replace")
+    # Zero the old payload first so a shorter plist does not leave stale bytes.
+    data[file_off : file_off + max(size, len(plist))] = b"\x00" * max(size, len(plist))
+    data[file_off : file_off + len(plist)] = plist
+    struct.pack_into("<Q", data, section + 40, len(plist))
+    path.write_bytes(data)
+    return f"replaced {len(plist)} bytes at file offset {file_off}"
+
+
+def embed(path: pathlib.Path, plist: bytes) -> str:
+    original = path.read_bytes()
+    data = bytearray(original)
+    replaced = replace_existing_info_plist(path, data, plist)
+    if replaced is not None:
+        return replaced
 
     data = bytearray(original)
     magic, cputype, cpusub, filetype, ncmds, sizeofcmds, flags, reserved = struct.unpack_from(

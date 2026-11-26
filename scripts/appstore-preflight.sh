@@ -59,12 +59,22 @@ for forbidden_helper_key in "com.apple.security.smartcard" "com.apple.security.d
   fi
 done
 
-for scdaemon_key in "com.apple.security.app-sandbox" "com.apple.security.inherit" "com.apple.security.smartcard" "com.apple.security.device.usb"; do
+for scdaemon_key in "com.apple.security.app-sandbox" "com.apple.security.smartcard" "com.apple.security.device.usb"; do
   if ! grep -q "$scdaemon_key" "$SCDAEMON_ENTITLEMENTS_PATH"; then
     echo "ERROR: GPGScdaemon.entitlements is missing $scdaemon_key."
     exit 1
   fi
 done
+
+if grep -q "com.apple.security.inherit" "$SCDAEMON_ENTITLEMENTS_PATH"; then
+  echo "ERROR: GPGScdaemon.entitlements must not use inherit; inherit plus device entitlements makes secinit SIGTRAP (SYSCALL_SET_USERLAND_PROFILE)."
+  exit 1
+fi
+
+if ! grep -q "Library/Containers/com.moaiy.app/Data/Library/gnupg/" "$SCDAEMON_ENTITLEMENTS_PATH"; then
+  echo "ERROR: GPGScdaemon.entitlements must allow the app-managed GNUPGHOME in the Moaiy container."
+  exit 1
+fi
 
 if ! grep -q "com.moaiy.app.scdaemon" "$SCDAEMON_INFO_PLIST_PATH"; then
   echo "ERROR: ScdaemonInfo.plist is missing CFBundleIdentifier com.moaiy.app.scdaemon."
@@ -85,29 +95,32 @@ fi
 
 echo "==> [2/4] Validating bundled GPG integrity & MAS helper signing script..."
 SCDAEMON_BIN="$ROOT_DIR/Moaiy/Resources/gpg.bundle/bin/scdaemon"
-if ! python3 "$ROOT_DIR/scripts/check_scdaemon_info_plist.py" "$SCDAEMON_BIN"; then
-  echo "ERROR: scdaemon Info.plist is not bound (codesign would report Info.plist=not bound)."
+if [[ ! -x "$SCDAEMON_BIN" ]]; then
+  echo "ERROR: source scdaemon binary missing at $SCDAEMON_BIN"
   exit 1
 fi
-if command -v codesign >/dev/null 2>&1; then
-  codesign_detail="$(codesign -d --verbose=2 "$SCDAEMON_BIN" 2>&1 || true)"
-  printf '%s\n' "$codesign_detail"
-  if printf '%s\n' "$codesign_detail" | grep -q "Info.plist=not bound"; then
-    echo "ERROR: codesign reports Info.plist=not bound for scdaemon."
-    exit 1
-  fi
-  if ! printf '%s\n' "$codesign_detail" | grep -q "Identifier=com.moaiy.app.scdaemon"; then
-    echo "ERROR: scdaemon codesign identifier is not com.moaiy.app.scdaemon."
-    exit 1
-  fi
+if ! grep -q "MoaiyScdaemon.app" "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh" \
+  || ! grep -q "install_scdaemon_helper_app" "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh"; then
+  echo "ERROR: sign_embedded_gpg_bundle.sh must package scdaemon as Helpers/MoaiyScdaemon.app."
+  exit 1
 fi
-if command -v otool >/dev/null 2>&1; then
-  otool_plist="$(otool -P "$SCDAEMON_BIN" 2>/dev/null || true)"
-  printf '%s\n' "$otool_plist"
-  if ! printf '%s\n' "$otool_plist" | grep -q "com.moaiy.app.scdaemon"; then
-    echo "ERROR: otool -P did not print CFBundleIdentifier com.moaiy.app.scdaemon."
-    exit 1
-  fi
+if ! grep -q "install_and_sign_helper_libraries" "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh" \
+  || ! grep -q 'helper_app/Contents/lib' "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh"; then
+  echo "ERROR: sign_embedded_gpg_bundle.sh must copy scdaemon libraries into MoaiyScdaemon.app/Contents/lib."
+  exit 1
+fi
+if ! grep -q "is_adhoc_sign_identity" "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh" \
+  || ! grep -q "sign_scdaemon_helper_codesign" "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh"; then
+  echo "ERROR: sign_embedded_gpg_bundle.sh must omit hardened runtime on the scdaemon helper when signing ad-hoc."
+  exit 1
+fi
+if ! grep -q "compile_scdaemon_launcher" "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh" \
+  || ! grep -q "sign_scdaemon_launcher_executable" "$ROOT_DIR/scripts/sign_embedded_gpg_bundle.sh" \
+  || ! grep -q "CFBundleExecutable</key>" "$ROOT_DIR/Moaiy/Resources/ScdaemonInfo.plist" \
+  || ! grep -q "MoaiyScdaemon" "$ROOT_DIR/Moaiy/Resources/ScdaemonInfo.plist" \
+  || [[ ! -f "$ROOT_DIR/Moaiy/Resources/scdaemon_launcher.c" ]]; then
+  echo "ERROR: scdaemon helper must ship a getpwuid launcher as CFBundleExecutable."
+  exit 1
 fi
 "$ROOT_DIR/scripts/verify_gpg_bundle.sh" >/dev/null
 

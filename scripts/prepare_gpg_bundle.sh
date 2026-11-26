@@ -301,8 +301,10 @@ sign_binaries() {
     local sign_identity="${GPG_CODESIGN_IDENTITY:--}"
     local helper_entitlements="$PROJECT_ROOT/Moaiy/Resources/GPGHelper.entitlements"
     local sign_for_sandbox="${SIGN_FOR_APP_SANDBOX:-0}"
-    # Executables are signed by scripts/sign_embedded_gpg_bundle.sh so only
-    # scdaemon receives device entitlements. Other helpers stay inherit-only.
+    # Executables are signed by scripts/sign_embedded_gpg_bundle.sh. When that
+    # script signs an embedded Moaiy.app copy, scdaemon is packaged as
+    # Helpers/MoaiyScdaemon.app with device entitlements. Other helpers, and
+    # the leftover gpg.bundle/bin/scdaemon source copy, stay inherit-only.
 
     # Sign libraries first (inside-out signing, no entitlements on dylibs)
     for lib in "$TEMP_BUNDLE/lib"/*.dylib; do
@@ -335,7 +337,7 @@ sign_binaries() {
                 if EXPANDED_CODE_SIGN_IDENTITY="$sign_identity" \
                     "$PROJECT_ROOT/scripts/sign_embedded_gpg_bundle.sh" --executable "$exe"; then
                     if [ "$exe_name" = "scdaemon" ]; then
-                        success "Signed scdaemon with smartcard entitlements and bundle id: $exe_name"
+                        success "Signed source-tree scdaemon inherit-only; helper .app is created when signing Moaiy.app: $exe_name"
                     else
                         success "Signed (inherit-only sandbox): $exe_name"
                     fi
