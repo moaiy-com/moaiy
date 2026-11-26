@@ -139,12 +139,29 @@ enum SmartCardOperationFailure: Equatable {
 /// Classifies GnuPG stderr/status text for OpenPGP card failures.
 /// PIN values are never part of the matched phrases.
 enum SmartCardFailureClassifier {
+    /// libgpg-error codes observed from scdaemon when no card is in the reader.
+    /// `ENODEV` is `GPG_ERR_SYSTEM_ERROR | 80` (32848). On current libgpg-error
+    /// the English text is "Operation not supported by device", not "No such device".
+    private static let missingCardErrorCodes: Set<Int> = [
+        110,   // GPG_ERR_CARD_REMOVED
+        112,   // GPG_ERR_CARD_NOT_PRESENT
+        32848, // GPG_ERR_ENODEV
+    ]
+
+    /// libgpg-error codes that mean the daemon or platform support is down.
+    private static let unavailableErrorCodes: Set<Int> = [
+        119, // GPG_ERR_NO_SCDAEMON
+    ]
+
     static func classification(of output: String) -> SmartCardOperationFailure? {
         let lowercased = output.lowercased()
         if lowercased.contains("bad pin")
             || lowercased.contains("invalid pin")
             || lowercased.contains("wrong pin") {
             return .pinInvalid
+        }
+        if assuanErrorCodes(in: output).contains(where: { unavailableErrorCodes.contains($0) }) {
+            return .unavailable
         }
         // Genuine support/daemon failures first, so "OpenPGP card not
         // available: Card error" stays unavailable rather than a missing card.
@@ -158,22 +175,38 @@ enum SmartCardFailureClassifier {
             || lowercased.contains("ignoring gpg-agent inquiry")
             || lowercased.contains("inquire confirm")
             || lowercased.contains("inquiry 'confirm")
-            || lowercased.contains("inquiry \"confirm")
-            || lowercased.contains("operation not supported by device") {
+            || lowercased.contains("inquiry \"confirm") {
             return .unavailable
         }
-        // GnuPG reports an empty reader as CARD_NOT_PRESENT or ENODEV
-        // ("No such device"), including "OpenPGP card not available: No such device".
+        if assuanErrorCodes(in: output).contains(where: { missingCardErrorCodes.contains($0) }) {
+            return .notPresent
+        }
+        // GnuPG reports an empty reader as CARD_NOT_PRESENT or ENODEV.
+        // Live SCD SERIALNO on this Mac uses "Operation not supported by device".
         if lowercased.contains("card not present")
             || lowercased.contains("card removed")
             || lowercased.contains("no data <scd>")
             || lowercased.contains("no such device")
             || lowercased.contains("no card inserted")
             || lowercased.contains("no current card")
+            || lowercased.contains("operation not supported by device")
             || lowercased.contains("openpgp card not available") {
             return .notPresent
         }
         return nil
+    }
+
+    /// Extracts the libgpg-error code (low 24 bits) from Assuan `ERR <n> ...` lines.
+    static func assuanErrorCodes(in output: String) -> [Int] {
+        output.split(whereSeparator: \.isNewline).compactMap { line in
+            let parts = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                .split(whereSeparator: \.isWhitespace)
+            guard parts.count >= 2, parts[0].uppercased() == "ERR",
+                  let value = Int(parts[1]) else {
+                return nil
+            }
+            return value & 0x00FF_FFFF
+        }
     }
 }
 
