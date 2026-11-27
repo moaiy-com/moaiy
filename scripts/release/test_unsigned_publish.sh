@@ -26,7 +26,7 @@ assert_eq() {
 assert_contains() {
   local file="$1"
   local needle="$2"
-  if ! grep -Fq "$needle" "$file"; then
+  if ! grep -Fq -- "$needle" "$file"; then
     fail "missing '$needle' in $file"
   fi
 }
@@ -34,7 +34,7 @@ assert_contains() {
 assert_not_contains() {
   local file="$1"
   local needle="$2"
-  if grep -Fq "$needle" "$file"; then
+  if grep -Fq -- "$needle" "$file"; then
     fail "unexpected '$needle' in $file"
   fi
 }
@@ -49,7 +49,7 @@ assert_fails_with() {
     fail "command succeeded; expected failure containing '$needle'"
   fi
   cat "$out" "$err" > "$combined"
-  if ! grep -Fq "$needle" "$combined"; then
+  if ! grep -Fq -- "$needle" "$combined"; then
     echo "----- command output -----" >&2
     cat "$combined" >&2
     fail "missing '$needle' in failure output"
@@ -626,7 +626,7 @@ EOF
   set -e
   cat "$stdout" "$stderr" > "$combined"
 
-  if grep -Fq "unbound variable" "$combined"; then
+  if grep -Fq -- "unbound variable" "$combined"; then
     echo "----- command output -----" >&2
     cat "$combined" >&2
     fail "$label aborted on an unbound variable"
