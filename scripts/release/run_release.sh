@@ -150,6 +150,10 @@ has_valid_team_id() {
 bundled_runtime_supports_x86_64() {
   local gpg_bin="$ROOT_DIR/Moaiy/Resources/gpg.bundle/bin/gpg"
   local archs=""
+  # Published for the post-validation log. `archs` is function-local, and the
+  # caller runs under `set -u`, so an unset BUNDLED_GPG_ARCHS aborts the release
+  # after validation has already passed.
+  BUNDLED_GPG_ARCHS=""
 
   if [[ ! -f "$gpg_bin" ]]; then
     echo "ERROR: bundled gpg binary missing: $gpg_bin" >&2
@@ -167,6 +171,7 @@ bundled_runtime_supports_x86_64() {
     return 2
   fi
 
+  BUNDLED_GPG_ARCHS="$archs"
   [[ "$archs" == *"x86_64"* ]]
 }
 
@@ -264,7 +269,11 @@ if [[ "$SUPPORTS_X86_64" == true ]]; then
     echo "Skipping x86_64 validation in fast mode."
   fi
 else
-  echo "Bundled gpg.bundle is arm64-only ($BUNDLED_GPG_ARCHS); targeting arm64 release artifacts."
+  if [[ -n "$BUNDLED_GPG_ARCHS" ]]; then
+    echo "Bundled gpg.bundle is arm64-only ($BUNDLED_GPG_ARCHS); targeting arm64 release artifacts."
+  else
+    echo "Bundled gpg.bundle is arm64-only; targeting arm64 release artifacts."
+  fi
 fi
 
 ARM64_DMG_NAME="Moaiy-${VERSION}-macos-apple-silicon.dmg"

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Policy tests for unsigned official publish and architecture-scoped release assets.
 # These do not build, sign, tag, or upload a GitHub Release.
+# The arm64-only orchestration case stubs validation and packaging so the real
+# run_release.sh still reaches the post-validation branch under its own set -u.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -24,7 +26,7 @@ assert_eq() {
 assert_contains() {
   local file="$1"
   local needle="$2"
-  if ! grep -Fq "$needle" "$file"; then
+  if ! grep -Fq -- "$needle" "$file"; then
     fail "missing '$needle' in $file"
   fi
 }
@@ -32,7 +34,7 @@ assert_contains() {
 assert_not_contains() {
   local file="$1"
   local needle="$2"
-  if grep -Fq "$needle" "$file"; then
+  if grep -Fq -- "$needle" "$file"; then
     fail "unexpected '$needle' in $file"
   fi
 }
@@ -47,7 +49,7 @@ assert_fails_with() {
     fail "command succeeded; expected failure containing '$needle'"
   fi
   cat "$out" "$err" > "$combined"
-  if ! grep -Fq "$needle" "$combined"; then
+  if ! grep -Fq -- "$needle" "$combined"; then
     echo "----- command output -----" >&2
     cat "$combined" >&2
     fail "missing '$needle' in failure output"
@@ -484,5 +486,214 @@ assert_fails_with "still draft" \
 
 echo "== version sync =="
 "$ROOT_DIR/scripts/release/check_version_sync.sh" --version 1.0.5 --allow-existing-tag >/dev/null
+
+echo "== arm64-only orchestration after validation =="
+# Dry-run returns before the branch that aborted official run 45922919657.
+# Continue past a successful arm64 gate with stubbed validation and packaging,
+# and require the orchestrator to publish an Apple Silicon DMG only.
+
+link_tool() {
+  local bindir="$1"
+  local cmd="$2"
+  if [[ ! -e "$bindir/$cmd" ]]; then
+    ln -s "$(command -v "$cmd")" "$bindir/$cmd"
+  fi
+}
+
+prepare_arm64_fixture() {
+  local fixture="$1"
+  mkdir -p \
+    "$fixture/scripts/release/templates" \
+    "$fixture/Moaiy/Resources/gpg.bundle/bin" \
+    "$fixture/bin"
+  printf 'not-a-mach-o\n' > "$fixture/Moaiy/Resources/gpg.bundle/bin/gpg"
+  ln -s "$ROOT_DIR/scripts/release/run_release.sh" "$fixture/scripts/release/run_release.sh"
+  ln -s "$ROOT_DIR/scripts/release/render_release_notes.sh" "$fixture/scripts/release/render_release_notes.sh"
+  ln -s "$ROOT_DIR/scripts/release/templates/release-notes.md.tmpl" \
+    "$fixture/scripts/release/templates/release-notes.md.tmpl"
+  ln -s "$ROOT_DIR/CHANGELOG.md" "$fixture/CHANGELOG.md"
+
+  cat > "$fixture/scripts/release/check_version_sync.sh" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+  cat > "$fixture/scripts/release/external_validation.sh" <<'EOF'
+#!/bin/bash
+printf '%s\n' "gate-invoked $*"
+printf '%s\n' "** TEST SUCCEEDED **"
+printf '%s\n' "validation summary result Passed"
+exit 0
+EOF
+  cat > "$fixture/scripts/package_dmg.sh" <<'EOF'
+#!/bin/bash
+log="${MOAIY_TEST_PACKAGE_LOG:?}"
+printf '%s\n' "$*" >> "$log"
+dist=""
+name=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dist-dir) dist="${2:-}"; shift 2 ;;
+    --artifact-name) name="${2:-}"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+if [[ -z "$dist" || -z "$name" ]]; then
+  echo "package_dmg stub missing --dist-dir or --artifact-name: $*" >&2
+  exit 1
+fi
+mkdir -p "$dist"
+printf 'fake-dmg\n' > "$dist/$name"
+EOF
+  chmod +x \
+    "$fixture/scripts/release/check_version_sync.sh" \
+    "$fixture/scripts/release/external_validation.sh" \
+    "$fixture/scripts/package_dmg.sh"
+
+  local cmd
+  for cmd in bash dirname sed head xargs git date mkdir shasum awk grep cat jq tr wc; do
+    link_tool "$fixture/bin" "$cmd"
+  done
+  cat > "$fixture/bin/stat" <<'EOF'
+#!/bin/bash
+if [[ "${1:-}" == "-f%z" && -n "${2:-}" ]]; then
+  wc -c < "$2" | tr -d '[:space:]'
+  exit 0
+fi
+echo "unexpected stat invocation: $*" >&2
+exit 1
+EOF
+  chmod +x "$fixture/bin/stat"
+
+  git -C "$fixture" init -q -b main
+  git -C "$fixture" \
+    -c user.email="release-test@example.com" \
+    -c user.name="release-test" \
+    commit --allow-empty --no-gpg-sign -q -m "fixture"
+}
+
+run_arm64_orchestration() {
+  local label="$1"
+  local with_lipo="$2"
+  local fixture="$TMP_DIR/arm64-fixture"
+  local stdout="$TMP_DIR/${label}.stdout"
+  local stderr="$TMP_DIR/${label}.stderr"
+  local combined="$TMP_DIR/${label}.combined"
+  local package_log="$TMP_DIR/${label}.package"
+  local lipo_log="$TMP_DIR/${label}.lipo"
+  local github_output="$TMP_DIR/${label}.github-output"
+  : > "$package_log"
+  : > "$lipo_log"
+
+  if [[ "$with_lipo" == "yes" ]]; then
+    cat > "$fixture/bin/lipo" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" != "-archs" ]; then
+  echo "unexpected lipo invocation: $*" >&2
+  exit 1
+fi
+case "${2:-}" in
+  */gpg.bundle/bin/gpg) ;;
+  *)
+    echo "unexpected lipo target: ${2:-}" >&2
+    exit 1
+    ;;
+esac
+if [ -n "${MOAIY_TEST_LIPO_LOG:-}" ]; then
+  printf '%s\n' "$2" >> "$MOAIY_TEST_LIPO_LOG"
+fi
+echo "arm64"
+EOF
+    chmod +x "$fixture/bin/lipo"
+  else
+    rm -f "$fixture/bin/lipo"
+  fi
+
+  set +e
+  env -u MOAIY_DEVELOPMENT_TEAM_ID \
+    PATH="$fixture/bin" \
+    MOAIY_TEST_PACKAGE_LOG="$package_log" \
+    MOAIY_TEST_LIPO_LOG="$lipo_log" \
+    "$fixture/scripts/release/run_release.sh" \
+    --version 1.0.5 \
+    --mode publish \
+    --signing auto \
+    --gate balanced \
+    --allow-existing-tag \
+    --dist-dir "$TMP_DIR/${label}-dist" \
+    --github-output "$github_output" \
+    >"$stdout" 2>"$stderr"
+  local status=$?
+  set -e
+  cat "$stdout" "$stderr" > "$combined"
+
+  if grep -Fq -- "unbound variable" "$combined"; then
+    echo "----- command output -----" >&2
+    cat "$combined" >&2
+    fail "$label aborted on an unbound variable"
+  fi
+  if [[ "$status" -ne 0 ]]; then
+    echo "----- command output -----" >&2
+    cat "$combined" >&2
+    fail "$label exited $status; expected the arm64-only path to finish packaging"
+  fi
+  if ! awk '
+    /validation summary result Passed/ { seen_validation=1 }
+    /targeting arm64 release artifacts/ {
+      if (!seen_validation) bad_order=1
+      seen_decision=1
+    }
+    END { if (bad_order || !seen_decision) exit 1 }
+  ' "$stdout"; then
+    echo "----- command output -----" >&2
+    cat "$combined" >&2
+    fail "$label did not choose arm64-only artifacts after validation passed"
+  fi
+
+  assert_eq "$(wc -l < "$package_log" | tr -d '[:space:]')" "1" "$label packages one DMG"
+  assert_contains "$package_log" "--arch arm64"
+  assert_contains "$package_log" "--configuration Debug"
+  assert_contains "$package_log" "Moaiy-1.0.5-macos-apple-silicon.dmg"
+  assert_not_contains "$package_log" "--arch x86_64"
+  assert_contains "$stdout" "Release orchestration completed."
+  assert_contains "$stdout" "x86_64 dmg: (not packaged; bundled runtime has no x86_64 slice)"
+  assert_contains "$stderr" "publishing an unsigned build"
+  assert_contains "$stderr" "Gatekeeper will block"
+  assert_eq "$(value_of "$github_output" signing_mode)" "unsigned" "$label signing mode"
+  assert_eq "$(value_of "$github_output" release_mode)" "publish" "$label release mode"
+  assert_eq "$(value_of "$github_output" x86_64_dmg_path)" "" "$label omits Intel DMG output"
+  assert_contains "$github_output" "Moaiy-1.0.5-macos-apple-silicon.dmg"
+
+  local manifest notes archs
+  manifest="$(value_of "$github_output" release_manifest_path)"
+  notes="$(value_of "$github_output" release_notes_path)"
+  if [[ ! -f "$manifest" || ! -f "$notes" ]]; then
+    fail "$label did not write release metadata after packaging"
+  fi
+  archs="$(jq -r '[.artifacts[].arch] | join(",")' "$manifest")"
+  assert_eq "$archs" "arm64" "$label manifest architectures"
+  assert_eq "$(jq -r '.signing_mode' "$manifest")" "unsigned" "$label manifest signing"
+  assert_eq "$(jq -r '.gate_mode' "$manifest")" "balanced" "$label manifest gate"
+  assert_eq "$(jq -r '.version' "$manifest")" "1.0.5" "$label manifest version"
+  assert_contains "$notes" "not code-signed"
+  assert_contains "$notes" "not notarized"
+  assert_contains "$notes" "Gatekeeper will block"
+  assert_contains "$notes" "Apple Silicon"
+  assert_not_contains "$notes" "Dual-architecture"
+  assert_not_contains "$notes" "macos-intel-chip"
+
+  if [[ "$with_lipo" == "yes" ]]; then
+    assert_contains "$stdout" "Bundled gpg.bundle is arm64-only (arm64); targeting arm64 release artifacts."
+    assert_contains "$stdout" "gate-invoked --version 1.0.5 --label release-arm64-full --mode full --arch arm64"
+    assert_contains "$lipo_log" "gpg.bundle/bin/gpg"
+  else
+    assert_contains "$stderr" "lipo is not available; treating the bundled runtime as arm64-only."
+    assert_contains "$stdout" "Bundled gpg.bundle is arm64-only; targeting arm64 release artifacts."
+    assert_not_contains "$stdout" "arm64-only ("
+  fi
+}
+
+prepare_arm64_fixture "$TMP_DIR/arm64-fixture"
+run_arm64_orchestration "lipo-arm64-only" "yes"
+run_arm64_orchestration "lipo-missing-arm64-only" "no"
 
 echo "Unsigned publish policy tests passed."
